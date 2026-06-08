@@ -6,7 +6,10 @@
 <title>Traffic Radius — Lead Intelligence Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
-<!-- 2026-06-04: Leaflet CDN removed with the mock Heatmap view -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script>window.Leaflet=window.L;</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.2/lib/anime.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.14/dist/lenis.min.js"></script>
@@ -36,14 +39,7 @@
   --sh-lg:0 4px 24px rgba(0,0,0,0.08),0 1px 4px rgba(0,0,0,0.05);
   --inp:#FFFFFF;
 }
-/* 2026-05-27: was `height:100%` which locked the body to viewport so a
-   trackpad two-finger swipe did nothing — only Ctrl+scroll (zoom-out)
-   forced visible scroll. Switched to `min-height:100%` + explicit
-   `overflow-y:auto` so the page grows naturally and normal trackpad/
-   mousewheel scrolling works as expected. The sidebar's
-   `position:sticky` + `height:100vh` already keep it anchored while
-   the rest of the page scrolls underneath. */
-html,body{min-height:100%;background:var(--bg);color:var(--t1);font-family:var(--sans);overflow-x:hidden;overflow-y:auto;transition:background 0.35s,color 0.35s;-webkit-overflow-scrolling:touch}
+html,body{height:100%;background:var(--bg);color:var(--t1);font-family:var(--sans);overflow-x:hidden;transition:background 0.35s,color 0.35s}
 [data-theme="light"] body{background:#EEF2F7}
 ::-webkit-scrollbar{width:3px;height:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--b20);border-radius:2px}
 #bg-cv{position:fixed;inset:0;z-index:0;pointer-events:none}
@@ -791,10 +787,10 @@ const STEPS=[{l:'Server Connection',d:'API handshake & auth'},{l:'Keyword Discov
 const LOGS=[{tag:'sys',msg:'Initialising Traffic Radius Lead Engine v5.0...'},{tag:'ok',msg:'Server verified → Railway production endpoint'},{tag:'scan',msg:'SEMrush: querying keyword database...'},{tag:'scan',msg:'SEMrush: 47 keywords with volume ≥ 100/mo found'},{tag:'find',msg:'"plumber ballarat" 1,900/mo · "dentist ballarat" 2,400/mo'},{tag:'scan',msg:'SerpAPI: scraping 47 keyword SERPs...'},{tag:'ok',msg:'SerpAPI: 312 unique domains extracted'},{tag:'find',msg:'Ballarat Plumbing Co — ballarat-plumbing.com.au'},{tag:'find',msg:'Ballarat Dental Group — ballaratdental.com.au'},{tag:'find',msg:'Central City Electrical — centralcity.com.au'},{tag:'find',msg:'Geelong Roofing Experts — geelongroofing.com.au'},{tag:'enrich',msg:'Apollo: enriching 89 businesses...'},{tag:'ok',msg:'Apollo: 62 emails · 51 phones matched'},{tag:'enrich',msg:'Lusha: direct-dial lookup for 19 executives'},{tag:'ok',msg:'Lusha: 19 direct dials + 9 personal emails'},{tag:'enrich',msg:'Hunter.io: verifying 62 email addresses...'},{tag:'ok',msg:'Hunter.io: 58/62 emails verified deliverable'},{tag:'score',msg:'AI scoring 89 leads for intent signals...'},{tag:'score',msg:'Ballarat Plumbing Co → 94/100 Tier 1'},{tag:'score',msg:'Ballarat Dental Group → 91/100 Tier 1'},{tag:'ok',msg:'12 Tier 1 · 44 Tier 2 · 33 Tier 3 leads qualified'},{tag:'sys',msg:'Exporting 89 leads to dashboard — complete ✓'}];
 const INDUSTRIES=['Select an industry','Plumbing & Gas Fitting','Electrical Services','HVAC & Air Conditioning','Roofing & Guttering','Landscaping & Gardening','Dental & Oral Health','Legal Services','Accounting & Finance','Real Estate','Automotive & Mechanical','Cleaning Services','Pest Control','Building & Construction','IT & Technology'];
 const CITIES_MAP={'Australia':['Ballarat','Melbourne','Sydney','Brisbane','Perth','Adelaide','Geelong','Bendigo','Gold Coast','Canberra'],'United States':['New York','Los Angeles','Chicago','Houston','Phoenix'],'United Kingdom':['London','Manchester','Birmingham','Leeds','Glasgow'],'Canada':['Toronto','Vancouver','Montreal','Calgary'],'New Zealand':['Auckland','Wellington','Christchurch','Hamilton']};
-/* 2026-06-04: dead mock LEADS array removed (table uses real backend leads). */
+const LEADS=[{b:'Ballarat Plumbing Co',d:'ballarat-plumbing.com.au',k:'plumber ballarat',v:'1,900',e:'info@ballarat-plumbing.com.au',p:'+61 3 5333 xxxx',s:94},{b:'Ballarat Dental Group',d:'ballaratdental.com.au',k:'dentist ballarat',v:'2,400',e:'hello@ballaratdental.com.au',p:'+61 3 5331 xxxx',s:91},{b:'Central City Electrical',d:'centralcity.com.au',k:'electrician ballarat',v:'1,600',e:'admin@centralcity.com.au',p:'+61 3 5332 xxxx',s:88},{b:'Geelong Roofing Experts',d:'geelongroofing.com.au',k:'roofing geelong',v:'1,200',e:'—',p:'+61 3 5221 xxxx',s:76},{b:'Bendigo Landscaping',d:'bendigolandscape.com.au',k:'landscaping bendigo',v:'880',e:'info@bendigo.com.au',p:'—',s:72}];
 const HISTORY=[{id:'RUN-2847',date:'24 Apr 2026, 09:31',config:'Ballarat, VIC — Tier 2 Cities',leads:89,emails:62,phones:51,tier1:12,status:'done',dur:'12.8s'},{id:'RUN-2846',date:'23 Apr 2026, 14:22',config:'Geelong, VIC — Tier 1 Cities',leads:67,emails:48,phones:39,tier1:8,status:'done',dur:'10.2s'},{id:'RUN-2845',date:'23 Apr 2026, 09:15',config:'Plumbing — Australia',leads:134,emails:91,phones:78,tier1:21,status:'done',dur:'15.4s'},{id:'RUN-2844',date:'22 Apr 2026, 16:48',config:'Bendigo, VIC — Tier 2 Cities',leads:43,emails:31,phones:26,tier1:6,status:'done',dur:'8.9s'},{id:'RUN-2843',date:'22 Apr 2026, 11:02',config:'Dental — Australia',leads:0,emails:0,phones:0,tier1:0,status:'fail',dur:'2.1s'}];
 const USERS=[{id:1,name:'James Mitchell',email:'james@trafficradius.com.au',role:'Admin',last:'Just now',online:true,av:'JM',color:'#8B5CF6'},{id:2,name:'Sarah Chen',email:'sarah@trafficradius.com.au',role:'Analyst',last:'1 hr ago',online:true,av:'SC',color:'#4BB8D9'},{id:3,name:'Marcus Williams',email:'marcus@trafficradius.com.au',role:'Viewer',last:'2 days ago',online:false,av:'MW',color:'#F59E0B'},{id:4,name:'Priya Sharma',email:'priya@trafficradius.com.au',role:'Analyst',last:'3 hr ago',online:true,av:'PS',color:'#7DBA4B'}];
-/* 2026-06-04: fake TICKERS status data removed (untrue hardcoded claims). */
+const TICKERS=[{b:'[APOLLO]',t:'1,000 credits available — ready'},{b:'[LUSHA]',t:'1,000 credits — enrichment online'},{b:'[SEMRUSH]',t:'50,000 keyword searches available'},{b:'[ENGINE]',t:'Traffic Radius v5.0 — all systems nominal'},{b:'[SERP]',t:'SerpAPI unlimited queries connected'},{b:'[HUNTER]',t:'Hunter.io email verification active'},{b:'[APOLLO]',t:'1,000 credits available — ready'},{b:'[LUSHA]',t:'1,000 credits — enrichment online'},{b:'[SEMRUSH]',t:'50,000 keyword searches available'},{b:'[ENGINE]',t:'Traffic Radius v5.0 — all systems nominal'},{b:'[SERP]',t:'SerpAPI unlimited queries connected'},{b:'[HUNTER]',t:'Hunter.io email verification active'}];
 
 /* ─── SPLASH COMPONENT ─── */
 function Splash({onDone,theme}){
@@ -887,7 +883,6 @@ function Icon({name,size=16,stroke=1.6,className,style}){
     settings:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',
     // Data icons
     database:'M12 2C7.58 2 4 3.34 4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5c0-1.66-3.58-3-8-3zM4 10c0 1.66 3.58 3 8 3s8-1.34 8-3M4 15c0 1.66 3.58 3 8 3s8-1.34 8-3',
-    'dollar-sign':'M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
     shield:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
     layers:'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
     trending:'M23 6l-9.5 9.5-5-5L1 18M17 6h6v6',
@@ -985,274 +980,16 @@ function CopyBtn({text}){
   return(<button onClick={e=>{e.stopPropagation();navigator.clipboard.writeText(text).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000)})}} style={{marginLeft:6,fontSize:9,padding:'1px 5px',background:copied?'var(--g10)':'var(--b5)',border:'1px solid '+(copied?'var(--g20)':'var(--b10)'),borderRadius:4,color:copied?'var(--green)':'var(--blue)',cursor:'pointer',transition:'all 0.2s',flexShrink:0}}>{copied?'✓':'Copy'}</button>);
 }
 
-function InlineProgress({phase,logs,progress,counts,theme,liveJob}){
+function InlineProgress({phase,logs,progress,counts,theme}){
   const termRef=useRef(null);
   const isLight=theme==='light';
   useEffect(()=>{if(termRef.current)termRef.current.scrollTop=termRef.current.scrollHeight},[logs]);
   const stepTimes=['0.8s','2.1s','3.4s','5.9s','8.2s','11.4s'];
-  // 2026-05-18 (round 3): pre-compute live API-spend numbers + last-tick
-  // age + per-call count + per-domain count + a fire-once flash class
-  // when a SEMrush number actually changes between ticks. This is what
-  // makes the panel feel ALIVE — without it 500ms polling looks the same
-  // as a static card.
-  const _live=liveJob||{};
-  const _smU=Number(_live.semrush_units_used||0);
-  const _smC=Number(_live.semrush_calls||0);
-  const _smB=Number(_live.semrush_unit_budget||0);
-  const _smPct=(_smB>0?Math.min(100,Math.round((_smU/_smB)*100)):0);
-  const _smPctBarColor=(_smPct>=85?'#DC2626':_smPct>=60?'#F59E0B':'#16A34A');
-  const _apC=Number(_live.apollo_calls||0);
-  const _apB=Number(_live.apollo_budget||0);
-  // 2026-05-18 (round 4): Apollo per-pool live counters (parity with SEMrush).
-  // Email + phone are incremented in V5._enrich_single_domain whenever a
-  // reveal actually returns data; export stays 0 mid-run (consumed on CSV).
-  const _apEmail=Number(_live.apollo_email_reveals||0);
-  const _apPhone=Number(_live.apollo_phone_reveals||0);
-  const _apExport=Number(_live.apollo_export_used||0);
-  const _luC=Number(_live.lusha_calls||0);
-  const _smSkipped=Number(_live.semrush_skipped||0);
-  const _smAlert=Boolean(_live.semrush_alert_75);
-  // Track which numbers just changed so we can flash them on update.
-  const _prevSnap=useRef({smU:0,smC:0,apC:0,apEmail:0,apPhone:0,luC:0});
-  const _changedRef=useRef({smU:false,smC:false,apC:false,apEmail:false,apPhone:false,luC:false});
-  const _tsRef=useRef(Date.now());
-  useEffect(()=>{
-    const p=_prevSnap.current;
-    _changedRef.current={
-      smU: _smU !== p.smU,
-      smC: _smC !== p.smC,
-      apC: _apC !== p.apC,
-      apEmail: _apEmail !== p.apEmail,
-      apPhone: _apPhone !== p.apPhone,
-      luC: _luC !== p.luC,
-    };
-    if(_smU!==p.smU||_smC!==p.smC||_apC!==p.apC
-        ||_apEmail!==p.apEmail||_apPhone!==p.apPhone||_luC!==p.luC){
-      _tsRef.current = Date.now();
-    }
-    _prevSnap.current={smU:_smU,smC:_smC,apC:_apC,
-                       apEmail:_apEmail,apPhone:_apPhone,luC:_luC};
-  },[_smU,_smC,_apC,_apEmail,_apPhone,_luC]);
-  // Force a re-render so the "X ms ago" label keeps ticking even when the
-  // upstream values haven't changed. 250ms is half the poll interval —
-  // makes the age field feel continuously alive.
-  const [_nowTick,_setNowTick]=useState(0);
-  useEffect(()=>{const id=setInterval(()=>_setNowTick(n=>n+1),250);return()=>clearInterval(id)},[]);
-  const _ageMs=Math.max(0,Date.now()-_tsRef.current);
-  const _ageStr=(_ageMs<1000)?(_ageMs+'ms'):(Math.floor(_ageMs/1000)+'s');
-  const _ageStale=_ageMs>3000;   // poll missed at least 6 ticks
-  const _changed=_changedRef.current;
   return(
     <div style={{display:'flex',flexDirection:'column',gap:12}}>
-      {/* 2026-05-18 (round 3): LIVE API-spend card. Polls every 500ms,
-          flashes each number on change, and shows the time since last
-          server tick — when that climbs above 3 s the dot turns grey
-          ("stale") so the user knows polling has stalled. Progress bar
-          turns amber at 60% and red at 85% of budget; the 75%+ alert
-          (fired by the backend guard) also surfaces here as a banner. */}
-      <style>{`
-        @keyframes apiNumFlash{
-          0%{color:#16A34A;text-shadow:0 0 8px rgba(34,197,94,0.5);}
-          70%{color:#0F172A;text-shadow:none;}
-          100%{color:#0F172A;text-shadow:none;}
-        }
-        .api-num-flash{animation:apiNumFlash 0.55s ease-out;}
-        @keyframes liveDotPulse{
-          0%,100%{box-shadow:0 0 4px #16A34A,0 0 0 rgba(22,163,74,0);}
-          50%{box-shadow:0 0 6px #16A34A,0 0 10px rgba(22,163,74,0.4);}
-        }
-      `}</style>
-      <div style={{
-          background:'#FFFFFF',border:'1px solid #E2E8F0',borderRadius:10,
-          padding:'12px 14px',
-        }}>
-        <div style={{
-            display:'flex',alignItems:'center',justifyContent:'space-between',
-            marginBottom:10,
-          }}>
-          <div style={{
-              fontSize:10,fontWeight:700,letterSpacing:'1.4px',
-              textTransform:'uppercase',color:'#0F172A',fontFamily:'var(--mono)',
-              display:'flex',alignItems:'center',gap:8,
-            }}>
-            <span style={{
-                display:'inline-block',width:7,height:7,borderRadius:'50%',
-                background:_ageStale?'#94A3B8':'#16A34A',
-                animation:_ageStale?'none':'liveDotPulse 1.4s ease-in-out infinite',
-              }}></span>
-            <span>LIVE API spend</span>
-            <span style={{
-                fontSize:9,fontWeight:500,color:_ageStale?'#DC2626':'#64748B',
-                fontFamily:'var(--mono)',letterSpacing:'0.3px',textTransform:'none',
-              }}>
-              {_ageStale?'stale · ':'tick · '}{_ageStr} ago · 500ms poll
-            </span>
-          </div>
-          {_smSkipped>0&&<div style={{
-              fontSize:9,fontWeight:700,color:'#DC2626',
-              fontFamily:'var(--mono)',
-              background:'rgba(220,38,38,0.10)',
-              border:'1px solid rgba(220,38,38,0.30)',
-              padding:'3px 8px',borderRadius:10,
-            }}>
-            {_smSkipped} SEMRUSH CALLS SKIPPED
-          </div>}
-        </div>
-        {/* 75%+ alert banner — server tells us via live.semrush_alert_75 */}
-        {_smAlert&&_smPct<100&&<div style={{
-            background:'rgba(245,158,11,0.08)',
-            border:'1px solid rgba(245,158,11,0.30)',
-            borderRadius:8,padding:'6px 10px',marginBottom:10,
-            fontSize:10,fontWeight:600,color:'#92400E',
-            fontFamily:'var(--mono)',
-          }}>
-          ! BUDGET WARNING · {_smU.toLocaleString('en-US')} / {_smB.toLocaleString('en-US')} units used (≥75%). Further SEMrush calls may be skipped.
-        </div>}
-        <div style={{
-            display:'grid',
-            gridTemplateColumns:'2fr 1fr 1fr',
-            gap:10,
-          }}>
-          <div style={{
-              background:'#F8FAFC',border:'1px solid #E2E8F0',
-              borderRadius:8,padding:'10px 12px',
-            }}>
-            <div style={{
-                display:'flex',alignItems:'baseline',justifyContent:'space-between',
-                marginBottom:6,
-              }}>
-              <div style={{
-                  fontSize:9,fontWeight:700,letterSpacing:'1.0px',
-                  textTransform:'uppercase',color:'#EF4444',
-                  fontFamily:'var(--mono)',
-                }}>
-                SEMrush units
-              </div>
-              <div style={{
-                  fontSize:9,color:'#64748B',fontFamily:'var(--mono)',
-                }}>
-                {_smPct}% of {_smB.toLocaleString('en-US')}
-              </div>
-            </div>
-            <div style={{display:'flex',alignItems:'baseline',gap:6}}>
-              <div key={_smU} className={_changed.smU?'api-num-flash':''} style={{
-                  fontSize:22,fontWeight:800,color:'#0F172A',
-                  fontFamily:'var(--mono)',lineHeight:1.05,
-                  letterSpacing:'-0.5px',
-                }}>
-                {_smU.toLocaleString('en-US')}
-              </div>
-              <div style={{
-                  fontSize:10,color:'#64748B',fontFamily:'var(--mono)',
-                }}>
-                used · {_smC} calls
-              </div>
-            </div>
-            <div style={{
-                marginTop:6,height:4,background:'#E2E8F0',borderRadius:3,overflow:'hidden',
-              }}>
-              <div style={{
-                  height:'100%',width:_smPct+'%',
-                  background:_smPctBarColor,
-                  transition:'width 0.4s ease-out, background 0.4s',
-                }}></div>
-            </div>
-          </div>
-          <div style={{
-              background:'#F8FAFC',border:'1px solid #E2E8F0',
-              borderRadius:8,padding:'10px 12px',
-            }}>
-            <div style={{
-                fontSize:9,fontWeight:700,letterSpacing:'1.0px',
-                textTransform:'uppercase',color:'#7C3AED',marginBottom:6,
-                fontFamily:'var(--mono)',
-                display:'flex',justifyContent:'space-between',
-              }}>
-              <span>Apollo · 3 pools</span>
-              <span style={{color:'#64748B',fontWeight:500}}>
-                {_apB>0?'cap '+_apB.toLocaleString('en-US'):'no cap'}
-              </span>
-            </div>
-            <div key={_apC} className={_changed.apC?'api-num-flash':''} style={{
-                fontSize:18,fontWeight:800,color:'#0F172A',
-                fontFamily:'var(--mono)',lineHeight:1.05,
-              }}>
-              {_apC.toLocaleString('en-US')}
-              <span style={{fontSize:9,color:'#64748B',fontWeight:500,marginLeft:4}}>calls</span>
-            </div>
-            {/* 2026-05-18 (round 4): per-pool sub-rows for parity with
-                SEMrush's per-phase breakdown. Each pool depletes independently
-                in Apollo billing, so seeing them split lets the user spot
-                which one is being burned hottest. */}
-            <div style={{
-                marginTop:6,display:'grid',
-                gridTemplateColumns:'repeat(3,1fr)',gap:4,
-                fontFamily:'var(--mono)',fontSize:9,
-              }}>
-              <div style={{
-                  background:'rgba(22,163,74,0.08)',
-                  border:'1px solid rgba(22,163,74,0.20)',
-                  borderRadius:5,padding:'3px 5px',minWidth:0,
-                }} title="Personal email reveals (people/match + search reveal_personal_emails)">
-                <div style={{color:'#16A34A',fontWeight:700,fontSize:8,letterSpacing:'0.4px'}}>EMAIL</div>
-                <div key={_apEmail} className={_changed.apEmail?'api-num-flash':''}
-                     style={{color:'#0F172A',fontWeight:700,fontSize:12}}>
-                  {_apEmail.toLocaleString('en-US')}
-                </div>
-              </div>
-              <div style={{
-                  background:'rgba(245,158,11,0.08)',
-                  border:'1px solid rgba(245,158,11,0.20)',
-                  borderRadius:5,padding:'3px 5px',minWidth:0,
-                }} title="Phone reveals (people/match reveal_phone_number)">
-                <div style={{color:'#F59E0B',fontWeight:700,fontSize:8,letterSpacing:'0.4px'}}>PHONE</div>
-                <div key={_apPhone} className={_changed.apPhone?'api-num-flash':''}
-                     style={{color:'#0F172A',fontWeight:700,fontSize:12}}>
-                  {_apPhone.toLocaleString('en-US')}
-                </div>
-              </div>
-              <div style={{
-                  background:'rgba(37,99,235,0.08)',
-                  border:'1px solid rgba(37,99,235,0.20)',
-                  borderRadius:5,padding:'3px 5px',minWidth:0,
-                }} title="Export credits (consumed on CSV finalize, not mid-run)">
-                <div style={{color:'#2563EB',fontWeight:700,fontSize:8,letterSpacing:'0.4px'}}>EXPORT</div>
-                <div style={{color:'#0F172A',fontWeight:700,fontSize:12}}>
-                  {_apExport.toLocaleString('en-US')}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div style={{
-              background:'#F8FAFC',border:'1px solid #E2E8F0',
-              borderRadius:8,padding:'10px 12px',
-            }}>
-            <div style={{
-                fontSize:9,fontWeight:700,letterSpacing:'1.0px',
-                textTransform:'uppercase',color:'#0EA5E9',marginBottom:6,
-                fontFamily:'var(--mono)',
-              }}>
-              Lusha calls
-            </div>
-            <div key={_luC} className={_changed.luC?'api-num-flash':''} style={{
-                fontSize:22,fontWeight:800,color:'#0F172A',
-                fontFamily:'var(--mono)',lineHeight:1.05,
-              }}>
-              {_luC.toLocaleString('en-US')}
-            </div>
-            <div style={{
-                fontSize:9,color:'#64748B',marginTop:4,
-                fontFamily:'var(--mono)',
-              }}>
-              this run
-            </div>
-          </div>
-        </div>
-      </div>
       {/* Live counters */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>
-        {/* Phase 2 (2026-05-07): "Direct Phones" replaces fake Tier 1 — backed by sm.direct_phones */}
-        {[{n:counts.total,l:'Leads',c:'var(--blue)'},{n:counts.emails,l:'Emails',c:'var(--green)'},{n:counts.phones,l:'Phones',c:'var(--amber)'},{n:counts.tier1,l:'Direct Phones',c:'var(--violet)'}].map((s,i)=>(
+        {[{n:counts.total,l:'Leads',c:'var(--blue)'},{n:counts.emails,l:'Emails',c:'var(--green)'},{n:counts.phones,l:'Phones',c:'var(--amber)'},{n:counts.tier1,l:'Tier 1',c:'var(--violet)'}].map((s,i)=>(
           <div key={i} style={{background:'var(--sf2)',border:'1px solid var(--bd)',borderRadius:9,padding:'12px 8px',textAlign:'center'}}>
             <div style={{fontFamily:'var(--mono)',fontSize:24,fontWeight:700,color:s.n>0?s.c:'var(--t4)',lineHeight:1}}>{s.n}</div>
             <div style={{fontFamily:'var(--mono)',fontSize:8,letterSpacing:'1.5px',textTransform:'uppercase',color:'var(--t3)',marginTop:3}}>{s.l}</div>
@@ -1305,36 +1042,16 @@ function InlineProgress({phase,logs,progress,counts,theme,liveJob}){
   );
 }
 
-function GenerateView({tab,setTab,stats,hasResults,onGenerate,onCancel,loading,auState,setAuState,cityTier,setCityTier,city,setCity,industry,setIndustry,indCountry,setIndCountry,maxLeads,setMaxLeads,minSearch,setMinSearch,minCpc,setMinCpc,enrich,setEnrich,serpOnly,setSerpOnly,nWorkers,setNWorkers,onNav,phase,logs,progress,counts,theme,industries,auCities,topCsvText,partialCsvUrl,liveCreditsDetails,creditsUsedThisRun,liveJob,realLeads,runOutcome}){
-  // City mode is AU-only — see legacy `cityState` dropdown (NSW/VIC/QLD/...).
-  // Tier maps the UI label to the backend tier code expected by /generate-city.
-  const _tierToKey={'All city tiers':'all','Tier 1 cities':'tier_1','Tier 2 cities':'tier_2','Tier 3 cities':'tier_3'};
-  const _stateOpts=[{code:'AUSTRALIA',name:'Australia (whole country)'}].concat((auCities&&auCities.states)||[]);
-  const _cityList=(()=>{
-    if(!auCities)return[];
-    const tierKey=_tierToKey[cityTier]||'tier_1';
-    if(auState==='AUSTRALIA'){
-      const aus=auCities.australia||{};
-      if(tierKey==='all')return[].concat(aus.tier_1||[],aus.tier_2||[],aus.tier_3||[]);
-      return aus[tierKey]||[];
-    }
-    const st=(auCities.states||[]).find(s=>s.code===auState);
-    if(!st)return[];
-    if(tierKey==='all')return[].concat(st.tier_1||[],st.tier_2||[],st.tier_3||[]);
-    return st[tierKey]||[];
-  })();
-  // Phase 2 (2026-05-06): industries fetched from /industries (52 base + 1
-  // new AU multi-vertical = 53). Falls back to hardcoded list while the
-  // fetch is in flight or if it fails.
-  const _IND_FALLBACK=['Plumbing & Gas Fitting','Electrical Services','HVAC & Air Conditioning','Roofing & Guttering','Landscaping & Gardening','Dental & Oral Health','Legal Services','Accounting & Finance','Real Estate','Automotive & Mechanical','Cleaning Services','Pest Control','Building & Construction','IT & Technology'];
-  const INDUSTRIES_L=['Select an industry'].concat((industries&&industries.length>0)?industries:_IND_FALLBACK);
-  const cities=_cityList;
+function GenerateView({tab,setTab,stats,hasResults,onGenerate,loading,country,setCountry,cityTier,setCityTier,city,setCity,industry,setIndustry,indCountry,setIndCountry,maxLeads,setMaxLeads,minSearch,setMinSearch,minCpc,setMinCpc,enrich,setEnrich,onNav,phase,logs,progress,counts,theme}){
+  const CITIES_MAP_L={'Australia':['Ballarat','Melbourne','Sydney','Brisbane','Perth','Adelaide','Geelong','Bendigo','Gold Coast','Canberra'],'United States':['New York','Los Angeles','Chicago','Houston','Phoenix'],'United Kingdom':['London','Manchester','Birmingham','Leeds','Glasgow'],'Canada':['Toronto','Vancouver','Montreal','Calgary'],'New Zealand':['Auckland','Wellington','Christchurch','Hamilton']};
+  const INDUSTRIES_L=['Select an industry','Plumbing & Gas Fitting','Electrical Services','HVAC & Air Conditioning','Roofing & Guttering','Landscaping & Gardening','Dental & Oral Health','Legal Services','Accounting & Finance','Real Estate','Automotive & Mechanical','Cleaning Services','Pest Control','Building & Construction','IT & Technology'];
+  const cities=CITIES_MAP_L[country]||[];
   const [formErr,setFormErr]=useState('');
   const [filter,setFilter]=useState('');
   const [sortCol,setSortCol]=useState('s');
   const [sortDir,setSortDir]=useState('desc');
   const {s:liveStats,flash:liveFlash}=useLiveStats();
-  const syncAgo=useSyncAgo(liveStats.syncTs);
+  const syncAgo=useSyncAgo();
 
   const handleGen=()=>{
     if(tab==='industries'&&industry==='Select an industry'){setFormErr('Please select an industry to continue');return;}
@@ -1346,182 +1063,14 @@ function GenerateView({tab,setTab,stats,hasResults,onGenerate,onCancel,loading,a
     document.addEventListener('keydown',h);return()=>document.removeEventListener('keydown',h);
   },[tab,industry,loading]);
 
-  // 2026-05-21 (THE BIG FIX): filtered/sorted lead list now reads from
-  // REAL backend leads (`realLeads` prop populated from /status/<job>.leads),
-  // NOT the hardcoded LEADS mock array. Backend lead dicts use different
-  // field names — we map them to the (b, d, e, p, s) shape the table
-  // already renders, with sensible fallbacks per source:
-  //   b = company OR name
-  //   d = domain
-  //   e = email (or "—")
-  //   p = phone (or "—")
-  //   s = score (server-provided _final_score / score, else derived from
-  //              quality flags: 90 if has email+phone, 75 with one, 60 none)
-  //   src = source label ("Apollo" / "Google Intent" / "Silent-Apollo")
-  const _mappedLeads=(Array.isArray(realLeads)?realLeads:[]).map(ld=>{
-    const company=(ld.company||'').trim();
-    const name=(ld.name||'').trim();
-    const domain=(ld.domain||'').trim();
-    const email=(ld.email||'').trim();
-    const phone=(ld.phone||'').trim();
-    const hasEmail=Boolean(email);
-    const hasPhone=Boolean(phone);
-    const score=Number(ld._final_score||ld.score||(hasEmail&&hasPhone?92:hasEmail||hasPhone?78:62));
-    const src=(ld._google_intent?'Google Intent':ld._silent_scope_apollo?'Silent-Apollo':(ld.source||'Apollo'));
-    // 2026-06-04: a real Apollo contact carries a person name + a role
-    // ("David" / "Owner"). Stub leads (Apollo found nobody) have a role of ""
-    // and a domain-derived name. So `role present` = real person → show their
-    // NAME as the primary; company becomes the sub-line. No role → stub → keep
-    // showing the company. Display-only; pipeline untouched.
-    const hasRole=Boolean((ld.role||'').trim());
-    const isPerson=hasRole&&Boolean(name);
-    return {
-      b:company||name||'(unnamed)',
-      nm:name,                       // person name (e.g. "David")
-      isPerson,
-      d:domain||'—',
-      e:hasEmail?email:'—',
-      p:hasPhone?phone:'—',
-      s:Math.max(0,Math.min(100,Math.round(score))),
-      src,
-      kw:(ld.keyword||'').trim()||'—',
-      // 2026-06-08: live per-lead dollar cost (same value frozen into the DB).
-      cpl:(ld.cost_per_lead!==undefined&&ld.cost_per_lead!==null&&Number(ld.cost_per_lead)>0)
-            ?('$'+Number(ld.cost_per_lead).toFixed(2)):'—',
-      _role:ld.role||'',
-      _direct:Boolean(ld._direct_phone),
-    };
-  });
-  const _filterLower=(filter||'').toLowerCase();
-  const filteredLeads=_mappedLeads.filter(l=>!_filterLower||(
-    l.b.toLowerCase().includes(_filterLower)
-    || l.d.toLowerCase().includes(_filterLower)
-    || (l.e||'').toLowerCase().includes(_filterLower)
-    || (l.src||'').toLowerCase().includes(_filterLower)
-    || (l.kw||'').toLowerCase().includes(_filterLower)
-  )).sort((a,b)=>{const dir=sortDir==='asc'?1:-1;if(sortCol==='s')return dir*(a.s-b.s);if(sortCol==='b')return dir*a.b.localeCompare(b.b);return 0;});
+  const filteredLeads=LEADS.filter(l=>!filter||(l.b.toLowerCase().includes(filter.toLowerCase())||l.d.toLowerCase().includes(filter.toLowerCase())||l.k.toLowerCase().includes(filter.toLowerCase()))).sort((a,b)=>{const dir=sortDir==='asc'?1:-1;if(sortCol==='s')return dir*(a.s-b.s);if(sortCol==='b')return dir*a.b.localeCompare(b.b);return 0;});
 
   const SortIcon=({col})=>{if(sortCol!==col)return<span style={{opacity:0.3,marginLeft:4}}>↕</span>;return<span style={{marginLeft:4,color:'var(--blue)'}}>{sortDir==='asc'?'↑':'↓'}</span>;};
 
-  // 2026-05-21: ONE merged credit panel (replaces 2 duplicate panels).
-  // Always renders at the top of the Generate view so credit info is
-  // visible BEFORE the user clicks Generate. 7 tiles:
-  //   Apollo Total / Export / Phone / Email / SEMrush / Lusha / Google Places
-  // Each tile shows REMAINING (top, large) + USED this run (bottom, smaller).
-  // The "used" sub-line is grey "—" until a run completes, then turns green
-  // with the per-pool delta + per-lead avg.
-  function renderMergedCreditPanel(){
-    const cu=creditsUsedThisRun||{};
-    const _svc=(liveCreditsDetails&&liveCreditsDetails.services)||{};
-    const _apoSvc=_svc.apollo||{};
-    const _smrSvc=_svc.semrush||{};
-    const _lusSvc=_svc.lusha||{};
-    const _gpSvc=_svc.google_places||{};
-    const _n=v=>(typeof v==='number'&&isFinite(v)?v:null);
-    const _f=v=>{const n=_n(v);return n===null?'—':n.toLocaleString('en-US');};
-    const _fp=v=>{const n=_n(v);return n===null?'—':(n>=10?n.toFixed(1):n.toFixed(2));};
-    const rows=[
-      {lbl:'Apollo · Total',   c:'#7C3AED',used:cu.apollo_total,  per:cu.per_lead&&cu.per_lead.apollo_total,  remaining:_apoSvc.remaining},
-      {lbl:'Apollo · Export',  c:'#2563EB',used:cu.apollo_export, per:cu.per_lead&&cu.per_lead.apollo_export, remaining:_apoSvc.export_remaining},
-      {lbl:'Apollo · Phone',   c:'#F59E0B',used:cu.apollo_phone,  per:cu.per_lead&&cu.per_lead.apollo_phone,  remaining:_apoSvc.phone_remaining},
-      {lbl:'Apollo · Email',   c:'#16A34A',used:cu.apollo_email,  per:cu.per_lead&&cu.per_lead.apollo_email,  remaining:_apoSvc.email_remaining},
-      {lbl:'SEMrush',          c:'#EF4444',used:cu.semrush_total, per:cu.per_lead&&cu.per_lead.semrush_total, remaining:_smrSvc.remaining},
-      {lbl:'Lusha',            c:'#0EA5E9',used:cu.lusha_total,   per:cu.per_lead&&cu.per_lead.lusha_total,   remaining:_lusSvc.remaining},
-      {lbl:'Google Places',    c:'#0F766E',used:_gpSvc.used,      per:null,                                    remaining:null, cap:_gpSvc.per_run_cap,isGoogle:true},
-    ];
-    const _hasRun=Boolean(creditsUsedThisRun);
-    return(<div style={{
-        background:'#FFFFFF',border:'1px solid #E2E8F0',borderRadius:10,
-        padding:'12px 14px',marginBottom:14,
-      }}>
-      <div style={{
-          display:'flex',alignItems:'center',justifyContent:'space-between',
-          marginBottom:10,
-        }}>
-        <div style={{
-            fontSize:11,fontWeight:700,letterSpacing:'1.4px',
-            textTransform:'uppercase',color:'#0F172A',
-            fontFamily:'var(--mono)',
-          }}>
-          ◈ API Credits {_hasRun?'— Remaining + Used This Run':'— Remaining (live 60s poll)'}
-        </div>
-        <div style={{
-            fontSize:10,color:'#64748B',fontFamily:'var(--mono)',
-          }}>
-          {_hasRun?
-            (cu.leads>0?(cu.leads+' lead'+(cu.leads===1?'':'s')+' generated · per-lead shown'):'0 leads — per-lead n/a')
-            :'no run yet — pre-flight view'}
-        </div>
-      </div>
-      <div style={{
-          display:'grid',
-          gridTemplateColumns:'repeat(7,minmax(0,1fr))',
-          gap:8,
-        }}>
-        {rows.map((r,i)=>(
-          <div key={i} style={{
-              background:'#F8FAFC',border:'1px solid #E2E8F0',
-              borderRadius:8,padding:'10px 12px',minWidth:0,
-            }}>
-            <div style={{
-                fontSize:9,fontWeight:700,letterSpacing:'0.8px',
-                textTransform:'uppercase',color:r.c,marginBottom:5,
-                fontFamily:'var(--mono)',whiteSpace:'nowrap',
-                overflow:'hidden',textOverflow:'ellipsis',
-              }}>
-              {r.lbl}
-            </div>
-            <div style={{
-                fontSize:18,fontWeight:800,color:'#0F172A',
-                fontFamily:'var(--mono)',lineHeight:1.05,
-              }}>
-              {r.isGoogle?_f(r.cap):_f(r.remaining)}
-            </div>
-            <div style={{
-                fontSize:8,color:'#94A3B8',marginTop:2,
-                fontFamily:'var(--mono)',
-              }}>
-              {r.isGoogle?'per-run cap':'remaining'}
-            </div>
-            <div style={{
-                fontSize:9,color:_hasRun?'#16A34A':'#94A3B8',marginTop:6,
-                fontFamily:'var(--mono)',fontWeight:600,borderTop:'1px solid #E2E8F0',
-                paddingTop:5,
-              }}>
-              {_f(r.used)}{!r.isGoogle&&(' · '+_fp(r.per)+'/lead')}
-            </div>
-            <div style={{
-                fontSize:8,color:'#94A3B8',marginTop:2,
-                fontFamily:'var(--mono)',
-              }}>
-              {r.isGoogle?'calls (session)':'used this run'}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>);
-  }
-
   return(<>
-    {/* 2026-05-21: merged credit panel — always visible at top of view. */}
-    {renderMergedCreditPanel()}
     <div className="intel-strip">
-      {/* Phase 2 (2026-05-07): every tile reflects real backend state.
-          - Master DB: master_leads count from /api/master-stats
-          - Industries: 53 (52 base + 1 multi-vertical AU bundle)
-          - Valid Now: live valid_leads_in_progress during a running job
-          - Dedup Out: master_leads_deduped_out from the latest finished run
-          - API Health: % of services reporting status='ok' && pct_remaining>10
-          - Last Sync: time since last credits refresh */}
-      {[
-        {k:'db',val:fmt(liveStats.db),label:'Master DB',c:'var(--blue)'},
-        {k:'industries',val:fmt(liveStats.industries||0),label:'Industries',c:'var(--violet)'},
-        {k:'validNow',val:fmt(counts.total||0),label:'Valid Now',c:loading?'var(--green)':'var(--t3)'},
-        {k:'dedupOut',val:fmt(liveStats.dedupOut||0),label:"Dedup'd Out",c:'var(--amber)'},
-        {k:'health',val:(liveStats.health!=null?liveStats.health:'—')+'%',label:'API Health',c:'var(--green)'},
-        {k:'sync',val:syncAgo,label:'Last Sync',c:'var(--t3)'},
-      ].map((m,i)=>(
-        <div className="intel-strip-item" key={i} style={{cursor:'default'}}>
+      {[{k:'db',val:fmt(liveStats.db),label:'DB Records',c:'var(--blue)'},{k:'dupes',val:fmt(liveStats.dupes),label:'Dupes Blocked',c:'var(--violet)'},{k:'kw',val:fmt(liveStats.kw),label:'KW Dictionary',c:'var(--green)'},{k:'learned',val:'+'+liveStats.learned,label:'Learned Today',c:'var(--amber)'},{k:'health',val:liveStats.health.toFixed(1)+'%',label:'DB Health',c:'var(--green)'},{k:'sync',val:syncAgo,label:'Last Sync',c:'var(--t3)'}].map((m,i)=>(
+        <div className="intel-strip-item" key={i} onClick={i<5?()=>onNav('intelligence'):undefined} style={{cursor:i<5?'pointer':'default'}} title={i<5?'View Intelligence →':undefined}>
           <div className={'intel-strip-val'+(liveFlash[m.k]?' val-flash':'')} key={m.k+'-'+(liveFlash[m.k]||0)} style={{color:m.c}}>{m.val}</div>
           <div className="intel-strip-label">{m.label}</div>
         </div>
@@ -1542,25 +1091,18 @@ function GenerateView({tab,setTab,stats,hasResults,onGenerate,onCancel,loading,a
             </button>
           </div>
           {tab==='cities'?(<>
-            {/* AU-only city mode (legacy parity): State dropdown lists NSW/VIC/QLD/...
-                from /api/au-cities. The whole-country option keeps the synthetic
-                AUSTRALIA scope (capitals across all states). */}
-            <div className="fg"><label className="fl">State / Region</label><select className="fs" value={auState} onChange={e=>{setAuState(e.target.value);setCity('')}}>{_stateOpts.map(s=><option key={s.code} value={s.code}>{s.name}</option>)}</select></div>
+            <div className="fg"><label className="fl">Country / Region</label><select className="fs" value={country} onChange={e=>{setCountry(e.target.value);setCity(CITIES_MAP_L[e.target.value]?.[0]||'')}}>{Object.keys(CITIES_MAP_L).map(c=><option key={c}>{c}</option>)}</select></div>
             <div className="fr2">
-              <div className="fg"><label className="fl">City Tier</label><select className="fs" value={cityTier} onChange={e=>{setCityTier(e.target.value);setCity('')}}>{['All city tiers','Tier 1 cities','Tier 2 cities','Tier 3 cities'].map(t=><option key={t}>{t}</option>)}</select></div>
-              <div className="fg"><label className="fl">City</label><select className="fs" value={city||(cities[0]||'')} onChange={e=>setCity(e.target.value)}>{[<option key="__all" value="all">All cities in tier</option>].concat(cities.map(c=><option key={c} value={c}>{c}</option>))}</select></div>
+              <div className="fg"><label className="fl">City Tier</label><select className="fs" value={cityTier} onChange={e=>setCityTier(e.target.value)}>{['All city tiers','Tier 1 cities','Tier 2 cities','Tier 3 cities'].map(t=><option key={t}>{t}</option>)}</select></div>
+              <div className="fg"><label className="fl">City</label><select className="fs" value={city} onChange={e=>setCity(e.target.value)}>{cities.map(c=><option key={c}>{c}</option>)}</select></div>
             </div>
             <div className="fr2">
               <div className="fg"><label className="fl">Max Leads</label><input className="fi" type="number" value={maxLeads} onChange={e=>setMaxLeads(e.target.value)} placeholder="0 = unlimited"/><div className="field-hint">0 = no limit</div></div>
               <div className="fg"><label className="fl">Min Search Volume</label><input className="fi" type="number" value={minSearch} onChange={e=>setMinSearch(e.target.value)}/><div className="field-hint">Monthly searches</div></div>
             </div>
-            {/* Parallel workers slider (legacy parity: 1–8 default 4) */}
-            <div className="fg"><label className="fl">Parallel Workers <span style={{color:'var(--green)',fontWeight:700}}>{nWorkers}</span></label><input type="range" min="1" max="8" value={nWorkers} onChange={e=>setNWorkers(parseInt(e.target.value)||4)} style={{accentColor:'var(--green)',width:'100%'}}/></div>
           </>):(<>
             <div className="fg"><label className="fl">Industry</label><select className="fs" value={industry} onChange={e=>{setIndustry(e.target.value);setFormErr('')}} style={{borderColor:formErr?'var(--red)':''}}>{INDUSTRIES_L.map(i=><option key={i}>{i}</option>)}</select>{formErr&&<div style={{fontSize:11,color:'var(--red)',marginTop:4}}>⚠ {formErr}</div>}</div>
-            {/* Industry mode keeps multi-country dropdown (legacy parity).
-                Default = AU per "optimize only for Australia". */}
-            <div className="fg"><label className="fl">Country</label><select className="fs" value={indCountry} onChange={e=>setIndCountry(e.target.value)}>{['AU','USA','UK','India'].map(c=><option key={c} value={c}>{c==='AU'?'Australia':c==='USA'?'United States':c==='UK'?'United Kingdom':'India'}</option>)}</select></div>
+            <div className="fg"><label className="fl">Country / Region</label><select className="fs" value={indCountry} onChange={e=>setIndCountry(e.target.value)}>{Object.keys(CITIES_MAP_L).map(c=><option key={c}>{c}</option>)}</select></div>
             <div className="fr2">
               <div className="fg"><label className="fl">Max Leads</label><input className="fi" type="number" value={maxLeads} onChange={e=>setMaxLeads(e.target.value)}/></div>
               <div className="fg"><label className="fl">Min Vol.</label><input className="fi" type="number" value={minSearch} onChange={e=>setMinSearch(e.target.value)}/></div>
@@ -1568,387 +1110,29 @@ function GenerateView({tab,setTab,stats,hasResults,onGenerate,onCancel,loading,a
             <div className="fg"><label className="fl">Min CPC ($)</label><input className="fi" type="number" value={minCpc} step="0.1" onChange={e=>setMinCpc(e.target.value)}/><div className="field-hint">Filter by min cost-per-click</div></div>
           </>)}
           <div className="tog-row"><div><div className="tog-title">Contact Enrichment</div><div className="tog-desc">Reveal verified phone &amp; email via Apollo / Lusha</div></div><div className={'tog '+(enrich?'on':'off')} onClick={()=>setEnrich(!enrich)}><div className="tog-k"></div></div></div>
-          {/* 2026-06-08: Data-source toggle. OFF = SerpAPI + SEMrush (default);
-              ON = SerpAPI only — bypasses SEMrush entirely even if it has credits
-              (SEMrush then consumes 0 → $0 SEMrush cost this run). */}
-          <div className="tog-row"><div><div className="tog-title">SerpAPI only (bypass SEMrush)</div><div className="tog-desc">{serpOnly?'SerpAPI + Google Places + Apollo — SEMrush skipped':'SerpAPI + SEMrush combined (default)'}</div></div><div className={'tog '+(serpOnly?'on':'off')} onClick={()=>setSerpOnly(!serpOnly)}><div className="tog-k"></div></div></div>
-          {/* 2026-05-18 (round 4): pre-flight SEMrush cost preview. Mirrors
-              the Python `predict_semrush_units()` in test_semrush_budget.py
-              so the user sees expected credit cost BEFORE clicking Generate
-              — letting them dial down max_leads if the estimate is too high.
-              Updates live as max_leads / mode / enrich toggle changes. */}
-          {(()=>{
-            const _ml=parseInt(maxLeads,10)||0;
-            const _mode=(tab==='cities')?'city':'industry';
-            const _en=Boolean(enrich);
-            // ── Budget cap (matches V5.LeadGenerationPipeline) ──
-            const _budget = _ml<=0 ? 25000 : Math.max(300, Math.min(20000, _ml*100));
-            // ── Natural spend estimate (mirrors test_semrush_budget.predict_semrush_units) ──
-            let nat = 0;
-            nat += 300;                                              // phase2_kw_expansion (12*25*1)
-            if(_mode==='industry'){ nat += 30*15; }                  // phase3 hardcoded 30 probes lim15
-            else {
-              const kwCap=_ml<=0?400:Math.max(40,Math.min(1200,_ml*20));
-              const domCap=_ml<=0?800:Math.max(200,_ml*8);
-              const probes=Math.min(kwCap,Math.max(20,Math.floor(domCap/3)));
-              nat += probes*10;
-            }
-            // phase4 (overview only, ~70% confirmed-paid skip in city mode)
-            const domsEnrich=_ml<=0?50:Math.min(_ml*6,200);
-            nat += _mode==='city' ? Math.floor(domsEnrich*0.30*40) : domsEnrich*40;
-            // phase3 BFS (round-3 v2: max_leads//5, cap 20)
-            const bfsCalls=_ml<=0?20:Math.max(1,Math.min(20,Math.floor(_ml/5)));
-            nat += bfsCalls*120;
-            // phase5c (skipped when enrich OFF)
-            if(_en){
-              const doms5c=_ml<=0?50:Math.max(5,Math.min(_ml,50));
-              const lim=(_ml<=0||_ml>=15)?15:Math.max(10,Math.min(15,_ml*3));
-              nat += doms5c*(lim*10 + 3*40);
-            }
-            // phase5h (cap 30, requires 30% of max_leads)
-            const doms5h=_ml<=0?3:Math.max(0,Math.min(30,Math.floor(_ml*0.3)));
-            nat += doms5h*(10*10 + 3*40);
-            // phase5f topup
-            if(_ml>=5){
-              const seedN=_ml<=0?5:Math.max(1,Math.min(5,Math.floor(_ml/5)));
-              const rounds=_ml>=25?2:1;
-              nat += rounds*seedN*200;
-            }
-            // city-only: Pass 3 + rediscovery
-            if(_mode==='city'){
-              if(_ml>5){
-                if(_ml<=25) nat += 5*3*40;
-                else if(_ml<=100) nat += 15*3*40;
-                else nat += 40*5*40;
-              }
-              if(_ml<=5) nat += 2*2*40;
-              else if(_ml<=25) nat += 5*3*40;
-              else nat += 40*3*40;
-            }
-            const actual=Math.min(nat, _budget);
-            const perLead=(_ml>0?Math.round(actual/_ml):0);
-            const pct=Math.round((actual/_budget)*100);
-            const barColor=pct>=95?'#DC2626':pct>=70?'#F59E0B':'#16A34A';
-            return(<div style={{
-                marginTop:12,padding:'10px 12px',
-                background:'rgba(75,184,217,0.05)',
-                border:'1px solid rgba(75,184,217,0.20)',
-                borderRadius:9,
-              }}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-                <div style={{
-                    fontSize:9,fontWeight:700,letterSpacing:'1.2px',
-                    textTransform:'uppercase',color:'#0F172A',
-                    fontFamily:'var(--mono)',
-                  }}>
-                  ≈ pre-flight SEMrush cost
-                </div>
-                <div style={{fontSize:9,color:'#64748B',fontFamily:'var(--mono)'}}>
-                  cap {_budget.toLocaleString('en-US')}
-                </div>
-              </div>
-              <div style={{display:'flex',alignItems:'baseline',gap:8}}>
-                <div style={{
-                    fontSize:22,fontWeight:800,color:'#0F172A',
-                    fontFamily:'var(--mono)',lineHeight:1.05,
-                    letterSpacing:'-0.4px',
-                  }}>
-                  {actual.toLocaleString('en-US')}
-                </div>
-                <div style={{fontSize:10,color:'#64748B',fontFamily:'var(--mono)'}}>
-                  credits · {perLead}/lead · {_mode}{_en?' · enrich':''}
-                </div>
-              </div>
-              <div style={{marginTop:6,height:3,background:'#E2E8F0',borderRadius:3,overflow:'hidden'}}>
-                <div style={{height:'100%',width:Math.min(100,pct)+'%',background:barColor,transition:'width 0.3s'}}></div>
-              </div>
-              {pct>=95&&<div style={{fontSize:9,color:'#DC2626',marginTop:5,fontFamily:'var(--mono)',fontWeight:600}}>
-                ! Estimated spend will hit budget cap. Some Phase-5 polish may be skipped mid-run.
-              </div>}
-            </div>);
-          })()}
-          <button className={'gen-btn-big '+(loading?'busy':'')} onClick={loading?onCancel:handleGen}>
-            {loading?<span style={{display:'flex',alignItems:'center',justifyContent:'center',gap:10}}><Spin/>Cancel Run</span>:'Generate Leads'}
+          <button className={'gen-btn-big '+(loading?'busy':'')} onClick={handleGen} disabled={loading}>
+            {loading?<span style={{display:'flex',alignItems:'center',justifyContent:'center',gap:10}}><Spin/>Scanning Leads...</span>:'Generate Leads'}
           </button>
-          {/* Phase 2 (2026-05-07): Railway Master DB live counter on the
-              front page, directly below the Generate button. Pulls from
-              /api/master-stats via useLiveStats (60s poll). */}
-          <div style={{
-              marginTop:14,padding:'14px 16px',
-              background:'#FFFFFF',
-              border:'1px solid #E2E8F0',
-              borderRadius:10,
-              boxShadow:'0 1px 2px rgba(15,23,42,0.04)',
-              display:'flex',alignItems:'center',gap:14,
-            }}>
-            <div style={{
-                width:40,height:40,borderRadius:10,flexShrink:0,
-                background:'rgba(75,184,217,0.10)',
-                border:'1px solid rgba(75,184,217,0.25)',
-                display:'flex',alignItems:'center',justifyContent:'center',
-                color:'#4BB8D9',fontSize:18,fontWeight:700,
-              }}>
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <ellipse cx="10" cy="4.5" rx="6.5" ry="2.5" stroke="currentColor" strokeWidth="1.4"/>
-                <path d="M3.5 4.5v5c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5v-5" stroke="currentColor" strokeWidth="1.4"/>
-                <path d="M3.5 9.5v5c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5v-5" stroke="currentColor" strokeWidth="1.4"/>
-              </svg>
-            </div>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{
-                  fontSize:10,fontWeight:600,letterSpacing:'1.2px',
-                  textTransform:'uppercase',color:'#94A3B8',marginBottom:3,
-                  fontFamily:'var(--mono)',
-                }}>
-                Railway Master Database
-              </div>
-              <div style={{display:'flex',alignItems:'baseline',gap:8}}>
-                <div style={{
-                    fontSize:22,fontWeight:700,color:'#0F172A',
-                    fontFamily:'var(--mono)',lineHeight:1,
-                  }}>
-                  {(liveStats.db||0).toLocaleString('en-US')}
-                </div>
-                <div style={{fontSize:11,color:'#64748B'}}>leads stored</div>
-              </div>
-            </div>
-            <div style={{textAlign:'right',flexShrink:0}}>
-              <div style={{
-                  display:'inline-flex',alignItems:'center',gap:5,
-                  fontSize:9,fontWeight:600,letterSpacing:'0.6px',
-                  textTransform:'uppercase',color:'#16A34A',
-                  background:'rgba(34,197,94,0.08)',
-                  border:'1px solid rgba(34,197,94,0.25)',
-                  padding:'3px 8px',borderRadius:12,
-                  fontFamily:'var(--mono)',
-                }}>
-                <span style={{
-                    width:6,height:6,borderRadius:'50%',
-                    background:'#16A34A',
-                    boxShadow:'0 0 4px #16A34A',
-                  }}></span>
-                LIVE
-              </div>
-              <div style={{fontSize:9,color:'#94A3B8',marginTop:4,fontFamily:'var(--mono)'}}>
-                Synced {syncAgo}
-              </div>
-            </div>
-          </div>
         </div></div>
       </div>
 
       {/* RIGHT: Dynamic content */}
       <div className="results-col">
-        {/* 2026-05-25: UNMISSABLE persistent post-run banner. Renders for
-            every terminal state (success / empty / cancelled / error) and
-            DOES NOT auto-dismiss. Replaces the previous reliance on the
-            4-second toast which vanished before users could read it,
-            making error/empty runs look identical to "user hasn't clicked
-            Generate yet". */}
-        {runOutcome&&!loading&&(()=>{
-          const k=runOutcome.kind;
-          const color = k==='success'?'#16A34A'
-                      : k==='empty'?'#F59E0B'
-                      : k==='cancelled'?'#94A3B8'
-                      : '#DC2626';
-          const icon = k==='success'?'✓'
-                     : k==='empty'?'!'
-                     : k==='cancelled'?'⊘'
-                     : '✕';
-          const title = k==='success'?(`Scan complete — ${runOutcome.leadsCount} lead${runOutcome.leadsCount===1?'':'s'} found`)
-                      : k==='empty'?'Scan completed — 0 leads returned'
-                      : k==='cancelled'?'Run cancelled'
-                      : 'Pipeline error';
-          return(<div style={{
-              marginBottom:14,padding:'14px 16px',
-              background:'#FFFFFF',
-              border:'2px solid '+color,
-              borderLeft:'6px solid '+color,
-              borderRadius:10,
-              boxShadow:'0 2px 8px rgba(15,23,42,0.10)',
-            }}>
-            <div style={{display:'flex',alignItems:'flex-start',gap:12}}>
-              <div style={{
-                  width:32,height:32,borderRadius:'50%',
-                  background:color+'15',color:color,
-                  display:'flex',alignItems:'center',justifyContent:'center',
-                  fontSize:18,fontWeight:800,flexShrink:0,
-                  border:'2px solid '+color+'40',
-                }}>{icon}</div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{
-                    fontSize:14,fontWeight:700,color:color,
-                    letterSpacing:'0.3px',marginBottom:4,
-                  }}>
-                  {title}
-                </div>
-                {runOutcome.reason&&<div style={{
-                    fontSize:11,color:'var(--t3)',lineHeight:1.55,
-                    fontFamily:'var(--mono)',
-                  }}>
-                  {runOutcome.reason}
-                </div>}
-                {runOutcome.partialUrl&&<div style={{marginTop:8}}>
-                  <a href={runOutcome.partialUrl} download className="btn-sm btn-blue"
-                     style={{textDecoration:'none',padding:'5px 10px',fontSize:10}}>
-                    ↓ Partial CSV
-                  </a>
-                </div>}
-              </div>
-            </div>
-          </div>);
-        })()}
-        {/* 2026-05-25: post-run log archive — same `logs` array rendered
-            during a run inside InlineProgress, but persists AFTER the run
-            completes so the user can scroll through diagnostic output
-            (KEY-HEALTH, FUNNEL, GooglePlaces calls, gate decisions, etc.).
-            Hidden during a live run (logs are shown in InlineProgress
-            then) and only renders when there are logs to show. */}
-        {!loading&&logs&&logs.length>0&&(()=>{
-          const isLight=theme==='light';
-          return(<div className="card" style={{marginBottom:12,overflow:'hidden'}}>
-            <div style={{padding:'8px 12px',borderBottom:'1px solid var(--bd)',display:'flex',alignItems:'center',justifyContent:'space-between',background:isLight?'var(--sf2)':'rgba(0,0,0,0.2)'}}>
-              <span style={{fontFamily:'var(--mono)',fontSize:10,fontWeight:700,letterSpacing:'1px',textTransform:'uppercase',color:'var(--t1)'}}>
-                ⌃ Run log — {logs.length} line{logs.length===1?'':'s'} (post-run archive)
-              </span>
-              <span style={{fontFamily:'var(--mono)',fontSize:9,color:'var(--t3)'}}>
-                last run's full output — scroll for diagnostics
-              </span>
-            </div>
-            <div style={{maxHeight:260,overflowY:'auto',padding:'8px 12px',fontFamily:'var(--mono)',fontSize:10,lineHeight:1.6,background:isLight?'#F8FAFC':'rgba(4,6,12,0.8)'}}>
-              {logs.slice(-200).map((l,i)=>(
-                <div className="tl" key={i}>
-                  <span className="tts" style={{color:isLight?'#9CA3AF':undefined}}>{l.ts}</span>
-                  <span className={'ttag '+l.tag} style={{color:isLight?{sys:'#9CA3AF',ok:'#16A34A',scan:'#2563EB',find:'#D97706',enrich:'#7C3AED',score:'#0891B2',err:'#DC2626'}[l.tag]||'#9CA3AF':undefined}}>[{l.tag.toUpperCase()}]</span>
-                  <span className="tmsg" style={{color:isLight?'#475569':undefined}}>{l.msg}</span>
-                </div>
-              ))}
-            </div>
-          </div>);
-        })()}
         {loading?(
-          <InlineProgress phase={phase} logs={logs} progress={progress} counts={counts} theme={theme} liveJob={liveJob}/>
+          <InlineProgress phase={phase} logs={logs} progress={progress} counts={counts} theme={theme}/>
         ):hasResults?(
           <>
-            {/* 2026-05-21: 4-card stats grid (Leads/Emails/Phones/Direct Phones)
-                deleted — same numbers are already in the "Scan complete — X
-                leads found · Y emails · Z phones · W direct dials" banner
-                directly beneath. Removing it shortens the page by ~80 px
-                and removes a duplicate. */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:0}}>
+              {[{label:'Leads Found',val:stats.total,c:'var(--blue)'},{label:'Emails',val:stats.email,c:'var(--green)'},{label:'Phones',val:stats.phone,c:'var(--amber)'},{label:'Tier 1',val:'12',c:'var(--violet)'}].map((s,i)=>(
+                <div className="rsi-card" key={i}><div className="rsi-label">{s.label}</div><div className="rsi-val" style={{color:s.val!=='—'?s.c:'var(--t4)'}}>{s.val}</div>{s.val!=='—'&&<div className="rsi-sub">This run</div>}</div>
+              ))}
+            </div>
             <div className="card"><div className="card-p">
-              {/* 2026-05-25: green "Scan complete" banner only shows when
-                  the run was an actual success (not when state='error' or
-                  state='empty' — those are covered by the persistent
-                  runOutcome banner at the TOP of this column). Without
-                  this guard, error runs misleadingly showed "Scan complete
-                  — 0 leads found" below the red Pipeline Error banner. */}
-              {(!runOutcome || runOutcome.kind==='success')&&<div style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:'var(--g5)',border:'1.5px solid var(--g20)',borderRadius:9,marginBottom:14}}>
+              <div style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:'var(--g5)',border:'1.5px solid var(--g20)',borderRadius:9,marginBottom:14}}>
                 <div style={{width:28,height:28,borderRadius:'50%',background:'var(--g10)',border:'1.5px solid var(--g20)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--green)',fontWeight:700,flexShrink:0}}>✓</div>
-                <div style={{flex:1}}>
-                  {/* Phase 2 (2026-05-07): real summary line — values from /status job summary */}
-                  <div style={{fontSize:13,fontWeight:600,color:'var(--t1)'}}>Scan complete — {stats.total!=='—'?stats.total:'0'} lead{stats.total==='1'?'':'s'} found</div>
-                  <div style={{fontSize:11,color:'var(--t3)'}}>
-                    {stats.email!=='—'?stats.email:'0'} email{stats.email==='1'?'':'s'} · {stats.phone!=='—'?stats.phone:'0'} phone{stats.phone==='1'?'':'s'} · {stats.direct!=='—'?stats.direct:'0'} direct dial{stats.direct==='1'?'':'s'} · {stats.personal!=='—'?stats.personal:'0'} personal email{stats.personal==='1'?'':'s'}
-                  </div>
-                </div>
-                <div style={{display:'flex',gap:6}}>
-                  <button className="btn-sm btn-blue" onClick={()=>{
-                    if(!topCsvText){alert('No CSV available yet');return;}
-                    const blob=new Blob([topCsvText],{type:'text/csv;charset=utf-8'});
-                    const url=URL.createObjectURL(blob);
-                    const a=document.createElement('a');
-                    a.href=url;a.download='leads_'+new Date().toISOString().slice(0,10)+'.csv';
-                    document.body.appendChild(a);a.click();a.remove();
-                    setTimeout(()=>URL.revokeObjectURL(url),1500);
-                  }}>↓ CSV</button>
-                  <button className="btn-sm btn-green" disabled style={{opacity:0.5,cursor:'not-allowed'}} title="Excel export coming soon">↓ Excel</button>
-                </div>
-              </div>}
-              {/* 2026-05-21: Credit panel was moved to TOP of GenerateView
-                  via renderMergedCreditPanel() so it's always visible (not
-                  just after a run). Only the SEMrush per-phase breakdown
-                  stays in the post-run results column — see below. */}
-              {creditsUsedThisRun&&(()=>{
-                const cu=creditsUsedThisRun;
-                /* 2026-05-21: this block now ONLY renders the SEMrush per-
-                   phase breakdown (the credit tiles moved up to the merged
-                   panel at the top of the view). */
-                if(!(cu.semrush_units_by_phase&&Object.keys(cu.semrush_units_by_phase).length>0))return null;
-                return(<div style={{
-                    background:'#FFFFFF',border:'1px solid #E2E8F0',borderRadius:10,
-                    padding:'12px 14px',marginBottom:14,
-                  }}>
-                  {(()=>{
-                    const _phases=cu.semrush_units_by_phase;
-                    const _totalUnits=cu.semrush_units_used||Object.values(_phases).reduce((a,b)=>a+(Number(b)||0),0);
-                    const _budget=cu.semrush_unit_budget||0;
-                    const _budgetPct=(_budget>0?Math.min(100,Math.round((_totalUnits/_budget)*100)):0);
-                    const _phaseColors={
-                      phase1_seed:'#94A3B8',
-                      phase2_kw_expansion:'#0EA5E9',
-                      phase3_discovery:'#2563EB',
-                      phase4_enrich:'#F59E0B',
-                      phase5c_insights:'#7C3AED',
-                      phase5h_backfill:'#16A34A',
-                      init:'#94A3B8',
-                      unknown:'#94A3B8',
-                    };
-                    const _phaseLabels={
-                      phase1_seed:'P1 seed kw',
-                      phase2_kw_expansion:'P2 kw expand',
-                      phase3_discovery:'P3 discovery',
-                      phase4_enrich:'P4 enrich',
-                      phase5c_insights:'P5c insights',
-                      phase5h_backfill:'P5h backfill',
-                      init:'init',
-                      unknown:'other',
-                    };
-                    const _sorted=Object.entries(_phases).sort((a,b)=>(Number(b[1])||0)-(Number(a[1])||0));
-                    return(<div style={{
-                        marginTop:14,paddingTop:12,borderTop:'1px solid #E2E8F0',
-                      }}>
-                      <div style={{
-                          display:'flex',alignItems:'center',justifyContent:'space-between',
-                          marginBottom:8,
-                        }}>
-                        <div style={{
-                            fontSize:10,fontWeight:700,letterSpacing:'1.2px',
-                            textTransform:'uppercase',color:'#0F172A',
-                            fontFamily:'var(--mono)',
-                          }}>
-                          ⌬ SEMrush units by phase
-                        </div>
-                        <div style={{
-                            fontSize:10,fontWeight:600,color:_budgetPct>=75?'#DC2626':'#64748B',
-                            fontFamily:'var(--mono)',
-                          }}>
-                          {_totalUnits.toLocaleString('en-US')}
-                          {_budget>0&&<span> / {_budget.toLocaleString('en-US')} ({_budgetPct}%)</span>}
-                          {cu.semrush_calls_skipped>0&&<span style={{color:'#DC2626',marginLeft:8}}>· {cu.semrush_calls_skipped} skipped</span>}
-                        </div>
-                      </div>
-                      <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                        {_sorted.map(([ph,u],i)=>{
-                          const n=Number(u)||0;
-                          const pct=(_totalUnits>0?Math.round((n/_totalUnits)*100):0);
-                          const c=_phaseColors[ph]||'#94A3B8';
-                          const lbl=_phaseLabels[ph]||ph;
-                          return(<div key={i} style={{
-                              display:'inline-flex',alignItems:'center',gap:6,
-                              padding:'4px 8px',borderRadius:6,
-                              background:c+'15',border:'1px solid '+c+'40',
-                              fontFamily:'var(--mono)',fontSize:10,
-                            }}>
-                            <span style={{fontWeight:700,color:c}}>{lbl}</span>
-                            <span style={{color:'#0F172A',fontWeight:700}}>{n.toLocaleString('en-US')}</span>
-                            <span style={{color:'#64748B'}}>({pct}%)</span>
-                          </div>);
-                        })}
-                      </div>
-                    </div>);
-                  })()}
-                </div>);
-              })()}
+                <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:'var(--t1)'}}>Scan complete — 89 leads found</div><div style={{fontSize:11,color:'var(--t3)'}}>12 Tier 1 · 44 Tier 2 · 33 Tier 3 · 12.8s</div></div>
+                <div style={{display:'flex',gap:6}}><button className="btn-sm btn-blue">↓ CSV</button><button className="btn-sm btn-green">↓ Excel</button></div>
+              </div>
               <div style={{marginBottom:12,position:'relative'}}>
                 <input className="fi" placeholder="Search leads..." value={filter} onChange={e=>setFilter(e.target.value)} style={{paddingLeft:32,fontSize:12}}/>
                 <span style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:'var(--t3)',fontSize:13,pointerEvents:'none'}}>⌕</span>
@@ -1959,51 +1143,18 @@ function GenerateView({tab,setTab,stats,hasResults,onGenerate,onCancel,loading,a
                   <thead><tr>
                     <th style={{cursor:'pointer'}} onClick={()=>{setSortCol('b');setSortDir(d=>d==='asc'?'desc':'asc')}}>Business<SortIcon col="b"/></th>
                     <th>Domain</th><th>Email</th><th>Phone</th>
-                    <th>Source</th>
-                    <th>Keyword</th>
-                    <th>Cost/Lead</th>
                     <th style={{cursor:'pointer'}} onClick={()=>{setSortCol('s');setSortDir(d=>d==='asc'?'desc':'asc')}}>Score<SortIcon col="s"/></th>
                   </tr></thead>
-                  <tbody>{filteredLeads.length>0?filteredLeads.map((l,i)=><tr key={i}>
-                    <td>{l.isPerson?
-                        <><span style={{fontWeight:600}}>{l.nm}</span><div style={{fontSize:9,color:'var(--t3)',marginTop:2}}>{l.b}{l._role?' · '+l._role:''}</div></>
-                        :<>{l.b}{l._role&&<div style={{fontSize:9,color:'var(--t3)',marginTop:2}}>{l._role}</div>}</>
-                    }</td>
-                    <td style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--blue)'}}>{l.d}</td>
-                    <td style={{fontFamily:'var(--mono)',fontSize:10}}><div style={{display:'flex',alignItems:'center',color:l.e!=='—'?'var(--green)':'var(--t3)'}}>{l.e}{l.e!=='—'&&<CopyBtn text={l.e}/>}</div></td>
-                    <td style={{fontFamily:'var(--mono)',fontSize:10}}><div style={{display:'flex',alignItems:'center',color:l.p!=='—'?'var(--amber)':'var(--t3)'}}>{l.p}{l.p!=='—'&&<CopyBtn text={l.p}/>}{l._direct&&<span style={{marginLeft:4,fontSize:8,color:'var(--violet)',fontWeight:700}}>DIRECT</span>}</div></td>
-                    <td style={{fontFamily:'var(--mono)',fontSize:9,color:l.src==='Google Intent'?'#0F766E':l.src==='Silent-Apollo'?'#F59E0B':'var(--t3)',fontWeight:600}}>{l.src}</td>
-                    <td style={{fontFamily:'var(--mono)',fontSize:9,color:l.kw!=='—'?'var(--violet)':'var(--t3)'}}>{l.kw}</td>
-                    <td style={{fontFamily:'var(--mono)',fontSize:10,color:l.cpl!=='—'?'var(--green)':'var(--t3)',fontWeight:600}}>{l.cpl}</td>
-                    <td><span className={'sc '+(l.s>=85?'sc-h':'sc-m')}>{l.s}/100</span></td>
-                  </tr>):<tr><td colSpan={8} style={{textAlign:'center',padding:'30px 20px',color:'var(--t3)',fontFamily:'var(--mono)',fontSize:11}}>
-                    {filter?
-                      ('No results match "'+filter+'"'):
-                      (realLeads.length===0?
-                        '0 leads found. Try a different scope (city/industry), enable enrichment, or check that Google Places / Apollo keys are set on Railway.':
-                        'No leads after filtering')}
-                  </td></tr>}</tbody>
+                  <tbody>{filteredLeads.length>0?filteredLeads.map((l,i)=><tr key={i}><td>{l.b}</td><td style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--blue)'}}>{l.d}</td><td style={{fontFamily:'var(--mono)',fontSize:10}}><div style={{display:'flex',alignItems:'center',color:l.e!=='—'?'var(--green)':'var(--t3)'}}>{l.e}<CopyBtn text={l.e}/></div></td><td style={{fontFamily:'var(--mono)',fontSize:10}}><div style={{display:'flex',alignItems:'center',color:l.p!=='—'?'var(--amber)':'var(--t3)'}}>{l.p}<CopyBtn text={l.p}/></div></td><td><span className={'sc '+(l.s>=85?'sc-h':'sc-m')}>{l.s}/100</span></td></tr>):<tr><td colSpan={5} style={{textAlign:'center',padding:'20px',color:'var(--t3)',fontFamily:'var(--mono)',fontSize:11}}>No results match "{filter}"</td></tr>}</tbody>
                 </table>
-                <div style={{textAlign:'center',padding:'10px 0 2px',fontFamily:'var(--mono)',fontSize:9,color:'var(--t3)',letterSpacing:'0.5px'}}>
-                  SHOWING {filteredLeads.length} OF {realLeads.length} — {realLeads.length>0?'EXPORT FOR FULL DATASET':'NO LEADS RETURNED FROM PIPELINE'}
-                </div>
+                <div style={{textAlign:'center',padding:'10px 0 2px',fontFamily:'var(--mono)',fontSize:9,color:'var(--t3)',letterSpacing:'0.5px'}}>SHOWING {filteredLeads.length} OF 89 — EXPORT FOR FULL DATASET</div>
               </div>
             </div></div>
           </>
         ):(
           <>
-            {partialCsvUrl&&(
-              <div className="card" style={{marginBottom:12}}><div className="card-p" style={{padding:'14px 16px',display:'flex',alignItems:'center',gap:14}}>
-                <div style={{width:32,height:32,borderRadius:'50%',background:'var(--a10,rgba(245,158,11,0.1))',color:'var(--amber)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:16,fontWeight:700}}>⚠</div>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:600,color:'var(--t1)'}}>Run did not complete</div>
-                  <div style={{fontSize:11,color:'var(--t3)'}}>Leads collected before cancel/error are available — not added to master DB.</div>
-                </div>
-                <a href={partialCsvUrl} download className="btn-sm btn-blue" style={{textDecoration:'none',padding:'7px 14px'}}>↓ Partial CSV</a>
-              </div></div>
-            )}
             <div className="run-stats-inline">
-              {[{label:'Leads Found',val:'—',c:'var(--blue)'},{label:'Emails',val:'—',c:'var(--green)'},{label:'Phones',val:'—',c:'var(--amber)'},{label:'Direct Phones',val:'—',c:'var(--violet)'}].map((s,i)=>(
+              {[{label:'Leads Found',val:'—',c:'var(--blue)'},{label:'Emails',val:'—',c:'var(--green)'},{label:'Phones',val:'—',c:'var(--amber)'},{label:'Tier 1',val:'—',c:'var(--violet)'}].map((s,i)=>(
                 <div className="rsi-card" key={i}><div className="rsi-label">{s.label}</div><div className="rsi-val" style={{color:'var(--t4)'}}>—</div></div>
               ))}
             </div>
@@ -2020,275 +1171,6 @@ function GenerateView({tab,setTab,stats,hasResults,onGenerate,onCancel,loading,a
         )}
       </div>
     </div>
-  </>);
-}
-
-
-/* ─── DATABASE VIEW ───
-   Pulls live MySQL data (Railway) and renders run_history + master_leads.
-   Color-coded numbers per analytic axis:
-     • leads_total   → blue
-     • leads_new     → green
-     • leads_deduped → amber
-     • duration      → violet
-     • state badge   → green/amber/red/blue per status
-   Endpoints:
-     /api/db/run-history?page=N&page_size=50
-     /api/db/master-leads?page=N&page_size=50
-     /api/master-stats   (master count + last_seen)
-*/
-// 2026-06-08: Cost / Pricing tab. The user enters per-API {credits bought,
-// amount paid, monthly?}; we derive $/credit and the backend uses it at run
-// finalize to freeze each run's dollar cost (run-history) + per-lead cost.
-function CostView(){
-  const base=(typeof window!=='undefined'&&window.location.origin)||'';
-  const [items,setItems]=useState({});
-  const [lineItems,setLineItems]=useState([]);
-  const [currency,setCurrency]=useState('$');
-  const [loading,setLoading]=useState(true);
-  const [saving,setSaving]=useState(false);
-  const [savedAt,setSavedAt]=useState(null);
-  const [err,setErr]=useState('');
-  useEffect(()=>{(async()=>{
-    try{
-      const r=await fetch(base+'/api/pricing');
-      const j=await r.json();
-      setItems((j.pricing&&j.pricing.items)||{});
-      setLineItems(j.line_items||[]);
-      setCurrency((j.pricing&&j.pricing.currency)||'$');
-    }catch(e){setErr(e.message||String(e));}
-    setLoading(false);
-  })();},[base]);
-  const upd=(k,field,val)=>setItems(prev=>({...prev,[k]:{...(prev[k]||{credits:0,paid:0,monthly:false}),[field]:val}}));
-  const unitPrice=(it)=>{const c=Number(it&&it.credits)||0,p=Number(it&&it.paid)||0;return c>0?p/c:0;};
-  const save=async()=>{
-    setSaving(true);setErr('');
-    try{
-      const r=await fetch(base+'/api/pricing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pricing:{items,currency}})});
-      const j=await r.json();
-      if(j.ok){setItems((j.pricing&&j.pricing.items)||items);setSavedAt(Date.now());}
-      else setErr(j.error||'Save failed');
-    }catch(e){setErr(e.message||String(e));}
-    setSaving(false);
-  };
-  if(loading)return(<div className="card"><div className="card-p" style={{color:'var(--t3)',padding:30,textAlign:'center'}}>Loading pricing…</div></div>);
-  let lastGroup=null;
-  return(<>
-    <div className="res-hd" style={{marginBottom:12}}>
-      <div>
-        <div className="res-title">Cost / Pricing</div>
-        <div style={{fontSize:11,color:'var(--t3)',marginTop:2}}>Enter what you paid per API → we compute the real $/credit, then freeze each run's cost.</div>
-      </div>
-      <button className="btn btn-primary" style={{minWidth:120}} onClick={save} disabled={saving}>{saving?'Saving…':'Save Pricing'}</button>
-    </div>
-    {err&&<div style={{padding:'10px 14px',background:'rgba(239,68,68,0.08)',color:'var(--red)',borderRadius:8,marginBottom:10,fontSize:12}}>⚠ {err}</div>}
-    {savedAt&&!err&&<div style={{padding:'10px 14px',background:'rgba(34,197,94,0.10)',color:'var(--green)',borderRadius:8,marginBottom:10,fontSize:12}}>✓ Pricing saved — applies to the NEXT run onward (past runs stay frozen).</div>}
-    <div className="card"><div className="card-p">
-      <div style={{overflowX:'auto'}}>
-        <table className="rt">
-          <thead><tr>
-            <th>API / Credit pool</th>
-            <th style={{textAlign:'right'}}>Credits bought</th>
-            <th style={{textAlign:'right'}}>Amount paid ({currency})</th>
-            <th style={{textAlign:'center'}}>Monthly plan</th>
-            <th style={{textAlign:'right'}}>{currency}/credit</th>
-          </tr></thead>
-          <tbody>
-            {lineItems.map(li=>{
-              const it=items[li.key]||{credits:0,paid:0,monthly:false};
-              const showGroup=li.group!==lastGroup; lastGroup=li.group;
-              const up=unitPrice(it);
-              return(<tr key={li.key}>
-                <td>
-                  {showGroup&&<div style={{fontSize:9,letterSpacing:'1.5px',textTransform:'uppercase',color:'var(--t3)',marginBottom:2}}>{li.group}</div>}
-                  <div style={{fontSize:12,fontWeight:600}}>{li.label}</div>
-                  <div style={{fontSize:9,color:'var(--t3)'}}>per {li.unit}</div>
-                </td>
-                <td style={{textAlign:'right'}}><input className="fi" type="number" min="0" step="any" style={{maxWidth:130,textAlign:'right'}} value={it.credits||''} placeholder="0" onChange={e=>upd(li.key,'credits',e.target.value)}/></td>
-                <td style={{textAlign:'right'}}><input className="fi" type="number" min="0" step="any" style={{maxWidth:130,textAlign:'right'}} value={it.paid||''} placeholder="0" onChange={e=>upd(li.key,'paid',e.target.value)}/></td>
-                <td style={{textAlign:'center'}}><div className={'tog '+(it.monthly?'on':'off')} style={{display:'inline-flex'}} onClick={()=>upd(li.key,'monthly',!it.monthly)}><div className="tog-k"></div></div></td>
-                <td style={{textAlign:'right',fontFamily:'var(--mono)',fontSize:12,color:up>0?'var(--green)':'var(--t3)',fontWeight:600}}>{up>0?(currency+up.toFixed(4)):'—'}</td>
-              </tr>);
-            })}
-          </tbody>
-        </table>
-      </div>
-      <div style={{marginTop:14,fontSize:11,color:'var(--t3)',lineHeight:1.6}}>
-        <div><b>How it works:</b> per-run cost = Σ (credits actually consumed × {currency}/credit). An API a run never used costs <b>{currency}0</b> for that run — so bypassing SEMrush (SerpAPI-only) drops its cost to zero automatically.</div>
-        <div style={{marginTop:4}}>Cost is <b>frozen</b> when the run finishes; editing prices here only affects future runs. Pricing is stored in a local file — re-enter it after a Railway redeploy (past run costs are safe in the DB).</div>
-      </div>
-    </div></div>
-  </>);
-}
-
-function DatabaseView(){
-  const [tab,setTab]=useState('runs');           // 'runs' | 'leads'
-  const [runs,setRuns]=useState([]);
-  const [runsTotal,setRunsTotal]=useState(0);
-  const [leads,setLeads]=useState([]);
-  const [leadsTotal,setLeadsTotal]=useState(0);
-  const [page,setPage]=useState(1);
-  const [pageSize]=useState(50);
-  const [stats,setStats]=useState({db:0,run_history:0,startup_error:''});
-  const [loading,setLoading]=useState(false);
-  const [err,setErr]=useState('');
-  const base=(typeof window!=='undefined'&&window.location.origin)||'';
-  const load=useCallback(async ()=>{
-    setLoading(true);setErr('');
-    try{
-      // /api/db/debug returns master_leads_count + run_history_count + db_ready
-      // in one call; /api/master-stats only returns total_leads. Using debug
-      // here keeps the DB summary tiles tight to the live DB state.
-      const ms=await fetch(base+'/api/db/debug',{credentials:'same-origin'});
-      if(ms.status===401){window.location.href='/login';return;}
-      if(ms.ok){
-        const j=await ms.json();
-        setStats({
-          db:j.master_leads_count||0,
-          run_history:j.run_history_count||0,
-          startup_error:j.db_startup_error||j.query_error||'',
-        });
-      }
-      const url=base+(tab==='runs'?'/api/db/run-history':'/api/db/master-leads')+'?page='+page+'&page_size='+pageSize;
-      const r=await fetch(url,{credentials:'same-origin'});
-      if(r.status===401){window.location.href='/login';return;}
-      if(!r.ok){setErr('HTTP '+r.status);setLoading(false);return;}
-      const j=await r.json();
-      if(tab==='runs'){
-        setRuns(Array.isArray(j.rows)?j.rows:[]);
-        setRunsTotal(j.total||0);
-      }else{
-        setLeads(Array.isArray(j.rows)?j.rows:[]);
-        setLeadsTotal(j.total||0);
-      }
-    }catch(e){setErr(e.message||String(e));}
-    setLoading(false);
-  },[base,tab,page,pageSize]);
-  useEffect(()=>{load();},[load]);
-  // Aggregates over the loaded page (cheap client-side roll-ups for the
-  // header strip — exact, paginated, but reflect THIS page only).
-  const agg=(()=>{
-    if(tab!=='runs')return null;
-    const a={total:0,new:0,dedup:0,err:0,done:0,running:0,cancelled:0};
-    for(const r of runs){
-      a.total+=Number(r.leads_total||0);
-      a.new+=Number(r.leads_new||0);
-      a.dedup+=Number(r.leads_deduped_out||0);
-      if(r.state==='done')a.done++;
-      else if(r.state==='error')a.err++;
-      else if(r.state==='cancelled')a.cancelled++;
-      else if(r.state==='running')a.running++;
-    }
-    return a;
-  })();
-  const _state_colour=(s)=>s==='done'?'var(--green)':s==='error'?'var(--red)':s==='cancelled'?'var(--amber)':s==='running'?'var(--blue)':'var(--t3)';
-  const _fmt_dt=(s)=>{
-    if(!s)return '—';
-    try{return new Date(s).toLocaleString('en-AU',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});}catch(e){return String(s);}
-  };
-  const totalPages=Math.max(1,Math.ceil((tab==='runs'?runsTotal:leadsTotal)/pageSize));
-  return(<>
-    {/* Master DB summary strip */}
-    <div className="kpis" style={{marginBottom:12}}>
-      <div className="kpi"><div className="kpi-label">Master Leads (DB)</div><div className="kpi-val" style={{color:'var(--blue)'}}>{Number(stats.db||0).toLocaleString('en-US')}</div><div className="kpi-trend">Unique (name, root_domain)</div></div>
-      <div className="kpi"><div className="kpi-label">Run History Rows</div><div className="kpi-val" style={{color:'var(--violet)'}}>{Number(stats.run_history||0).toLocaleString('en-US')}</div><div className="kpi-trend">All-time pipeline runs</div></div>
-      <div className="kpi"><div className="kpi-label">Page · Leads Total</div><div className="kpi-val" style={{color:'var(--green)'}}>{agg?Number(agg.total||0).toLocaleString('en-US'):'—'}</div><div className="kpi-trend">Sum of leads_total on this page</div></div>
-      <div className="kpi"><div className="kpi-label">Page · Deduped Out</div><div className="kpi-val" style={{color:'var(--amber)'}}>{agg?Number(agg.dedup||0).toLocaleString('en-US'):'—'}</div><div className="kpi-trend">Already in master_leads</div></div>
-    </div>
-    {stats.startup_error&&<div className="card" style={{marginBottom:10,borderColor:'var(--red)'}}><div className="card-p" style={{color:'var(--red)',fontSize:12}}>⚠ DB startup error: {stats.startup_error}</div></div>}
-    <div className="card"><div className="card-p">
-      <div className="res-hd" style={{marginBottom:12}}>
-        <div>
-          <div className="res-title">Railway MySQL — {tab==='runs'?'run_history':'master_leads'}</div>
-          <div style={{fontSize:11,color:'var(--t3)',marginTop:2}}>
-            {(tab==='runs'?runsTotal:leadsTotal).toLocaleString('en-US')} row{(tab==='runs'?runsTotal:leadsTotal)===1?'':'s'} · page {page} / {totalPages}
-          </div>
-        </div>
-        <div style={{display:'flex',gap:6,alignItems:'center'}}>
-          <div style={{display:'inline-flex',background:'var(--inp)',border:'1px solid var(--bd)',borderRadius:8,padding:3}}>
-            <button className="btn-sm" style={{padding:'5px 12px',fontSize:11,background:tab==='runs'?'var(--blue)':'transparent',color:tab==='runs'?'#fff':'var(--t2)',border:'none',borderRadius:6}} onClick={()=>{setTab('runs');setPage(1);}}>Runs</button>
-            <button className="btn-sm" style={{padding:'5px 12px',fontSize:11,background:tab==='leads'?'var(--blue)':'transparent',color:tab==='leads'?'#fff':'var(--t2)',border:'none',borderRadius:6}} onClick={()=>{setTab('leads');setPage(1);}}>Leads</button>
-          </div>
-          <button className="btn-sm btn-ghost" onClick={load}>↻ Refresh</button>
-        </div>
-      </div>
-      {err&&<div style={{padding:'10px 14px',background:'rgba(239,68,68,0.08)',color:'var(--red)',borderRadius:8,marginBottom:10,fontSize:12}}>⚠ {err}</div>}
-      <div style={{overflowX:'auto'}}>
-        {tab==='runs'?(
-          <table className="rt">
-            <thead><tr>
-              <th>ID</th><th>User</th><th>Industry / Mode</th><th>Country</th>
-              <th style={{textAlign:'right'}}>Total</th>
-              <th style={{textAlign:'right'}}>New</th>
-              <th style={{textAlign:'right'}}>Deduped</th>
-              <th style={{textAlign:'right'}}>Duration</th>
-              <th style={{textAlign:'right'}}>Cost</th>
-              <th style={{textAlign:'right'}}>$/Lead</th>
-              <th>State</th><th>Started</th>
-            </tr></thead>
-            <tbody>
-              {loading?(
-                <tr><td colSpan="12" style={{textAlign:'center',padding:30,color:'var(--t3)'}}>Loading…</td></tr>
-              ):runs.length===0?(
-                <tr><td colSpan="12" style={{textAlign:'center',padding:30,color:'var(--t3)'}}>No runs yet. Generate some leads first.</td></tr>
-              ):runs.map(r=>(
-                <tr key={r.id}>
-                  <td style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--blue)'}}>#{r.id}</td>
-                  <td style={{fontSize:11,color:'var(--t2)'}}>{r.username||'—'}</td>
-                  <td style={{fontSize:12}}>{r.industry||'—'} <span style={{fontSize:10,color:'var(--t3)',marginLeft:4}}>· {r.mode}</span></td>
-                  <td style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--t2)'}}>{r.country||'—'}</td>
-                  <td style={{textAlign:'right',fontFamily:'var(--mono)',fontWeight:700,color:'var(--blue)'}}>{Number(r.leads_total||0).toLocaleString('en-US')}</td>
-                  <td style={{textAlign:'right',fontFamily:'var(--mono)',fontWeight:700,color:Number(r.leads_new||0)>0?'var(--green)':'var(--t3)'}}>{Number(r.leads_new||0).toLocaleString('en-US')}</td>
-                  <td style={{textAlign:'right',fontFamily:'var(--mono)',color:Number(r.leads_deduped_out||0)>0?'var(--amber)':'var(--t3)'}}>{Number(r.leads_deduped_out||0).toLocaleString('en-US')}</td>
-                  <td style={{textAlign:'right',fontFamily:'var(--mono)',fontSize:11,color:'var(--violet)'}}>{Number(r.duration_seconds||0)}s</td>
-                  <td style={{textAlign:'right',fontFamily:'var(--mono)',fontSize:11,color:(r.cost_usd!=null&&Number(r.cost_usd)>0)?'var(--green)':'var(--t3)'}}>{(r.cost_usd!=null&&Number(r.cost_usd)>0)?('$'+Number(r.cost_usd).toFixed(2)):'—'}</td>
-                  <td style={{textAlign:'right',fontFamily:'var(--mono)',fontSize:11,color:(r.cost_per_lead_usd!=null&&Number(r.cost_per_lead_usd)>0)?'var(--green)':'var(--t3)'}}>{(r.cost_per_lead_usd!=null&&Number(r.cost_per_lead_usd)>0)?('$'+Number(r.cost_per_lead_usd).toFixed(2)):'—'}</td>
-                  <td><span style={{display:'inline-block',padding:'2px 8px',borderRadius:10,fontSize:10,fontWeight:700,background:_state_colour(r.state)+'22',color:_state_colour(r.state),border:'1px solid '+_state_colour(r.state)+'40'}}>{r.state}</span></td>
-                  <td style={{fontSize:11,color:'var(--t3)'}}>{_fmt_dt(r.started_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ):(
-          <table className="rt">
-            <thead><tr>
-              <th>ID</th><th>Name</th><th>Company</th><th>Domain</th><th>Role</th>
-              <th>Phone</th><th>Email</th><th>Type</th><th>Industry</th><th>Country</th>
-              <th style={{textAlign:'right'}}>Cost/Lead</th>
-            </tr></thead>
-            <tbody>
-              {loading?(
-                <tr><td colSpan="11" style={{textAlign:'center',padding:30,color:'var(--t3)'}}>Loading…</td></tr>
-              ):leads.length===0?(
-                <tr><td colSpan="11" style={{textAlign:'center',padding:30,color:'var(--t3)'}}>No master leads stored yet.</td></tr>
-              ):leads.map(r=>(
-                <tr key={r.id}>
-                  <td style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--blue)'}}>#{r.id}</td>
-                  <td style={{fontSize:12,color:'var(--t1)',fontWeight:600}}>{r.display_name||r.normalized_name||'—'}</td>
-                  <td style={{fontSize:12}}>{r.company_name||'—'}</td>
-                  <td style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--violet)'}}>{r.root_domain||'—'}</td>
-                  <td style={{fontSize:11,color:'var(--t2)'}}>{r.role||'—'}</td>
-                  <td style={{fontFamily:'var(--mono)',fontSize:11,color:r.phone_e164?'var(--amber)':'var(--t3)'}}>{r.phone_e164||'—'}</td>
-                  <td style={{fontSize:11,color:r.primary_email?'var(--green)':'var(--t3)'}}>{r.primary_email||'—'}</td>
-                  <td style={{fontSize:10,color:r.email_type==='personal'?'var(--green)':'var(--t3)'}}>{r.email_type||'—'}</td>
-                  <td style={{fontSize:11,color:'var(--t2)'}}>{r.industry||'—'}</td>
-                  <td style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--t2)'}}>{r.country||'—'}</td>
-                  {/* Blank for leads stored before the cost feature (null). */}
-                  <td style={{textAlign:'right',fontFamily:'var(--mono)',fontSize:11,color:(r.cost_per_lead_usd!=null&&Number(r.cost_per_lead_usd)>0)?'var(--green)':'var(--t3)'}}>{(r.cost_per_lead_usd!=null&&Number(r.cost_per_lead_usd)>0)?('$'+Number(r.cost_per_lead_usd).toFixed(2)):''}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:12,fontSize:11,color:'var(--t3)'}}>
-        <div>Page {page} of {totalPages}</div>
-        <div style={{display:'flex',gap:6}}>
-          <button className="btn-sm btn-ghost" disabled={page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}>← Prev</button>
-          <button className="btn-sm btn-ghost" disabled={page>=totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}>Next →</button>
-        </div>
-      </div>
-    </div></div>
   </>);
 }
 
@@ -2759,26 +1641,8 @@ function SettingsView(){
 }
 
 /* ─── SIDEBAR ─── */
-function Sidebar({nav,setNav,srvUrl,setSrvUrl,onConnect,credits,lastDrain,details}){
-  // Phase 2 (2026-05-07): legacy parity — Apollo block now shows 4 sub-pools
-  // (Total / Export / Phone / Email). When a plan tier doesn't expose a
-  // pool, the row falls back to "—" instead of being hidden, matching
-  // index_legacy.html. Source: /api/credits → services.apollo →
-  //   {remaining, export_remaining, phone_remaining, email_remaining}.
-  // Also adds the "Database" nav entry that wires to /api/db/run-history.
-  // 2026-06-04: dashboard now shows ONLY the views backed by real data —
-  // Generate (live pipeline) + Database (live Railway pull). The mock views
-  // (Analytics/Heatmap/History/AI Intelligence/Pipeline/Schedule/Users/
-  // Settings) were hardcoded placeholders and have been removed.
-  const NAV=[
-    {id:'generate',icon:'zap',l:'Generate'},
-    {id:'database',icon:'database',l:'Database',badge:'Live'},
-    {id:'cost',icon:'dollar-sign',l:'Cost / Pricing'},
-  ];
-  const apolloSvc=(details&&details.services&&details.services.apollo)||{};
-  const _fmt=(v)=>(v===null||v===undefined||v===0?'—':Number(v).toLocaleString('en-US'));
-  // For "Total" we always show the Apollo aggregate remaining (always present).
-  const apolloTotal=apolloSvc.remaining!=null?apolloSvc.remaining:(credits?credits.Apollo:0);
+function Sidebar({nav,setNav,srvUrl,setSrvUrl,onConnect,credits,lastDrain}){
+  const NAV=[{id:'generate',icon:'zap',l:'Generate'},{id:'analytics',icon:'bar-chart',l:'Analytics',badge:'6'},{id:'heatmap',icon:'map',l:'Heatmap'},{id:'history',icon:'history',l:'History',badge:'5'},{id:'intelligence',icon:'brain',l:'AI Intelligence',badge:'Live'},{id:'pipeline',icon:'kanban',l:'Pipeline'},{id:'schedule',icon:'calendar',l:'Schedule'},{id:'users',icon:'users',l:'Users',badge:'4'},{id:'settings',icon:'settings',l:'Settings'}];
   return(<aside className="sb">
     <div className="sb-logo"><img src="uploads/pasted-1776998089687-0.png" alt="Traffic Radius"/></div>
     <div className="sb-nav">
@@ -2792,34 +1656,14 @@ function Sidebar({nav,setNav,srvUrl,setSrvUrl,onConnect,credits,lastDrain,detail
     </div>
     <div style={{flex:1}}></div>
     <div className="sb-foot">
-      {/* Apollo 4-pool block (legacy parity) */}
-      <div className="credit-mini" style={{marginBottom:6,paddingBottom:6,borderBottom:'1px solid var(--bd)'}}>
-        <div className="cm-row" style={{fontWeight:700}}>
-          <div className="cm-name"><span className="cm-dot" style={{background:'#4BB8D9',boxShadow:'0 0 4px #4BB8D9'}}></span>Apollo</div>
-          <span className={'cm-val'+(lastDrain&&lastDrain.startsWith('Apollo:')?' drained':'')}>{Number(apolloTotal||0).toLocaleString('en-US')}</span>
-        </div>
-        <div className="cm-row" style={{paddingLeft:14,fontSize:10,opacity:0.85}}>
-          <div className="cm-name" style={{color:'var(--violet)'}}>↳ Export</div>
-          <span className="cm-val" style={{color:'var(--violet)'}}>{_fmt(apolloSvc.export_remaining)}</span>
-        </div>
-        <div className="cm-row" style={{paddingLeft:14,fontSize:10,opacity:0.85}}>
-          <div className="cm-name" style={{color:'var(--amber)'}}>↳ Phone</div>
-          <span className="cm-val" style={{color:'var(--amber)'}}>{_fmt(apolloSvc.phone_remaining)}</span>
-        </div>
-        <div className="cm-row" style={{paddingLeft:14,fontSize:10,opacity:0.85}}>
-          <div className="cm-name" style={{color:'var(--green)'}}>↳ Email</div>
-          <span className="cm-val" style={{color:'var(--green)'}}>{_fmt(apolloSvc.email_remaining)}</span>
-        </div>
-      </div>
-      {/* Lusha + SEMrush (single-pool services) */}
       <div className="credit-mini" style={{marginBottom:8}}>
-        {[{n:'Lusha',c:'#7DBA4B'},{n:'SEMrush',c:'#F59E0B'}].map(a=>{
+        {[{n:'Apollo',c:'#4BB8D9'},{n:'Lusha',c:'#7DBA4B'},{n:'SEMrush',c:'#F59E0B'}].map(a=>{
           const v=credits?credits[a.n]:(a.n==='SEMrush'?50000:1000);
           const drained=lastDrain&&lastDrain.startsWith(a.n+':');
           return(
             <div className="cm-row" key={a.n}>
               <div className="cm-name"><span className="cm-dot" style={{background:a.c,boxShadow:`0 0 4px ${a.c}`}}></span>{a.n}</div>
-              <span key={v} className={'cm-val'+(drained?' drained':'')}>{Number(v||0).toLocaleString('en-US')}</span>
+              <span key={v} className={'cm-val'+(drained?' drained':'')}>{v.toLocaleString('en-US')}</span>
             </div>
           );
         })}
@@ -2834,99 +1678,42 @@ function Sidebar({nav,setNav,srvUrl,setSrvUrl,onConnect,credits,lastDrain,detail
 }
 
 /* ─── LIVE OPS HOOKS + FEED ─── */
-// Phase 2 (2026-05-07): the intel strip's six tiles now reflect real backend
-// data instead of randomized mocks. Mapping:
-//   db          → /api/master-stats total_leads  (60s poll)
-//   industries  → /industries length              (one-shot at mount)
-//   dedupOut    → cumulative master_leads_deduped_out from this session
-//                 (App() pushes this in via update() when a run finishes)
-//   validNow    → valid_leads_in_progress, pushed in by polling
-//   health      → % of API services with status==='ok' AND pct_remaining>10
-//                 (derived from /api/credits payload pushed in via update())
-//   syncTs      → epoch-ms of the last successful /api/credits poll
 function useLiveStats(){
-  const [s,setS]=useState({db:0,industries:0,dedupOut:0,validNow:0,health:100,syncTs:Date.now()});
+  const [s,setS]=useState({db:4892,dupes:1247,kw:2847,learned:23,health:98.2});
   const [flash,setFlash]=useState({});
   useEffect(()=>{
-    const base=(typeof window!=='undefined'&&window.location.origin)||'';
-    let alive=true;
-    const fetchMaster=async()=>{
-      try{
-        const r=await fetch(base+'/api/master-stats',{credentials:'same-origin'});
-        if(r.status===401){window.location.href='/login';return;}
-        if(!r.ok)return;
-        const j=await r.json();
-        if(alive&&typeof j.total_leads==='number'){
-          // Phase 2 (2026-05-07): refresh syncTs on every successful poll so
-          // the "Last Sync" tile actually moves.
-          setS(p=>{
-            const next={...p,syncTs:Date.now()};
-            if(p.db!==j.total_leads)next.db=j.total_leads;
-            return next;
-          });
-          setFlash(f=>({...f,db:Date.now()}));
-        }
-      }catch(e){/* network */}
+    const tick=(k,delta,next)=>{
+      setS(p=>({...p,[k]:next(p[k],delta)}));
+      setFlash(f=>({...f,[k]:Date.now()}));
     };
-    const fetchInd=async()=>{
-      try{
-        const r=await fetch(base+'/industries',{credentials:'same-origin'});
-        if(!r.ok)return;
-        const j=await r.json();
-        if(alive&&Array.isArray(j.industries))setS(p=>({...p,industries:j.industries.length}));
-      }catch(e){}
-    };
-    fetchMaster();fetchInd();
-    const t=setInterval(fetchMaster,60000);
-    return()=>{alive=false;clearInterval(t)};
+    const t1=setInterval(()=>tick('db',Math.floor(1+Math.random()*6),(v,d)=>v+d),9500);
+    const t2=setInterval(()=>tick('learned',1,(v,d)=>v+d),24000);
+    const t3=setInterval(()=>tick('dupes',Math.floor(1+Math.random()*3),(v,d)=>v+d),14500);
+    const t4=setInterval(()=>tick('kw',1,(v,d)=>v+d),32000);
+    const t5=setInterval(()=>tick('health',0,(v,d)=>{const j=(Math.random()-0.5)*0.2;return Math.max(96,Math.min(99.8,+(v+j).toFixed(1)))}),18000);
+    return()=>[t1,t2,t3,t4,t5].forEach(clearInterval);
   },[]);
-  // update() lets App() push live values (validNow, dedupOut, health, syncTs)
-  const update=(patch)=>{
-    setS(p=>({...p,...patch}));
-    setFlash(f=>{const next={...f};Object.keys(patch).forEach(k=>{next[k]=Date.now()});return next;});
-  };
-  return{s,flash,update};
+  return{s,flash};
 }
-// "Last sync" tile shows time since the last credits refresh succeeded.
-function useSyncAgo(syncTs){
-  const [now,setNow]=useState(Date.now());
-  useEffect(()=>{const t=setInterval(()=>setNow(Date.now()),15000);return()=>clearInterval(t)},[]);
-  if(!syncTs)return '—';
-  const m=Math.floor((now-syncTs)/60000);
+function useSyncAgo(){
+  const [m,setM]=useState(2);
+  useEffect(()=>{const t=setInterval(()=>setM(v=>v>=59?2:v+1),60000);return()=>clearInterval(t)},[]);
   return m<1?'now':m<60?m+'m ago':Math.floor(m/60)+'h ago';
 }
-// Phase 2 (2026-05-06): real /api/credits fetch (was random-decrement mock).
-// Fetches once on mount, then polls every 60s. Backend already TTL-caches
-// at 60s so we're not hammering Apollo/SEMrush.
 function useLiveCredits(){
-  const [c,setC]=useState({Apollo:0,Lusha:0,SEMrush:0});
+  const [c,setC]=useState({Apollo:1000,Lusha:1000,SEMrush:50000});
   const [last,setLast]=useState(null);
-  const [details,setDetails]=useState(null);
-  const fetchCredits=useCallback(async (force)=>{
-    try{
-      const base=(typeof window!=='undefined'&&window.location.origin)||'';
-      const url=base+'/api/credits'+(force?'/refresh':'');
-      const r=await fetch(url,{method:force?'POST':'GET',credentials:'same-origin'});
-      if(r.status===401){window.location.href='/login';return null;}
-      if(!r.ok)return null;
-      const data=await r.json();
-      const svc=data.services||{};
-      setC({
-        Apollo: ((svc.apollo&&svc.apollo.remaining)|0),
-        Lusha:  ((svc.lusha&&svc.lusha.remaining )|0),
-        SEMrush:((svc.semrush&&svc.semrush.remaining)|0),
-      });
-      setDetails(data);
-      setLast('refresh:'+Date.now());
-      // Phase 2 (2026-05-15): return the payload so callers (post-run diff)
-      // can read the freshly-fetched values synchronously without waiting on
-      // a setState round-trip.
-      return data;
-    }catch(e){/* silent — UI keeps last known values */}
-    return null;
+  useEffect(()=>{
+    const keys=['Apollo','Lusha','SEMrush'];
+    const t=setInterval(()=>{
+      const k=keys[Math.floor(Math.random()*keys.length)];
+      const d=k==='SEMrush'?Math.floor(1+Math.random()*3):1;
+      setC(p=>({...p,[k]:Math.max(0,p[k]-d)}));
+      setLast(k+':'+Date.now());
+    },11000);
+    return()=>clearInterval(t);
   },[]);
-  useEffect(()=>{fetchCredits(false);const t=setInterval(()=>fetchCredits(false),60000);return()=>clearInterval(t)},[fetchCredits]);
-  return{c,last,details,refresh:()=>fetchCredits(true)};
+  return{c,last};
 }
 const ACTIVITY_POOL=[
   {t:'learn',ic:'KW',lbl:'Keyword learned',subs:['emergency plumber ballarat','24hr electrician sebastopol','hvac repair wendouree','roof leak ballarat east','gas fitter alfredton','plumber bacchus marsh','hot water repair','emergency gas leak','blocked drain ballarat']},
@@ -2971,35 +1758,16 @@ function App(){
   const [theme,setTheme]=useState('light');
   const [nav,setNav]=useState('generate');
   const [tab,setTab]=useState('cities');
-  // City mode (AU-only). auState is an AU state code (NSW/VIC/QLD/...) or
-  // 'AUSTRALIA' for the synthetic whole-country scope. Defaults match the
-  // legacy index_legacy.html: whole country + Tier 1 capitals.
-  const [auState,setAuState]=useState('AUSTRALIA');
-  const [cityTier,setCityTier]=useState('Tier 1 cities');
-  const [city,setCity]=useState('all');
-  const [auCities,setAuCities]=useState(null);     // cached /api/au-cities payload
-  const [nWorkers,setNWorkers]=useState(4);
-  // Industry mode. Default to "Select an industry" so the dropdown forces a
-  // valid pick from the live /industries list (server's keys won't match a
-  // hardcoded preset like 'Plumbing & Gas Fitting').
-  const [industry,setIndustry]=useState('Select an industry');
-  const [indCountry,setIndCountry]=useState('AU');
-  const [maxLeads,setMaxLeads]=useState('10');
+  const [country,setCountry]=useState('Australia');
+  const [cityTier,setCityTier]=useState('Tier 2 cities');
+  const [city,setCity]=useState('Ballarat');
+  const [industry,setIndustry]=useState('Plumbing & Gas Fitting');
+  const [indCountry,setIndCountry]=useState('Australia');
+  const [maxLeads,setMaxLeads]=useState('0');
   const [minSearch,setMinSearch]=useState('100');
   const [minCpc,setMinCpc]=useState('1.0');
-  const [enrich,setEnrich]=useState(true);
-  // 2026-06-08: "SerpAPI only" toggle. false = SerpAPI + SEMrush (default,
-  // preserves current behaviour); true = bypass SEMrush entirely this run.
-  const [serpOnly,setSerpOnly]=useState(false);
-  // Phase 2 (2026-05-06): default the server URL to current origin so the
-  // SPA works wherever it's hosted (Railway, local dev, etc.). The user can
-  // still override it in the Sidebar field.
-  const [srvUrl,setSrvUrl]=useState((typeof window!=='undefined'&&window.location.origin)||'');
-  const [industries,setIndustries]=useState([]);
-  // Top CSV / partial CSV state — shown after a run completes / cancels.
-  const [topCsvText,setTopCsvText]=useState('');
-  const [partialCsvUrl,setPartialCsvUrl]=useState('');
-  const [currentJobId,setCurrentJobId]=useState('');
+  const [enrich,setEnrich]=useState(false);
+  const [srvUrl,setSrvUrl]=useState('https://leadforgegenerator-24-4-2026-production.up.railway.app');
   const [loading,setLoading]=useState(false);
   const [drawerOpen,setDrawerOpen]=useState(false);
   const [phase,setPhase]=useState(-1);
@@ -3009,35 +1777,8 @@ function App(){
   const [toast,setToast]=useState(null);
   const [hasResults,setHasResults]=useState(false);
   const [stats,setStats]=useState({paid:'—',organic:'—',total:'—',phone:'—',email:'—',personal:'—',direct:'—',semrush:'—',apollo:'—',lusha:'—'});
-  // 2026-05-21: REAL leads from the run (replaces the hardcoded LEADS mock).
-  // Populated from /status/<job>.leads when state==='done'. The results
-  // table now renders this array; if empty AND the run finished, the table
-  // shows a clear "0 leads found" empty state instead of mock data.
-  const [realLeads,setRealLeads]=useState([]);
-  // 2026-05-25: persistent post-run banner state. The toast auto-dismisses
-  // after 4.2s, so error/cancel/empty-result outcomes vanished before the
-  // user could read them — page looked identical to the pre-run home view.
-  // This state survives until the next run starts and drives a HUGE
-  // unmissable banner at the top of the results column.
-  //   shape: { kind: 'success'|'empty'|'cancelled'|'error',
-  //            leadsCount: int,
-  //            reason: string,
-  //            partialUrl: string|null }
-  const [runOutcome,setRunOutcome]=useState(null);
-  // Phase 2 (2026-05-15): per-run credit usage tracker. Captured as
-  // (snapshot at run start) - (snapshot after run finishes); both pulled
-  // from /api/credits/refresh. Displayed in the post-run results panel
-  // alongside "per lead" averages so the user sees the exact cost of
-  // every run, broken out by Apollo export/phone/email + SEMrush + Lusha.
-  const [creditsUsedThisRun,setCreditsUsedThisRun]=useState(null);
-  const creditsSnapshotRef=useRef(null);
-  // 2026-05-18 (round 2): live in-run API counters. Polled every 500ms
-  // from /status/<job>.live by runGeneration, rendered inside the
-  // InlineProgress "Live API spend" card so the user sees SEMrush units
-  // and Apollo calls ticking up in real time during the run.
-  const [liveJob,setLiveJob]=useState(null);
   const timers=useRef([]);
-  const {c:liveCredits,last:liveCreditsLast,details:liveCreditsDetails,refresh:refreshCredits}=useLiveCredits();
+  const {c:liveCredits,last:liveCreditsLast}=useLiveCredits();
 
   useEffect(()=>{document.documentElement.setAttribute('data-theme',theme)},[theme]);
   useEffect(()=>{if(toast){const id=setTimeout(()=>setToast(null),4200);return()=>clearTimeout(id)}},[toast]);
@@ -3061,286 +1802,26 @@ function App(){
     prevNav.current=nav;
   },[nav]);
 
-  // Phase 2 (2026-05-06): runs the actual pipeline via /generate or
-  // /generate-city, then polls /status/<job_id> for live progress, logs,
-  // valid-lead counts, partial CSV availability, and final summary.
-  // Replaces the simulated runGeneration() that walked through fake
-  // LOGS / STEPS arrays. Auth: 401 → redirect to /login.
-  const runGeneration=async ()=>{
+  const runGeneration=()=>{
     if(loading)return;
-    timers.current.forEach(id=>{try{clearTimeout(id);clearInterval(id)}catch(e){}});timers.current=[];
-    // Phase 2 (2026-05-15): capture credit snapshot BEFORE the run so we can
-    // compute (before - after) per-pool usage when the run finishes. Pulled
-    // from the live cache; if it hasn't loaded yet, the diff is suppressed.
-    creditsSnapshotRef.current=liveCreditsDetails;
-    setCreditsUsedThisRun(null);
-    // 2026-05-18 (round 2): reset the live in-run counters card to zero so
-    // it doesn't show stale numbers from the previous run.
-    setLiveJob(null);
-    // Phase 2 (2026-05-15): logs are NO LONGER wiped between runs — the user
-    // explicitly wants persistence across runs. We append a divider line so
-    // the boundary is visible. The previous behaviour (setLogs([])) cleared
-    // valuable diagnostic history every time a new scan started.
-    setLoading(true);setPhase(0);setProgress(0);
-    setLogs(prev=>{
-      const ts=new Date().toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-      const divider={ts,tag:'sys',msg:'═══════════ New run started ═══════════'};
-      return prev&&prev.length?[...prev,divider]:[divider];
-    });
-    setNav('generate');
-    setCounts({total:0,emails:0,phones:0,tier1:0});
-    setHasResults(false);setTopCsvText('');setPartialCsvUrl('');setRealLeads([]);setRunOutcome(null);
-    const base=(typeof window!=='undefined'&&window.location.origin)||'';
-    const isCity=tab==='cities';
-    const endpoint=isCity?'/generate-city':'/generate';
-    // Map UI cityTier label → backend tier code expected by /generate-city.
-    const _tierMap={'All city tiers':'all','Tier 1 cities':'tier_1','Tier 2 cities':'tier_2','Tier 3 cities':'tier_3'};
-    // Guard against empty industry pick — backend expects a non-empty key.
-    if(!isCity&&(!industry||industry==='Select an industry')){
-      setLoading(false);
-      setToast({t:'Pick an industry',m:'Choose an industry from the dropdown to start a run.'});
-      return;
-    }
-    const payload=isCity?{
-      // auState is already an AU state code (NSW/VIC/...) or 'AUSTRALIA'.
-      state_code:auState||'AUSTRALIA',
-      tier:_tierMap[cityTier]||'tier_1',
-      city:city||'all',
-      min_volume:parseInt(minSearch)||100,
-      max_leads:parseInt(maxLeads)||0,
-      enrichment:enrich,country:'AU',n_workers:parseInt(nWorkers)||4,
-      disable_semrush:serpOnly,
-    }:{
-      industry:industry,
-      // indCountry is already a backend code (AU/USA/UK/India).
-      country:indCountry||'AU',
-      min_volume:parseInt(minSearch)||100,
-      min_cpc:parseFloat(minCpc)||0.05,
-      max_leads:parseInt(maxLeads)||0,
-      enrichment:enrich,
-      disable_semrush:serpOnly,
-    };
-    let jobId='';
-    try{
-      const r=await fetch(base+endpoint,{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        credentials:'same-origin',
-        body:JSON.stringify(payload),
-      });
-      if(r.status===401){window.location.href='/login';return;}
-      const data=await r.json();
-      if(!r.ok||data.error){
-        setLoading(false);
-        setToast({t:'Error',m:data.error||('HTTP '+r.status)});
-        return;
-      }
-      jobId=data.job_id;setCurrentJobId(jobId);
-    }catch(e){
-      setLoading(false);
-      setToast({t:'Network error',m:e.message||'Could not reach server'});
-      return;
-    }
-    // Poll status. Each tick: append new_logs, update progress + valid lead
-    // count, watch for state transitions (done / cancelled / error).
-    const pollId=setInterval(async ()=>{
-      try{
-        const r=await fetch(base+'/status/'+jobId,{credentials:'same-origin'});
-        if(r.status===401){clearInterval(pollId);window.location.href='/login';return;}
-        if(!r.ok)return;
-        const s=await r.json();
-        if(typeof s.progress==='number'){
-          setProgress(s.progress);
-          // Phase 2 (2026-05-06): map server progress% to InlineProgress's
-          // 7-step indicator. STEPS has ~7 items; phase index = floor(p/14).
-          setPhase(Math.min(6,Math.floor((s.progress||0)/14)));
-        }
-        if(Array.isArray(s.new_logs)&&s.new_logs.length){
-          const ts=new Date().toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-          setLogs(prev=>[...prev,...s.new_logs.map(line=>{
-            // Parse leading [TAG] from V5 log lines and map to the 7 colors
-            // InlineProgress styles. Falls back to 'sys' for plain output.
-            const txt=String(line||'');
-            const m=txt.match(/^\s*\[([^\]]+)\]\s*(.+)$/);
-            let tag='sys',msg=txt;
-            if(m){msg=m[2]; const k=m[1].toLowerCase();
-              if(/phase/.test(k))tag='scan';
-              else if(/valid|done|complete|success|ok/.test(k))tag='ok';
-              else if(/error|fail/.test(k))tag='err';
-              else if(/apollo|lusha|hunter|enrich|email|phone/.test(k))tag='enrich';
-              else if(/score|tier/.test(k))tag='score';
-              else if(/find|discover|domain|seed/.test(k))tag='find';
-              else tag='sys';
-            }
-            return{ts,tag,msg};
-          })]);
-        }
-        if(typeof s.valid_leads_in_progress==='number'){
-          setCounts(c=>({...c,total:s.valid_leads_in_progress}));
-        }
-        // 2026-05-18 (round 2): stream the in-run API counters into the
-        // InlineProgress live panel. `s.live` is populated by /status while
-        // the pipeline is still running; absence = pipeline not attached yet.
-        if(s.live&&typeof s.live==='object'){
-          setLiveJob(s.live);
-        }
-        if(s.state==='done'){
-          clearInterval(pollId);
-          setLoading(false);setProgress(100);setHasResults(true);
-          // 2026-05-21: capture the REAL leads from /status payload.
-          // Each lead dict from V5 has: name, domain, company, role, phone,
-          // email, source, _domain_source, _google_intent, _silent_scope_apollo,
-          // _direct_phone, etc. The table-row mapper below maps these to
-          // the column shape it expects.
-          setRealLeads(Array.isArray(s.leads)?s.leads:[]);
-          const sm=s.summary||{};
-          // Phase 2 (2026-05-07): use explicit ternary instead of mixing
-          // ?? with ||/&& at the top level — that's a SyntaxError in JS and
-          // prevents Babel from transpiling the entire script.
-          const _fallback=(v,fb)=>(v===null||v===undefined?fb:v);
-          setStats({
-            paid:String(_fallback(sm.paid_leads,'—')),
-            organic:String(_fallback(sm.organic_leads,'—')),
-            total:String(_fallback(sm.total_leads,(s.leads&&s.leads.length)||'—')),
-            phone:String(_fallback(sm.with_phone,'—')),
-            email:String(_fallback(sm.with_email,'—')),
-            personal:String(_fallback(sm.personal_emails,'—')),
-            direct:String(_fallback(sm.direct_phones,'—')),
-            semrush:String(_fallback(sm.semrush_tokens,'—')),
-            apollo:String(_fallback(sm.apollo_tokens,'—')),
-            lusha:String(_fallback(sm.lusha_tokens,'—')),
-          });
-          if(s.top_csv)setTopCsvText(s.top_csv);
-          // 2026-05-25: persistent post-run banner (toast auto-dismisses in 4s).
-          // Reads `empty_result` from summary so the banner can distinguish
-          // "ran successfully but found 0 leads" from "real success with leads".
-          (function _setOutcome(){
-            const _n=Number(sm.total_leads||0)||(Array.isArray(s.leads)?s.leads.length:0);
-            const _empty=Boolean(sm.empty_result)||_n===0;
-            setRunOutcome({
-              kind: _empty?'empty':'success',
-              leadsCount:_n,
-              reason: _empty?(sm.empty_result_reason||'Pipeline finished but produced 0 leads. See log feed for [FUNNEL]/[KEY-HEALTH] lines.'):'',
-              partialUrl: null,
-            });
-          })();
-          setToast({t:'Scan Complete',m:((sm.total_leads??0)+' leads found')});
-          // Phase 2 (2026-05-15): credit-usage diff. Force-refresh /api/credits
-          // (bypasses the 60s cache), then subtract from the pre-run snapshot
-          // so the user sees the exact credit cost of THIS run, broken out by
-          // pool (Apollo export / phone / email / total, plus SEMrush + Lusha)
-          // and divided by total leads for the per-lead averages they asked for.
-          try{
-            const after=(refreshCredits?await refreshCredits():null);
-            const before=creditsSnapshotRef.current;
-            const _num=v=>(typeof v==='number'&&isFinite(v)?v:null);
-            const _diff=(b,a)=>{const bn=_num(b),an=_num(a);return(bn!==null&&an!==null)?Math.max(0,bn-an):null;};
-            const bA=(before&&before.services&&before.services.apollo)||{};
-            const aA=(after&&after.services&&after.services.apollo)||{};
-            const bS=(before&&before.services&&before.services.semrush)||{};
-            const aS=(after&&after.services&&after.services.semrush)||{};
-            const bL=(before&&before.services&&before.services.lusha)||{};
-            const aL=(after&&after.services&&after.services.lusha)||{};
-            const leadsCount=Number(_fallback(sm.total_leads,(s.leads&&s.leads.length)||0))||0;
-            const _per=v=>(v!==null&&leadsCount>0?(v/leadsCount):null);
-            // 2026-05-18: pull SEMrush per-phase unit breakdown from
-            // s.summary (populated by V5.py /generate(-city) summary build).
-            // Falls back gracefully when the backend payload is missing
-            // any of these fields (older deploys etc.).
-            const _semUnits=_num(sm.semrush_units_used);
-            const _semBudget=_num(sm.semrush_unit_budget);
-            const _semByPhase=(sm.semrush_units_by_phase&&typeof sm.semrush_units_by_phase==='object')?sm.semrush_units_by_phase:{};
-            const _semSkipped=_num(sm.semrush_calls_skipped)||0;
-            setCreditsUsedThisRun({
-              leads:leadsCount,
-              apollo_total:_diff(bA.remaining,aA.remaining),
-              apollo_export:_diff(bA.export_remaining,aA.export_remaining),
-              apollo_phone:_diff(bA.phone_remaining,aA.phone_remaining),
-              apollo_email:_diff(bA.email_remaining,aA.email_remaining),
-              semrush_total:_diff(bS.remaining,aS.remaining),
-              lusha_total:_diff(bL.remaining,aL.remaining),
-              per_lead:{
-                apollo_total:_per(_diff(bA.remaining,aA.remaining)),
-                apollo_export:_per(_diff(bA.export_remaining,aA.export_remaining)),
-                apollo_phone:_per(_diff(bA.phone_remaining,aA.phone_remaining)),
-                apollo_email:_per(_diff(bA.email_remaining,aA.email_remaining)),
-                semrush_total:_per(_diff(bS.remaining,aS.remaining)),
-                lusha_total:_per(_diff(bL.remaining,aL.remaining)),
-              },
-              // Backend-reported SEMrush telemetry (canonical, includes the
-              // weighted unit cost the budget guard tracks against — usually
-              // very close to the (before-after) SEMrush diff, but breaks it
-              // out per pipeline phase so the user can see where credits went).
-              semrush_units_used:_semUnits,
-              semrush_unit_budget:_semBudget,
-              semrush_units_per_lead:(_semUnits!==null&&leadsCount>0?(_semUnits/leadsCount):null),
-              semrush_units_by_phase:_semByPhase,
-              semrush_calls_skipped:_semSkipped,
-            });
-          }catch(_e){/* diff is best-effort; absence is non-fatal */}
-        }else if(s.state==='cancelled'||s.state==='error'){
-          clearInterval(pollId);
-          setLoading(false);
-          // 2026-05-25: surface the outcome as a persistent banner AND set
-          // hasResults so the right column doesn't fall back to the empty
-          // "What you'll get" home view. Without this, an error run looked
-          // identical to "user hasn't clicked Generate yet".
-          setHasResults(true);
-          if(s.partial_csv_available){
-            setPartialCsvUrl(base+'/download-partial/'+jobId);
-          }
-          const _partial=s.partial_csv_available?(base+'/download-partial/'+jobId):null;
-          const msg=s.state==='cancelled'
-            ?('Run cancelled'+(s.partial_csv_available?' — partial CSV available':''))
-            :('Pipeline error: '+(s.error||'unknown')+(s.partial_csv_available?' — partial CSV available':''));
-          setRunOutcome({
-            kind:s.state==='cancelled'?'cancelled':'error',
-            leadsCount:0,
-            reason:msg,
-            partialUrl:_partial,
-          });
-          setToast({t:s.state==='cancelled'?'Cancelled':'Error',m:msg});
-        }
-      }catch(e){/* keep polling on transient errors */}
-    },500);   /* 2026-05-18 (round 2): 500ms poll for live counter updates */
-    timers.current.push(pollId);
+    timers.current.forEach(clearTimeout);timers.current=[];
+    setLoading(true);setPhase(0);setLogs([]);setProgress(0);
+    setNav('generate'); // Always show generate view during run
+    setCounts({total:0,emails:0,phones:0,tier1:0});setHasResults(false);
+    let delay=0;
+    LOGS.forEach(log=>{delay+=300+Math.random()*230;const t=setTimeout(()=>{const ts=new Date().toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});setLogs(prev=>[...prev,{...log,ts}])},delay);timers.current.push(t)});
+    [[0,0],[1000,1],[2900,2],[5100,3],[7600,4],[10000,5],[11500,6]].forEach(([d,p])=>{const t=setTimeout(()=>{setPhase(p);setProgress(Math.round((p/STEPS.length)*100))},d);timers.current.push(t)});
+    [[1800,{total:12,emails:8,phones:7,tier1:3}],[4200,{total:38,emails:26,phones:21,tier1:7}],[7000,{total:71,emails:48,phones:40,tier1:10}],[10500,{total:89,emails:62,phones:51,tier1:12}]].forEach(([d,c])=>{const t=setTimeout(()=>setCounts(c),d);timers.current.push(t)});
+    const s1=setTimeout(()=>setStats({paid:'23',organic:'66',total:'89',phone:'51',email:'62',personal:'28',direct:'19',semrush:'47',apollo:'62',lusha:'19'}),9000);timers.current.push(s1);
+    const s2=setTimeout(()=>{setLoading(false);setProgress(100);setHasResults(true);setToast({t:'Scan Complete',m:'89 leads found — 12 Tier 1 opportunities'})},12500);timers.current.push(s2);
   };
 
-  // Cancel the running job.
-  const cancelGeneration=async ()=>{
-    try{
-      const base=(typeof window!=='undefined'&&window.location.origin)||'';
-      await fetch(base+'/cancel',{method:'POST',credentials:'same-origin'});
-    }catch(e){/* silent */}
-  };
-
-  // Fetch the industries dropdown list once at mount.
-  useEffect(()=>{
-    const base=(typeof window!=='undefined'&&window.location.origin)||'';
-    fetch(base+'/industries',{credentials:'same-origin'}).then(r=>{
-      if(r.status===401){window.location.href='/login';return null;}
-      if(!r.ok)return null;
-      return r.json();
-    }).then(data=>{if(data&&Array.isArray(data.industries))setIndustries(data.industries)}).catch(()=>{});
-  },[]);
-
-  // Fetch AU state/tier/city dataset once at mount. Drives the city-mode
-  // dropdowns. Shape: {australia:{tier_1:[],tier_2:[],tier_3:[]}, states:[{code,name,tier_1,tier_2,tier_3}]}
-  useEffect(()=>{
-    const base=(typeof window!=='undefined'&&window.location.origin)||'';
-    fetch(base+'/api/au-cities',{credentials:'same-origin'}).then(r=>{
-      if(r.status===401){window.location.href='/login';return null;}
-      if(!r.ok)return null;
-      return r.json();
-    }).then(data=>{if(data&&!data.error)setAuCities(data)}).catch(()=>{});
-  },[]);
-
-  const VIEW_TITLES={generate:{title:<>Lead <em>Generation</em> Engine</>,sub:'Configure your search and generate qualified leads'},database:{title:<>Railway <em>Database</em></>,sub:'Live MySQL — run_history, master_leads, and per-run statistics'},analytics:{title:<>Analytics <em>& Insights</em></>,sub:'Performance overview across all runs'},heatmap:{title:<>Geographic <em>Heatmap</em></>,sub:'Ballarat suburb-level lead density visualization'},history:{title:<>Run <em>History</em></>,sub:'All previous lead generation runs'},intelligence:{title:<>AI <em>Intelligence</em></>,sub:'Master database · ML keyword learning · self-expanding dictionary'},pipeline:{title:<>Lead <em>Pipeline</em></>,sub:'Manage and track leads through your sales process'},schedule:{title:<>Scheduled <em>Runs</em></>,sub:'Automate your lead generation on a recurring schedule'},users:{title:<>Team <em>Management</em></>,sub:'Manage users, roles, and permissions'},settings:{title:<>Platform <em>Settings</em></>,sub:'API keys, preferences, and billing'}};
+  const VIEW_TITLES={generate:{title:<>Lead <em>Generation</em> Engine</>,sub:'Configure your search and generate qualified leads'},analytics:{title:<>Analytics <em>& Insights</em></>,sub:'Performance overview across all runs'},heatmap:{title:<>Geographic <em>Heatmap</em></>,sub:'Ballarat suburb-level lead density visualization'},history:{title:<>Run <em>History</em></>,sub:'All previous lead generation runs'},intelligence:{title:<>AI <em>Intelligence</em></>,sub:'Master database · ML keyword learning · self-expanding dictionary'},pipeline:{title:<>Lead <em>Pipeline</em></>,sub:'Manage and track leads through your sales process'},schedule:{title:<>Scheduled <em>Runs</em></>,sub:'Automate your lead generation on a recurring schedule'},users:{title:<>Team <em>Management</em></>,sub:'Manage users, roles, and permissions'},settings:{title:<>Platform <em>Settings</em></>,sub:'API keys, preferences, and billing'}};
   const vt=VIEW_TITLES[nav]||{title:nav,sub:''};
 
   return(<>
     {showSplash&&<Splash onDone={()=>setShowSplash(false)} theme={theme}/>}
-    <Sidebar nav={nav} setNav={setNav} srvUrl={srvUrl} setSrvUrl={setSrvUrl} onConnect={()=>setToast({t:'Connected',m:'Railway endpoint verified'})} credits={liveCredits} lastDrain={liveCreditsLast} details={liveCreditsDetails}/>
+    <Sidebar nav={nav} setNav={setNav} srvUrl={srvUrl} setSrvUrl={setSrvUrl} onConnect={()=>setToast({t:'Connected',m:'Railway endpoint verified'})} credits={liveCredits} lastDrain={liveCreditsLast}/>
 
     <main className="main">
       <div className="topbar">
@@ -3356,18 +1837,20 @@ function App(){
         </div>
       </div>
 
-      {nav==='generate'&&<GenerateView tab={tab} setTab={setTab} stats={stats} hasResults={hasResults} onGenerate={runGeneration} onCancel={cancelGeneration} loading={loading} auState={auState} setAuState={setAuState} cityTier={cityTier} setCityTier={setCityTier} city={city} setCity={setCity} industry={industry} setIndustry={setIndustry} indCountry={indCountry} setIndCountry={setIndCountry} maxLeads={maxLeads} setMaxLeads={setMaxLeads} minSearch={minSearch} setMinSearch={setMinSearch} minCpc={minCpc} setMinCpc={setMinCpc} enrich={enrich} setEnrich={setEnrich} serpOnly={serpOnly} setSerpOnly={setSerpOnly} nWorkers={nWorkers} setNWorkers={setNWorkers} onNav={setNav} phase={phase} logs={logs} progress={progress} counts={counts} theme={theme} industries={industries} auCities={auCities} topCsvText={topCsvText} partialCsvUrl={partialCsvUrl} liveCreditsDetails={liveCreditsDetails} creditsUsedThisRun={creditsUsedThisRun} liveJob={liveJob} realLeads={realLeads} runOutcome={runOutcome}/>}
-      {nav==='database'&&<DatabaseView/>}
-      {nav==='cost'&&<CostView/>}
-      {/* 2026-06-04: mock placeholder views removed (Analytics/Heatmap/
-          History/AI Intelligence/Pipeline/Schedule/Users/Settings). */}
+      {nav==='generate'&&<GenerateView tab={tab} setTab={setTab} stats={stats} hasResults={hasResults} onGenerate={runGeneration} loading={loading} country={country} setCountry={setCountry} cityTier={cityTier} setCityTier={setCityTier} city={city} setCity={setCity} industry={industry} setIndustry={setIndustry} indCountry={indCountry} setIndCountry={setIndCountry} maxLeads={maxLeads} setMaxLeads={setMaxLeads} minSearch={minSearch} setMinSearch={setMinSearch} minCpc={minCpc} setMinCpc={setMinCpc} enrich={enrich} setEnrich={setEnrich} onNav={setNav} phase={phase} logs={logs} progress={progress} counts={counts} theme={theme}/>}
+      {nav==='analytics'&&<AnalyticsView theme={theme}/>}
+      {nav==='heatmap'&&<HeatmapView theme={theme}/>}
+      {nav==='history'&&<HistoryView/>}
+      {nav==='intelligence'&&<IntelligenceView theme={theme}/>}
+      {nav==='pipeline'&&<PipelineView/>}
+      {nav==='schedule'&&<ScheduleView/>}
+      {nav==='users'&&<UsersView/>}
+      {nav==='settings'&&<SettingsView/>}
     </main>
 
     {/* Drawer hidden — progress shown inline on Generate view */}
 
-    {/* 2026-06-04: fake status ticker removed (it showed hardcoded untrue
-        claims like "SerpAPI unlimited" / "SEMrush 50,000 searches"). Live
-        credit numbers already appear in the Generate view's credit panel. */}
+    {!drawerOpen&&<div className="ticker"><div className="ticker-lbl">◈ live</div><div className="ticker-tr"><div className="ticker-in">{TICKERS.map((t,i)=><span className="ti" key={i}><b>{t.b}</b>{t.t}</span>)}</div></div></div>}
 
     {!drawerOpen&&<LiveActivityFeed/>}
     {toast&&<div className="toast"><div className="toast-ic">✓</div><div><div className="toast-title">{toast.t}</div><div className="toast-msg">{toast.m}</div></div></div>}

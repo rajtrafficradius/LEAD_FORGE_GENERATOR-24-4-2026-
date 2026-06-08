@@ -7,6 +7,14 @@
 *.key
 *.pem
 
+# Phase 2: first-run credential drops — contain plaintext admin password
+FIRST_RUN_CREDENTIALS.txt
+FIRST_RUN_CREDENTIALS.read
+
+# 2026-06-04: secure API-key backup taken before GitHub push — NEVER upload
+API KEYS GUT UPLD.txt
+_keyscan_tmp.py
+
 # IDE
 .idea/
 *.swp
@@ -43,3 +51,29 @@ wheels/
 
 # Output
 output/
+
+# Phase 2: generated secondary keywords meta (keep secondary_keywords.py)
+secondary_keywords_meta.json
+
+# 2026-06-08: pre-GitHub-push hardening — keep PII, logs & local tooling private
+# Lead CSVs contain real business emails/phones/names → never publish.
+LATEST OUTPUT FILES/
+leads_all_*.csv
+leads_*_2026-*.csv
+APOLLO_CREDITS_PER_RUN.csv
+# Runtime logs can contain scraped lead data
+*.log
+server.log
+# Local agent / IDE state
+.claude/
+.vscode/
+# Per-machine API pricing (numbers, not secrets, but private cost data)
+api_pricing.json
+
+# 2026-06-08: docs that contain REAL scraped lead emails (PII) — keep private
+LeadForge_V5_Session_Complete_Context(MAIN CONTEXT).md
+CODEBASE_GUIDE.md
+
+# Unknown-content pasted screenshots/uploads — may show real data on-screen
+NEW FRONTEND/LG/uploads/
+NEW FRONTEND/LG/screenshots/

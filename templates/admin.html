@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LeadForge — Admin</title>
+<style>
+  body{background:#0a0a0a;color:#eee;font-family:'Segoe UI',system-ui,sans-serif;margin:0;padding:24px;}
+  h1{margin:0 0 16px;font-size:22px}
+  h2{margin:28px 0 10px;font-size:16px;color:#9ab}
+  .bar{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .bar a{color:#4f9cff;text-decoration:none}
+  table{width:100%;border-collapse:collapse;background:#141414;border:1px solid #222;border-radius:8px;overflow:hidden;font-size:13px}
+  th,td{padding:10px 12px;border-bottom:1px solid #222;text-align:left;vertical-align:top}
+  th{background:#1b1b1b;color:#9ab;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.4px}
+  tr:last-child td{border-bottom:none}
+  .muted{color:#777}
+  .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+  .pill.admin{background:#3a2b00;color:#ffb638}
+  .pill.user{background:#0e2a3a;color:#4fc3ff}
+  .pill.done{background:#0a2e1a;color:#67e29a}
+  .pill.running{background:#0e2a3a;color:#4fc3ff}
+  .pill.error{background:#2b0a0a;color:#ff8a80}
+  .pill.cancelled{background:#2a2a2a;color:#bbb}
+</style>
+</head>
+<body>
+  <div class="bar">
+    <h1>LeadForge Admin</h1>
+    <div><a href="/">← Dashboard</a> &nbsp;·&nbsp; <a href="/logout">Logout</a></div>
+  </div>
+
+  <h2>Users</h2>
+  <table id="users"><thead><tr>
+    <th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Created</th><th>Last login</th>
+  </tr></thead><tbody><tr><td colspan="6" class="muted">Loading…</td></tr></tbody></table>
+
+  <h2>Recent runs</h2>
+  <table id="runs"><thead><tr>
+    <th>ID</th><th>User</th><th>Job</th><th>Industry</th><th>State</th>
+    <th>Total</th><th>New</th><th>Dedup</th><th>Dur(s)</th><th>Started</th>
+  </tr></thead><tbody><tr><td colspan="10" class="muted">Loading…</td></tr></tbody></table>
+
+<script>
+(async () => {
+  const td = (v) => {
+    const n = document.createElement("td");
+    n.textContent = (v ?? "").toString();
+    return n;
+  };
+  const pill = (kind, text) => {
+    const s = document.createElement("span");
+    s.className = "pill " + kind;
+    s.textContent = text;
+    return s;
+  };
+
+  try {
+    const r = await fetch("/admin/users", { credentials: "same-origin" });
+    if (r.status === 401) { location.href = "/login?next=/admin"; return; }
+    const data = await r.json();
+    const body = document.querySelector("#users tbody");
+    body.innerHTML = "";
+    (data.users || []).forEach(u => {
+      const tr = document.createElement("tr");
+      tr.appendChild(td(u.id));
+      tr.appendChild(td(u.username));
+      tr.appendChild(td(u.email));
+      const rc = document.createElement("td"); rc.appendChild(pill(u.role, u.role)); tr.appendChild(rc);
+      tr.appendChild(td(u.created_at || ""));
+      tr.appendChild(td(u.last_login_at || ""));
+      body.appendChild(tr);
+    });
+  } catch (e) {
+    document.querySelector("#users tbody").innerHTML = `<tr><td colspan="6" class="muted">Error: ${e}</td></tr>`;
+  }
+
+  try {
+    const r = await fetch("/admin/runs?limit=100", { credentials: "same-origin" });
+    const data = await r.json();
+    const body = document.querySelector("#runs tbody");
+    body.innerHTML = "";
+    (data.runs || []).forEach(ru => {
+      const tr = document.createElement("tr");
+      tr.appendChild(td(ru.id));
+      tr.appendChild(td(ru.username || ru.user_id));
+      tr.appendChild(td(ru.job_uuid));
+      tr.appendChild(td(ru.industry));
+      const sc = document.createElement("td"); sc.appendChild(pill(ru.state, ru.state)); tr.appendChild(sc);
+      tr.appendChild(td(ru.leads_total));
+      tr.appendChild(td(ru.leads_new));
+      tr.appendChild(td(ru.leads_deduped_out));
+      tr.appendChild(td(ru.duration_seconds));
+      tr.appendChild(td(ru.started_at || ""));
+      body.appendChild(tr);
+    });
+  } catch (e) {
+    document.querySelector("#runs tbody").innerHTML = `<tr><td colspan="10" class="muted">Error: ${e}</td></tr>`;
+  }
+})();
+</script>
+</body>
+</html>

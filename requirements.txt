@@ -4,3 +4,10 @@ openai>=1.0.0
 flask>=2.3.0
 flask-cors>=4.0.0
 gunicorn>=21.0.0
+
+# Phase 2: MySQL + auth
+PyMySQL==1.1.0
+DBUtils==3.1.0
+Flask-Login==0.6.3
+cryptography==42.0.5
+python-dotenv==1.0.1

@@ -374,6 +374,56 @@ def flatten_lead(lead: dict) -> dict:
     }
 
 
+# ── Master-DB Dedup Keys ─────────────────────────────────────────────────────
+#
+# These two helpers define the canonical (normalized_name, root_domain) pair
+# used as the UNIQUE KEY on master_leads. Must be deterministic: the same
+# logical person+company must map to the same key across runs, regardless of
+# casing, leading/trailing whitespace, or common punctuation noise.
+
+_MASTER_KEY_PUNCT_RE = re.compile(r"[^\w\s]", re.UNICODE)   # strip punctuation, keep word chars + spaces
+_MASTER_KEY_WS_RE = re.compile(r"\s+")                        # collapse any run of whitespace to one space
+
+
+def normalize_master_key(name: str) -> str:
+    """Canonicalize a person name for master-DB dedup.
+
+    Strips honorifics, diacritics, punctuation, and collapses whitespace to
+    one space. Returns lowercase. Matches the UNIQUE KEY contract on
+    master_leads.normalized_name.
+
+    >>> normalize_master_key("  Dr. John  SMITH ")
+    'john smith'
+    >>> normalize_master_key("Renée O'Connor")
+    'renee oconnor'
+    """
+    if not name:
+        return ""
+    # Reuse clean_name to drop honorifics + title-case, then flatten
+    cleaned = clean_name(name)
+    deaccented = remove_accents(cleaned)
+    no_punct = _MASTER_KEY_PUNCT_RE.sub("", deaccented)
+    collapsed = _MASTER_KEY_WS_RE.sub(" ", no_punct).strip().lower()
+    return collapsed
+
+
+def root_domain(domain: str) -> str:
+    """Canonicalize a domain for master-DB dedup.
+
+    Lowercases, strips scheme, strips leading 'www.'. Preserves the TLD
+    (unlike strip_domain_tld). Handles full URLs gracefully.
+
+    >>> root_domain("https://WWW.SmithDental.com.au/contact")
+    'smithdental.com.au'
+    >>> root_domain("acme.com")
+    'acme.com'
+    """
+    if not domain:
+        return ""
+    d = domain_from_url(domain) or domain.lower().strip()
+    return d.removeprefix("www.").strip()
+
+
 # ── Quick self-test ──────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -394,4 +444,11 @@ if __name__ == "__main__":
     assert format_duration(754) == "12m 34s"
     assert format_duration(3661) == "1h 1m 1s"
     assert safe_json_get({"a": {"b": [10, 20]}}, "a", "b", 1) == 20
+    # Master-key smoke
+    assert normalize_master_key("  Dr. John  SMITH ") == "john smith"
+    assert normalize_master_key("Renée O'Connor") == "renee oconnor"
+    assert normalize_master_key("") == ""
+    assert root_domain("https://WWW.SmithDental.com.au/contact") == "smithdental.com.au"
+    assert root_domain("acme.com") == "acme.com"
+    assert root_domain("") == ""
     print("All smoke tests passed.")

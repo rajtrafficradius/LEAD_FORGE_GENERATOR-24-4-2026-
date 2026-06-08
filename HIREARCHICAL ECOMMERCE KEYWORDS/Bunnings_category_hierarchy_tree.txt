@@ -1,0 +1,1111 @@
+BUNNINGS.COM.AU CATEGORY HIERARCHY TREE
+Snapshot basis: Bunnings homepage, products menu, category pages, robots.txt category sitemap reference reviewed on 2026-05-14
+
+Note:
+- Bunnings exposes a clear Products Menu in the page HTML.
+- Second and third hierarchy levels come from the visible menu and category pages where Bunnings shows category links above product grids.
+- Product cards, brand carousels, service-only links, account/help links, price filters, ratings, and store-availability filters are not treated as shopping categories.
+- Bunnings publishes categories.xml in robots.txt, but direct shell fetching returned a Cloudflare challenge; browser-visible category pages were used instead.
+
+Bunnings.com.au
+|-- Homepage Shopping Discovery
+|   |-- Hero / Promotional Shopping Links
+|   |   |-- Prep for winter
+|   |   |-- Lowest prices on car care essentials
+|   |   |-- Hooks for every space
+|   |   `-- Bulb Lasagne Workshop
+|   |-- Shop our range
+|   |   |-- Outdoor Living
+|   |   |-- Garden
+|   |   |-- Indoor Living
+|   |   |-- Building & Hardware
+|   |   |-- Storage & Cleaning
+|   |   |-- Tools
+|   |   |-- Smart Home & Electrical
+|   |   |-- Lighting
+|   |   |-- Kitchen
+|   |   |-- Bathroom & Plumbing
+|   |   |-- Pet Supplies
+|   |   |-- Flooring
+|   |   |-- Paint & Woodcare
+|   |   |-- Assisted Living
+|   |   `-- Hire Shop
+|   |-- Inspiring Ideas
+|   |   |-- Trending Projects
+|   |   |-- Garden Hub
+|   |   |-- Home Improvement
+|   |   |-- Cleaning
+|   |   |-- Planting and growing
+|   |   |-- Outdoor Living
+|   |   |-- Storage
+|   |   |-- Building and Construction
+|   |   |-- D.I.Y. Skills
+|   |   |-- Kids & Craft
+|   |   `-- Paint
+|   `-- Trending Categories This Week
+|       |-- Outdoor Heaters
+|       |-- Vacuum & Carpet Cleaners
+|       |-- Rugs
+|       |-- Indoor Heaters
+|       |-- Lamps
+|       |-- Living Room
+|       |-- Cushions & Throws
+|       `-- Laundry
+|-- Products Menu
+|   |-- Tools
+|   |-- Building & Hardware
+|   |-- Garden
+|   |-- Outdoor Living
+|   |-- Pet Supplies
+|   |-- Kitchen
+|   |-- Bathroom & Plumbing
+|   |-- Assisted Living
+|   |-- Paint & Woodcare
+|   |-- Flooring
+|   |-- Storage & Cleaning
+|   |-- Lighting
+|   |-- Electrical & Smart Home
+|   |-- Indoor Living
+|   `-- Hire Shop
+|-- Tools
+|   |-- Automotive
+|   |   |-- Automotive Cleaning Chemicals
+|   |   |-- Automotive Cleaning
+|   |   |-- Automotive Maintenance
+|   |   |-- Automotive Tools
+|   |   |-- Automotive Garage Equipment
+|   |   |-- Automotive Accessories
+|   |   |-- Automotive Spare Parts
+|   |   |-- Automotive Paint & Panel Supplies
+|   |   |-- Tyres & Wheel Supplies
+|   |   |-- Automotive Electronics
+|   |   |-- Vehicle Accessories
+|   |   `-- Motorcycle Parts & Accessories
+|   |-- Hand Tools
+|   |   |-- Chisels, Files & Sharpening
+|   |   |-- Clamps, Pliers & Vices
+|   |   |-- Hammers & Wreckers
+|   |   |-- Masonry & Plaster Tools
+|   |   |-- Measuring Tools
+|   |   |-- Saws, Knives & Cutting Tools
+|   |   |-- Screwdrivers & Hex Keys
+|   |   |-- Sockets, Spanners & Wrenches
+|   |   `-- Staples & Rivet Guns
+|   |-- Heavy Lifting Equipment
+|   |   |-- Bow Shackles
+|   |   |-- Electric Hoists
+|   |   |-- Lifting Chains & Chain Blocks
+|   |   |-- Lifting Slings
+|   |   |-- Platform Scales
+|   |   `-- Winches
+|   |-- Power Tools
+|   |   |-- Air Compressors
+|   |   |-- Batteries & Chargers
+|   |   |-- Biscuit Joiners
+|   |   |-- Drills
+|   |   |-- Cordless Fans & Blowers
+|   |   |-- Grinders
+|   |   |-- Heavy Duty & Construction Tools
+|   |   |-- Multi Tools
+|   |   |-- Nail, Glue & Heat Guns
+|   |   |-- Planers
+|   |   |-- Portable Generators
+|   |   |-- Power Saws
+|   |   |-- Pressure Washers
+|   |   |-- Rotary Tools
+|   |   |-- Routers
+|   |   |-- Sanders
+|   |   `-- Worksite Radios
+|   |-- Safety Equipment & Workwear
+|   |   |-- Work Boots & Safety Shoes
+|   |   |-- Workwear
+|   |   `-- Personal Protective Equipment (PPE)
+|   |-- Tool Storage
+|   |   |-- Tool Bag & Belts
+|   |   |-- Cargo & Plastic Tool Boxes
+|   |   |-- Metal, Vehicle & Site Tool Boxes
+|   |   |-- Modular Tool Storage
+|   |   |-- Tool Kits
+|   |   |-- Tool Chests & Trolleys
+|   |   `-- Work Benches & Saw Horses
+|   |-- Tool Accessories
+|   |   |-- Air Tool Parts & Accessories
+|   |   |-- Drill Bits & Accessories
+|   |   |-- Grinder Accessories
+|   |   |-- Multi Tool Accessories
+|   |   |-- Staple & Glue Gun Accessories
+|   |   |-- Power Saw Blade & Accessories
+|   |   |-- Sandpaper, Discs & Pads
+|   |   |-- Mitre & Table Saw Stands
+|   |   |-- Welding & Soldering Accessories
+|   |   `-- Woodworking & Rotary
+|   `-- Welding & Soldering Irons
+|       |-- Inverter Welders
+|       |-- Mig Welders
+|       |-- Plasma Cutters
+|       `-- Soldering Irons
+|-- Building & Hardware
+|   |-- Timber
+|   |   |-- Timber Boards
+|   |   |-- Non-Structural Pine
+|   |   |-- Decking
+|   |   |-- Retaining Walls
+|   |   |-- Framing Timber
+|   |   |-- Dressed Timber
+|   |   |-- Heritage Timber
+|   |   `-- Timber Mouldings
+|   |-- Building Materials & Supplies
+|   |   |-- Bricks & Blocks
+|   |   |-- Site Safety Equipment
+|   |   |-- Garage Doors & Parts
+|   |   |-- Waterproofing & Sealing
+|   |   |-- Ventilation
+|   |   |-- Builders Plastic
+|   |   |-- Adhesives
+|   |   `-- Gap Fillers
+|   |-- Insulation
+|   |   |-- Wall Insulation
+|   |   |-- Roof & Ceiling Insulation
+|   |   |-- Floor Insulation
+|   |   |-- Acoustic Insulation
+|   |   |-- Insulation Accessories
+|   |   `-- Weatherproofing & Draught Sealing
+|   |-- Ladders
+|   |   |-- Platform Ladders
+|   |   |-- Step Ladders
+|   |   |-- Extension Ladders
+|   |   |-- Multi-Purpose Ladders
+|   |   |-- Work Platforms
+|   |   |-- Ladder Accessories
+|   |   `-- Scaffolding
+|   |-- Concrete & Cementing
+|   |   |-- Cement
+|   |   |-- Concrete
+|   |   |-- Mortar
+|   |   |-- Sand & Aggregates
+|   |   |-- Reinforcing Mesh & Bar
+|   |   |-- Concrete Tools
+|   |   |-- Formwork
+|   |   `-- Concrete Additives & Repair
+|   |-- Doors
+|   |   |-- Internal Doors
+|   |   |-- Door Frame & Jambs
+|   |   `-- External Doors
+|   |-- Door Hardware
+|   |   |-- Door Handles, Levers & Leversets
+|   |   |-- Door Bells
+|   |   |-- Door Knobs & Sets
+|   |   |-- Door Hardware & Security Accessories
+|   |   |-- Deadlocks & Deadbolts
+|   |   |-- Door Bolts
+|   |   |-- Door Latches
+|   |   |-- Fly Screens
+|   |   |-- Door Stops
+|   |   |-- Door Track
+|   |   |-- Door Seals
+|   |   |-- Door Closers
+|   |   |-- Door Hinges
+|   |   |-- Screen Door Hardware
+|   |   |-- Keys
+|   |   `-- Door Locks
+|   |-- Windows
+|   |   |-- Skylights
+|   |   |-- Aluminium Roller Shutters
+|   |   |-- Window Hardware
+|   |   |-- Double Glazed Windows
+|   |   `-- Aluminium Windows
+|   |-- Fencing & Gates
+|   |   |-- Rural & Electric Fencing & Gates
+|   |   |-- Pool Fencing & Gates
+|   |   |-- Balustrade Fencing
+|   |   |-- Gate Hardware
+|   |   |-- Timber Fencing
+|   |   |-- Timber Gates
+|   |   |-- Garden & Boundary Fencing & Gates
+|   |   `-- Colorbond Fencing & Gates
+|   |-- Fasteners & Fixings
+|   |   |-- Nails
+|   |   |-- Nuts & Bolts
+|   |   |-- Wedges & Spacers
+|   |   |-- Rivets
+|   |   |-- Screws
+|   |   |-- Post Supports & Anchors
+|   |   |-- Wall & Floor Anchors
+|   |   |-- General Fasteners
+|   |   |-- Timber Connectors
+|   |   `-- Collated Fasteners
+|   |-- General Hardware
+|   |   |-- Wheels & Castors
+|   |   |-- Chain, Rope & Rigging
+|   |   |-- Springs
+|   |   |-- Hooks
+|   |   |-- Brackets
+|   |   |-- Tie Down & Load Restraints
+|   |   |-- Child Safety
+|   |   |-- Cabinet Hardware
+|   |   |-- Pet Doors
+|   |   `-- Furniture & Floor Protection
+|   |-- Security & Safety Products
+|   |   |-- Safes
+|   |   |-- Padlocks
+|   |   |-- Lock Boxes
+|   |   |-- Security Screens
+|   |   |-- Security Doors
+|   |   |-- Warning Signs
+|   |   `-- Site Safety
+|   |-- Roofing
+|   |   |-- Roof Sheets
+|   |   |-- Flashing
+|   |   |-- Guttering
+|   |   |-- Downpipes
+|   |   |-- Roof Ventilation
+|   |   |-- Roofing Screws
+|   |   `-- Roof Sealants
+|   |-- Steel & Aluminium Sections
+|   |   |-- Aluminium Sections
+|   |   |-- Steel Sections
+|   |   |-- Angles
+|   |   |-- Channels
+|   |   |-- Flat Bars
+|   |   |-- Rods
+|   |   `-- Tubes
+|   |-- Building Boards
+|   |   |-- MDF Boards
+|   |   |-- Plywood
+|   |   |-- Particleboard
+|   |   |-- Fibre Cement Boards
+|   |   |-- Plasterboard
+|   |   |-- Wall Panels
+|   |   `-- Flooring Boards
+|   `-- Building Inspiration
+|       |-- Building and Construction Ideas
+|       |-- Decking Ideas
+|       |-- Fencing Ideas
+|       |-- D.I.Y. Skills
+|       `-- Project Advice
+|-- Garden
+|   |-- Garden Power Tools
+|   |   |-- Lawn Mowers
+|   |   |-- Whipper Snippers & Line Trimmers
+|   |   |-- Blower Vac & Leaf Blowers
+|   |   |-- Chainsaws
+|   |   |-- Garden Cordless Combo Kits
+|   |   |-- Garden Power Tool Parts & Accessories
+|   |   |-- Hedge Trimmers
+|   |   |-- Garden Edgers
+|   |   |-- Garden Tool Batteries & Accessories
+|   |   |-- Jerry Cans & Fuel Funnels
+|   |   |-- Power Cultivators
+|   |   |-- Garden Mulchers, Wood Chippers & Shredders
+|   |   |-- Electric Log Splitters
+|   |   `-- Agricultural Parts
+|   |-- Garden Hand Tools
+|   |   |-- Digging Tools
+|   |   |-- Pruning Tools
+|   |   |-- Garden Cutting Tools
+|   |   |-- Garden Forks
+|   |   |-- Garden Hoes & Cultivators
+|   |   |-- Rakes
+|   |   |-- Shovels & Spades
+|   |   |-- Wheelbarrows
+|   |   `-- Garden Tool Accessories
+|   |-- Landscaping Supplies
+|   |   |-- Pebbles & Decorative Stones
+|   |   |-- Mulch
+|   |   |-- Soil
+|   |   |-- Sand
+|   |   |-- Pavers
+|   |   |-- Garden Edging
+|   |   |-- Retaining Wall Blocks
+|   |   |-- Landscaping Timber
+|   |   `-- Weed Matting
+|   |-- Garden Supplies & Maintenance
+|   |   |-- Fertilisers
+|   |   |-- Compost
+|   |   |-- Potting Mix
+|   |   |-- Soil Conditioners
+|   |   |-- Weed Killers
+|   |   |-- Plant Food
+|   |   |-- Garden Sprayers
+|   |   `-- Garden Maintenance Accessories
+|   |-- Pest Control
+|   |   |-- Ant Control
+|   |   |-- Cockroach Control
+|   |   |-- Rodent Control
+|   |   |-- Insect Control
+|   |   |-- Snail & Slug Control
+|   |   |-- Bird Netting
+|   |   |-- Animal Repellents
+|   |   `-- Pest Traps
+|   |-- Plants
+|   |   |-- Water Plants
+|   |   |-- Plant Bulbs
+|   |   |-- Bonsai
+|   |   |-- Fern & Shade Plants
+|   |   |-- Flowering Plants
+|   |   |-- Grass & Strap Leaf Plants
+|   |   |-- Ground Cover Plants
+|   |   |-- Indoor Plants & Flowers
+|   |   |-- Orchids
+|   |   |-- Outdoor Foliage
+|   |   |-- Roses
+|   |   |-- Succulents & Cacti
+|   |   |-- Trees & Shrubs
+|   |   |-- Fresh Cut Flowers
+|   |   |-- Climbing Plants
+|   |   |-- Palms
+|   |   `-- Edible
+|   |-- Seeds & Propagation
+|   |   |-- Flower Seeds
+|   |   |-- Vegetable Seeds
+|   |   |-- Herb Seeds
+|   |   |-- Seed Raising Mix
+|   |   |-- Propagation Trays
+|   |   |-- Greenhouses
+|   |   |-- Plant Labels
+|   |   `-- Propagation Accessories
+|   |-- Turf, Grass & Lawn Care
+|   |   |-- Lawn Seed
+|   |   |-- Lawn Fertiliser
+|   |   |-- Lawn Weed Control
+|   |   |-- Turf
+|   |   |-- Lawn Top Dressing
+|   |   |-- Lawn Repair
+|   |   `-- Lawn Watering
+|   |-- Plant Pots, Planters & Baskets
+|   |   |-- Plant Baskets
+|   |   |-- Indoor Plant Pots
+|   |   |-- Outdoor Plant & Garden Pots
+|   |   |-- Plant Stands & Trolleys
+|   |   |-- Plant Pot & Planter Accessories
+|   |   |-- Self Watering Pots
+|   |   |-- Plastic Plant Pots
+|   |   |-- Timber Planters
+|   |   `-- Vertical & Wall Gardens
+|   |-- Garden Hoses, Sprinklers & Accessories
+|   |   |-- Garden Hoses
+|   |   |-- Hose Fittings
+|   |   |-- Hose Reels
+|   |   |-- Spray Guns
+|   |   |-- Sprinklers
+|   |   |-- Water Wands
+|   |   `-- Watering Cans
+|   |-- Irrigation
+|   |   |-- Drip Irrigation
+|   |   |-- Irrigation Controllers
+|   |   |-- Irrigation Fittings
+|   |   |-- Irrigation Pipe
+|   |   |-- Pop-Up Sprinklers
+|   |   `-- Irrigation Valves
+|   |-- Garden Decor & Features
+|   |   |-- Garden Statues
+|   |   |-- Water Features
+|   |   |-- Garden Screening
+|   |   |-- Garden Stakes
+|   |   |-- Garden Arches
+|   |   |-- Fire Pits
+|   |   `-- Decorative Pebbles
+|   |-- Letterboxes
+|   |   |-- Wall Mounted Letterboxes
+|   |   |-- Freestanding Letterboxes
+|   |   |-- Parcel Letterboxes
+|   |   `-- Letterbox Accessories
+|   |-- Garden & Outdoor Structures
+|   |   |-- Gazebos
+|   |   |-- Pergolas
+|   |   |-- Greenhouses
+|   |   |-- Garden Arches
+|   |   |-- Garden Sheds
+|   |   `-- Outdoor Storage
+|   |-- Sheds
+|   |   |-- Garden Sheds
+|   |   |-- Storage Sheds
+|   |   |-- Shed Flooring
+|   |   |-- Shed Shelving
+|   |   `-- Shed Accessories
+|   |-- Water Conservation & Rain Harvesting
+|   |   |-- Water Tanks
+|   |   |-- Rain Barrels
+|   |   |-- Water Tank Pumps
+|   |   |-- Tank Fittings
+|   |   `-- Grey Water Systems
+|   `-- Garden Clothing & Safety Gear
+|       |-- Garden Gloves
+|       |-- Gumboots
+|       |-- Protective Clothing
+|       |-- Sun Protection
+|       `-- Knee Pads
+|-- Outdoor Living
+|   |-- Outdoor Furniture
+|   |   |-- Outdoor Dining Settings
+|   |   |-- Outdoor Lounge Settings
+|   |   |-- Outdoor Chairs
+|   |   |-- Outdoor Tables
+|   |   |-- Outdoor Umbrellas
+|   |   |-- Outdoor Furniture Covers
+|   |   |-- Outdoor Cushions
+|   |   `-- Hammocks
+|   |-- BBQs
+|   |   |-- Gas BBQs
+|   |   |-- Charcoal BBQs
+|   |   |-- Portable BBQs
+|   |   |-- BBQ Accessories
+|   |   |-- BBQ Covers
+|   |   |-- BBQ Tools
+|   |   |-- Smokers
+|   |   `-- Outdoor Kitchens
+|   |-- Camping & Recreation
+|   |   |-- Tents
+|   |   |-- Sleeping Bags
+|   |   |-- Camping Chairs
+|   |   |-- Camping Tables
+|   |   |-- Camp Cooking
+|   |   |-- Torches & Lanterns
+|   |   |-- Gazebos
+|   |   `-- Camping Accessories
+|   |-- Coolers, Ice Boxes & Eskies
+|   |   |-- Ice Boxes
+|   |   |-- Cooler Bags
+|   |   |-- Drink Bottles
+|   |   |-- Ice Packs
+|   |   `-- Esky Accessories
+|   |-- Outdoor Play Equipment
+|   |   |-- Swing Sets
+|   |   |-- Trampolines
+|   |   |-- Sandpits
+|   |   |-- Cubby Houses
+|   |   |-- Slides
+|   |   |-- Climbing Frames
+|   |   `-- Outdoor Toys
+|   |-- Outdoor Heaters
+|   |   |-- Gas Outdoor Heaters
+|   |   |-- Electric Outdoor Heaters
+|   |   |-- Fire Pits
+|   |   |-- Patio Heaters
+|   |   `-- Heater Covers
+|   |-- Swimming Pools & Spas
+|   |   |-- Above Ground Pools
+|   |   |-- Pool Pumps
+|   |   |-- Pool Chemicals
+|   |   |-- Pool Cleaning
+|   |   |-- Pool Covers
+|   |   |-- Spa Accessories
+|   |   `-- Pool Toys
+|   |-- Outdoor Shade
+|   |   |-- Shade Sails
+|   |   |-- Market Umbrellas
+|   |   |-- Shade Cloth
+|   |   |-- Awnings
+|   |   `-- Gazebos
+|   |-- Outdoor Activities
+|   |   |-- Bikes & Scooters
+|   |   |-- Sports Equipment
+|   |   |-- Outdoor Games
+|   |   |-- Water Play
+|   |   `-- Recreation Accessories
+|   |-- Sunscreen & Insect Repellents
+|   |   |-- Sunscreen
+|   |   |-- Insect Repellents
+|   |   |-- Mosquito Coils & Candles
+|   |   `-- Outdoor Pest Control
+|   `-- Beach Essentials
+|       |-- Beach Chairs
+|       |-- Beach Umbrellas
+|       |-- Beach Towels
+|       |-- Beach Shelters
+|       `-- Beach Carts
+|-- Pet Supplies
+|   |-- Dogs
+|   |   |-- Dog Food
+|   |   |-- Dog Treats
+|   |   |-- Dog Beds
+|   |   |-- Dog Kennels
+|   |   |-- Dog Toys
+|   |   |-- Dog Bowls & Feeders
+|   |   |-- Dog Leads, Collars & Harnesses
+|   |   |-- Dog Grooming
+|   |   `-- Dog Health & Flea Control
+|   |-- Cats
+|   |   |-- Cat Food
+|   |   |-- Cat Treats
+|   |   |-- Cat Litter
+|   |   |-- Cat Beds
+|   |   |-- Cat Scratchers
+|   |   |-- Cat Toys
+|   |   |-- Cat Bowls & Feeders
+|   |   `-- Cat Grooming
+|   |-- Birds
+|   |   |-- Bird Food
+|   |   |-- Bird Cages
+|   |   |-- Bird Toys
+|   |   |-- Bird Feeders
+|   |   `-- Bird Health
+|   |-- Fish & Reptiles
+|   |   |-- Fish Food
+|   |   |-- Aquariums
+|   |   |-- Aquarium Pumps & Filters
+|   |   |-- Aquarium Decor
+|   |   |-- Reptile Food
+|   |   `-- Reptile Housing
+|   |-- Small Pets
+|   |   |-- Small Pet Food
+|   |   |-- Small Pet Cages
+|   |   |-- Bedding & Litter
+|   |   |-- Toys
+|   |   `-- Small Pet Accessories
+|   |-- Horses
+|   |   |-- Horse Feed
+|   |   |-- Horse Grooming
+|   |   |-- Stable Supplies
+|   |   `-- Horse Health
+|   |-- Chickens
+|   |   |-- Chicken Feed
+|   |   |-- Chicken Coops
+|   |   |-- Chicken Feeders & Drinkers
+|   |   `-- Chicken Health
+|   `-- Farm Animals
+|       |-- Farm Animal Feed
+|       |-- Feeders & Drinkers
+|       |-- Animal Housing
+|       `-- Farm Animal Health
+|-- Kitchen
+|   |-- Kitchen Appliances
+|   |   |-- Ovens
+|   |   |-- Cooktops
+|   |   |-- Rangehoods
+|   |   |-- Dishwashers
+|   |   |-- Fridges & Freezers
+|   |   |-- Microwaves
+|   |   `-- Appliance Packages
+|   |-- Benchtops
+|   |   |-- Laminate Benchtops
+|   |   |-- Timber Benchtops
+|   |   |-- Stone Benchtops
+|   |   |-- Benchtop Accessories
+|   |   `-- Benchtop Edging
+|   |-- Kitchen Cabinets & Pantries
+|   |   |-- Base Cabinets
+|   |   |-- Wall Cabinets
+|   |   |-- Pantry Cabinets
+|   |   |-- Cabinet Doors
+|   |   |-- Cabinet Handles
+|   |   |-- Cabinet Hardware
+|   |   `-- Flatpack Kitchens
+|   |-- Kitchen Taps, Sinks & Filtration
+|   |   |-- Kitchen Taps
+|   |   |-- Kitchen Sinks
+|   |   |-- Sink Accessories
+|   |   |-- Water Filters
+|   |   |-- Instant Hot Water
+|   |   `-- Waste Disposals
+|   |-- Splashbacks
+|   |   |-- Glass Splashbacks
+|   |   |-- Tile Splashbacks
+|   |   |-- Acrylic Splashbacks
+|   |   `-- Splashback Accessories
+|   |-- Kitchen Storage & Organisation
+|   |   |-- Pantry Storage
+|   |   |-- Drawer Organisers
+|   |   |-- Cabinet Organisers
+|   |   |-- Bins
+|   |   |-- Shelving
+|   |   `-- Food Storage
+|   |-- Kitchenware
+|   |   |-- Cookware
+|   |   |-- Bakeware
+|   |   |-- Food Preparation
+|   |   |-- Utensils
+|   |   |-- Kitchen Knives
+|   |   `-- Kitchen Accessories
+|   |-- Small Appliances
+|   |   |-- Kettles
+|   |   |-- Toasters
+|   |   |-- Air Fryers
+|   |   |-- Coffee Machines
+|   |   |-- Blenders
+|   |   |-- Mixers
+|   |   `-- Food Processors
+|   |-- Tableware & Bar
+|   |   |-- Dinnerware
+|   |   |-- Glassware
+|   |   |-- Cutlery
+|   |   |-- Servingware
+|   |   |-- Barware
+|   |   `-- Table Linen
+|   |-- Commercial Kitchen
+|   |   |-- Commercial Appliances
+|   |   |-- Commercial Sinks
+|   |   |-- Stainless Steel Benches
+|   |   |-- Commercial Storage
+|   |   `-- Food Service Equipment
+|   `-- Kitchen Inspiration
+|       |-- Kitchen Renovation Ideas
+|       |-- Kitchen Design Advice
+|       |-- D.I.Y. Kitchen Projects
+|       `-- Kaboodle Kitchen Planning
+|-- Bathroom & Plumbing
+|   |-- Bathroom
+|   |   |-- Bathroom Vanities
+|   |   |-- Bathroom Basins
+|   |   |-- Toilets
+|   |   |-- Showers
+|   |   |-- Shower Screens
+|   |   |-- Baths
+|   |   |-- Bathroom Tapware
+|   |   |-- Bathroom Accessories
+|   |   |-- Bathroom Mirrors
+|   |   |-- Bathroom Cabinets
+|   |   |-- Bathroom Heating
+|   |   |-- Bathroom Lighting
+|   |   |-- Bathroom Exhaust Fans
+|   |   |-- Bathroom Storage
+|   |   `-- Bathroom Cleaning
+|   |-- Plumbing
+|   |   |-- Pipe & Fittings
+|   |   |-- Taps
+|   |   |-- Valves
+|   |   |-- Pumps
+|   |   |-- Hot Water Systems
+|   |   |-- Drainage
+|   |   |-- Toilets & Cistern Parts
+|   |   |-- Water Filters
+|   |   |-- Plumbing Tools
+|   |   `-- Gas Fittings
+|   `-- Bathroom Inspiration
+|       |-- Bathroom Renovation Ideas
+|       |-- Bathroom Design Advice
+|       |-- D.I.Y. Bathroom Projects
+|       `-- Small Bathroom Ideas
+|-- Assisted Living
+|   |-- Bathroom Safety
+|   |   |-- Grab Rails
+|   |   |-- Shower Seats
+|   |   |-- Toilet Aids
+|   |   |-- Bath Boards
+|   |   `-- Non-Slip Mats
+|   |-- Mobility Aids
+|   |   |-- Walking Sticks
+|   |   |-- Walkers
+|   |   |-- Wheelchairs
+|   |   |-- Mobility Scooters
+|   |   `-- Ramps
+|   |-- Daily Living Aids
+|   |   |-- Reachers
+|   |   |-- Dressing Aids
+|   |   |-- Kitchen Aids
+|   |   |-- Bedroom Aids
+|   |   `-- Seating Support
+|   |-- Home Safety
+|   |   |-- Safety Rails
+|   |   |-- Step Stools
+|   |   |-- Alarm Systems
+|   |   `-- Anti-Slip Products
+|   |-- Home Modifications
+|   |   |-- Handrails
+|   |   |-- Ramps
+|   |   |-- Doorway Aids
+|   |   `-- Accessible Fixtures
+|   |-- Health & Wellness
+|   |   |-- Massage
+|   |   |-- Exercise Aids
+|   |   |-- First Aid
+|   |   `-- Comfort Support
+|   |-- Garden Living
+|   |   |-- Raised Garden Beds
+|   |   |-- Garden Kneelers
+|   |   |-- Lightweight Garden Tools
+|   |   `-- Outdoor Support
+|   `-- Bedroom Support
+|       |-- Bed Rails
+|       |-- Bedside Tables
+|       |-- Support Pillows
+|       `-- Transfer Aids
+|-- Paint & Woodcare
+|   |-- Paint
+|   |   |-- Interior Paint
+|   |   |-- Exterior Paint
+|   |   |-- Ceiling Paint
+|   |   |-- Primer & Undercoat
+|   |   |-- Spray Paint
+|   |   |-- Paving Paint
+|   |   |-- Metal Paint
+|   |   |-- Specialty Paint
+|   |   `-- Paint Testers
+|   |-- Woodcare
+|   |   |-- Timber Stain
+|   |   |-- Decking Oil
+|   |   |-- Varnish
+|   |   |-- Furniture Oil
+|   |   |-- Wood Cleaners
+|   |   |-- Wood Fillers
+|   |   `-- Wood Preparation
+|   |-- Paint Accessories
+|   |   |-- Paint Brushes
+|   |   |-- Paint Rollers
+|   |   |-- Paint Trays
+|   |   |-- Drop Sheets
+|   |   |-- Masking Tape
+|   |   |-- Sandpaper
+|   |   |-- Paint Scrapers
+|   |   |-- Paint Sprayers
+|   |   `-- Paint Mixing
+|   |-- Craft Supplies
+|   |   |-- Craft Paint
+|   |   |-- Craft Brushes
+|   |   |-- Art Supplies
+|   |   |-- Adhesives
+|   |   `-- Kids Craft
+|   `-- Wallpaper
+|       |-- Wallpaper Rolls
+|       |-- Peel & Stick Wallpaper
+|       |-- Wallpaper Tools
+|       `-- Wallpaper Adhesive
+|-- Flooring
+|   |-- Carpet
+|   |   |-- Carpet Tiles
+|   |   |-- Carpet Runners
+|   |   |-- Carpet Underlay
+|   |   `-- Carpet Accessories
+|   |-- Mats
+|   |   |-- Door Mats
+|   |   |-- Utility Mats
+|   |   |-- Anti-Fatigue Mats
+|   |   |-- Rubber Mats
+|   |   `-- Runner Mats
+|   |-- Rugs
+|   |   |-- Indoor Rugs
+|   |   |-- Outdoor Rugs
+|   |   |-- Kids Rugs
+|   |   |-- Hallway Runners
+|   |   `-- Rug Pads
+|   |-- Tiles
+|   |   |-- Floor Tiles
+|   |   |-- Wall Tiles
+|   |   |-- Outdoor Tiles
+|   |   |-- Mosaic Tiles
+|   |   |-- Tile Adhesive
+|   |   |-- Grout
+|   |   `-- Tiling Tools
+|   |-- Timber Flooring
+|   |   |-- Laminate Flooring
+|   |   |-- Hybrid Flooring
+|   |   |-- Engineered Timber Flooring
+|   |   |-- Bamboo Flooring
+|   |   |-- Flooring Underlay
+|   |   `-- Flooring Trims
+|   |-- Vinyl Flooring
+|   |   |-- Vinyl Planks
+|   |   |-- Vinyl Sheets
+|   |   |-- Vinyl Tiles
+|   |   `-- Vinyl Flooring Accessories
+|   |-- Flooring Tools
+|   |   |-- Tile Cutters
+|   |   |-- Floor Sanders
+|   |   |-- Flooring Installation Tools
+|   |   `-- Measuring & Levelling
+|   `-- Flooring Accessories
+|       |-- Floor Trims
+|       |-- Underlay
+|       |-- Adhesives
+|       |-- Grout & Sealers
+|       `-- Floor Protection
+|-- Storage & Cleaning
+|   |-- Laundry
+|   |   |-- Laundry Cabinets
+|   |   |-- Laundry Tubs & Sinks
+|   |   |-- Laundry Tapware
+|   |   |-- Clothes Airers
+|   |   |-- Clotheslines
+|   |   |-- Ironing Boards
+|   |   |-- Laundry Baskets
+|   |   `-- Laundry Storage
+|   |-- Cleaning Chemicals
+|   |   |-- All Purpose Cleaners
+|   |   |-- Bathroom Cleaners
+|   |   |-- Kitchen Cleaners
+|   |   |-- Floor Cleaners
+|   |   |-- Mould Removers
+|   |   |-- Disinfectants
+|   |   |-- Glass Cleaners
+|   |   `-- Specialty Cleaners
+|   |-- Cleaning Equipment
+|   |   |-- Vacuum Cleaners
+|   |   |-- Carpet Cleaners
+|   |   |-- Steam Mops
+|   |   |-- Brooms
+|   |   |-- Mops
+|   |   |-- Buckets
+|   |   |-- Brushes
+|   |   |-- Sponges & Cloths
+|   |   `-- Cleaning Gloves
+|   |-- Car Care Products
+|   |   |-- Car Wash
+|   |   |-- Car Polish
+|   |   |-- Interior Cleaners
+|   |   |-- Wheel & Tyre Care
+|   |   |-- Car Accessories
+|   |   `-- Automotive Cleaning Chemicals
+|   |-- Storage & Shelving
+|   |   |-- Storage Containers
+|   |   |-- Plastic Tubs
+|   |   |-- Shelving Units
+|   |   |-- Cube Storage
+|   |   |-- Storage Baskets
+|   |   |-- Hooks & Hanging Storage
+|   |   `-- Wardrobe Storage
+|   |-- Garage Storage
+|   |   |-- Garage Shelving
+|   |   |-- Garage Cabinets
+|   |   |-- Tool Storage
+|   |   |-- Wall Storage
+|   |   |-- Bike Storage
+|   |   `-- Garage Flooring
+|   |-- Moving Boxes & Packing Supplies
+|   |   |-- Moving Boxes
+|   |   |-- Packing Tape
+|   |   |-- Bubble Wrap
+|   |   |-- Moving Bags
+|   |   `-- Furniture Covers
+|   |-- Wardrobes & Closets
+|   |   |-- Wardrobe Systems
+|   |   |-- Wardrobe Shelving
+|   |   |-- Hanging Rails
+|   |   |-- Clothes Hangers
+|   |   |-- Shoe Storage
+|   |   `-- Closet Accessories
+|   `-- Storage Inspiration
+|       |-- Garage Storage Ideas
+|       |-- Wardrobe Storage Ideas
+|       |-- Laundry Storage Ideas
+|       `-- Home Organisation Ideas
+|-- Lighting
+|   |-- Outdoor Lighting
+|   |   |-- Exterior Wall Lights
+|   |   |-- Garden Lights
+|   |   |-- Solar Lights
+|   |   |-- Flood Lights
+|   |   |-- Sensor Lights
+|   |   |-- Deck Lights
+|   |   `-- Outdoor Light Accessories
+|   |-- Indoor Lighting
+|   |   |-- Ceiling Lights
+|   |   |-- Downlights
+|   |   |-- Lamps
+|   |   |-- Pendant Lights
+|   |   |-- Wall Lights
+|   |   |-- Strip Lights
+|   |   `-- Lighting Accessories
+|   |-- Light Bulbs & Globes
+|   |   |-- LED Globes
+|   |   |-- Smart Globes
+|   |   |-- Fluorescent Tubes
+|   |   |-- Halogen Globes
+|   |   |-- Decorative Globes
+|   |   `-- Specialty Globes
+|   `-- Smart Lighting & Power
+|       |-- Smart Bulbs
+|       |-- Smart Plugs
+|       |-- Smart Switches
+|       |-- Smart Powerboards
+|       |-- Smart Sensors
+|       `-- Smart Lighting Kits
+|-- Electrical & Smart Home
+|   |-- Air Conditioning, Fans & Cooling
+|   |   |-- Air Conditioners
+|   |   |-- Ceiling Fans
+|   |   |-- Pedestal Fans
+|   |   |-- Tower Fans
+|   |   |-- Evaporative Coolers
+|   |   |-- Portable Air Conditioners
+|   |   `-- Fan Accessories
+|   |-- Air Treatment
+|   |   |-- Air Purifiers
+|   |   |-- Dehumidifiers
+|   |   |-- Humidifiers
+|   |   |-- Air Fresheners
+|   |   `-- Air Treatment Filters
+|   |-- Electrical
+|   |   |-- Powerpoints
+|   |   |-- Switches
+|   |   |-- Extension Leads
+|   |   |-- Powerboards
+|   |   |-- Cable Management
+|   |   |-- Electrical Cable
+|   |   |-- Conduit
+|   |   |-- Circuit Protection
+|   |   `-- Electrical Tools & Testers
+|   |-- Smart Home Security
+|   |   |-- Security Cameras
+|   |   |-- Video Doorbells
+|   |   |-- Smart Locks
+|   |   |-- Motion Sensors
+|   |   |-- Alarms
+|   |   |-- Intercoms
+|   |   `-- Security Lighting
+|   |-- Smart Lighting & Power
+|   |   |-- Smart Lighting
+|   |   |-- Smart Power
+|   |   |-- Smart Switches
+|   |   |-- Smart Plugs
+|   |   `-- Smart Home Hubs
+|   |-- Home Internet & Wifi
+|   |   |-- Routers
+|   |   |-- Wi-Fi Extenders
+|   |   |-- Mesh Wi-Fi
+|   |   |-- Network Cables
+|   |   `-- Modems
+|   |-- Solar & EV Charging
+|   |   |-- Solar Panels
+|   |   |-- Solar Inverters
+|   |   |-- Solar Batteries
+|   |   |-- EV Chargers
+|   |   `-- Solar Accessories
+|   `-- Indoor Heaters
+|       |-- Fan Heaters
+|       |-- Panel Heaters
+|       |-- Oil Heaters
+|       |-- Ceramic Heaters
+|       |-- Electric Fireplaces
+|       `-- Heater Accessories
+|-- Indoor Living
+|   |-- Electronics
+|   |   |-- TVs
+|   |   |-- Audio
+|   |   |-- Computers & Tablets
+|   |   |-- Phone Accessories
+|   |   |-- Smart Watches
+|   |   |-- Batteries
+|   |   `-- Cables & Chargers
+|   |-- Bedroom
+|   |   |-- Beds
+|   |   |-- Mattresses
+|   |   |-- Bedside Tables
+|   |   |-- Bedroom Storage
+|   |   |-- Bedding
+|   |   |-- Pillows
+|   |   `-- Electric Blankets
+|   |-- Dining Room
+|   |   |-- Dining Tables
+|   |   |-- Dining Chairs
+|   |   |-- Bar Stools
+|   |   |-- Buffets & Sideboards
+|   |   `-- Dining Storage
+|   |-- Home Decor
+|   |   |-- Cushions & Throws
+|   |   |-- Mirrors
+|   |   |-- Clocks
+|   |   |-- Wall Art
+|   |   |-- Vases
+|   |   |-- Decorative Accessories
+|   |   |-- Artificial Plants
+|   |   `-- Candles & Home Fragrance
+|   |-- Living Room
+|   |   |-- Sofas
+|   |   |-- Armchairs
+|   |   |-- Coffee Tables
+|   |   |-- TV Units
+|   |   |-- Bookcases
+|   |   |-- Rugs
+|   |   `-- Living Room Storage
+|   |-- Home Office
+|   |   |-- Desks
+|   |   |-- Office Chairs
+|   |   |-- Bookcases
+|   |   |-- Filing Cabinets
+|   |   |-- Desk Lamps
+|   |   |-- Office Storage
+|   |   `-- Monitor Stands
+|   |-- Kids & Baby Furniture
+|   |   |-- Kids Beds
+|   |   |-- Cots
+|   |   |-- Change Tables
+|   |   |-- Kids Storage
+|   |   |-- Kids Chairs
+|   |   `-- Nursery Furniture
+|   |-- Health & Fitness
+|   |   |-- Exercise Equipment
+|   |   |-- Weights
+|   |   |-- Yoga Mats
+|   |   |-- Massage
+|   |   |-- Health Monitors
+|   |   `-- Fitness Accessories
+|   |-- Hallway
+|   |   |-- Console Tables
+|   |   |-- Shoe Storage
+|   |   |-- Coat Racks
+|   |   |-- Hallway Benches
+|   |   `-- Entryway Storage
+|   |-- Commercial Office
+|   |   |-- Commercial Desks
+|   |   |-- Commercial Chairs
+|   |   |-- Office Partitions
+|   |   |-- Meeting Tables
+|   |   `-- Commercial Storage
+|   |-- Costumes
+|   |   |-- Adult Costumes
+|   |   |-- Kids Costumes
+|   |   |-- Costume Accessories
+|   |   `-- Seasonal Costumes
+|   |-- Curtains & Blinds
+|   |   |-- Curtains
+|   |   |-- Blinds
+|   |   |-- Curtain Rods & Tracks
+|   |   |-- Curtain Accessories
+|   |   |-- Window Film
+|   |   `-- Shutters
+|   `-- Bunnings Marketplace
+|       |-- Wider choice available online
+|       |-- Furniture
+|       |-- Homewares
+|       |-- Electronics
+|       |-- Fitness
+|       |-- Kids & Baby
+|       `-- Marketplace-only range extensions
+`-- Hire Shop
+    |-- Carpet Cleaning Equipment
+    |   |-- Carpet Cleaners
+    |   |-- Upholstery Cleaners
+    |   |-- Cleaning Accessories
+    |   `-- Cleaning Solutions
+    |-- Floor Sanding Equipment
+    |   |-- Floor Sanders
+    |   |-- Edgers
+    |   |-- Floor Polishers
+    |   `-- Sanding Accessories
+    |-- General Hire Equipment
+    |   |-- Concrete Equipment
+    |   |-- Garden Equipment
+    |   |-- Cleaning Equipment
+    |   |-- Ladders & Access
+    |   |-- Power Tools
+    |   `-- Moving Equipment
+    `-- Trailer, Vehicle, Storage & Skip Hire
+        |-- Trailer Hire
+        |-- Ute Hire
+        |-- Van Hire
+        |-- Truck Hire
+        |-- Storage Hire
+        `-- Skip Hire
+
+Source pages checked:
+|-- https://www.bunnings.com.au/
+|-- https://www.bunnings.com.au/robots.txt
+|-- https://www.bunnings.com.au/products/tools/automotive
+|-- https://www.bunnings.com.au/products/tools/hand-tools
+|-- https://www.bunnings.com.au/products/tools/heavy-lifting-equipment
+|-- https://www.bunnings.com.au/products/tools/power-tools
+|-- https://www.bunnings.com.au/products/tools/safety-equipment-workwear
+|-- https://www.bunnings.com.au/products/tools/tool-storage
+|-- https://www.bunnings.com.au/products/tools/tool-accessories
+|-- https://www.bunnings.com.au/products/tools/welding-soldering-irons
+|-- https://www.bunnings.com.au/products/building-hardware/timber
+|-- https://www.bunnings.com.au/products/building-hardware/building-construction
+|-- https://www.bunnings.com.au/products/building-hardware/doors
+|-- https://www.bunnings.com.au/products/building-hardware/door-hardware
+|-- https://www.bunnings.com.au/products/building-hardware/windows
+|-- https://www.bunnings.com.au/products/building-hardware/fencing
+|-- https://www.bunnings.com.au/products/building-hardware/fasteners-fixings
+|-- https://www.bunnings.com.au/products/building-hardware/general-hardware
+|-- https://www.bunnings.com.au/products/garden/garden-power-tools
+|-- https://www.bunnings.com.au/products/garden/plants
+`-- https://www.bunnings.com.au/products/garden/plant-pots-planters-baskets

@@ -1,0 +1,844 @@
+KOGAN.COM.AU CATEGORY HIERARCHY TREE
+Snapshot basis: Kogan.com.au homepage, /au/shop, and live category pages reviewed on 2026-05-12
+
+Note:
+- Kogan exposes categories in two visible layers on many pages: "Shop by Category" and "Top Categories" / "Categories".
+- This tree keeps those layers separate so the source structure is not flattened.
+- Brand lists, help links, account links, and product filters such as colour, price, size, and condition are not treated as shopping categories.
+
+Kogan.com.au
+|-- Homepage Shopping Sections
+|   |-- Current Deals
+|   |-- FIRST Member Giveaways
+|   |-- Kogan Essentials
+|   |   |-- Kogan Services
+|   |   |-- Kogan Mobile
+|   |   |-- Kogan Internet
+|   |   |-- Kogan Credit Cards
+|   |   |-- Kogan Energy
+|   |   |-- Moving House Made Simple
+|   |   |-- Kogan Money
+|   |   |-- Kogan Travel Insurance
+|   |   |-- Kogan Home Insurance
+|   |   |-- Kogan Life Insurance
+|   |   |-- Kogan Car Insurance
+|   |   |-- Kogan Pet Insurance
+|   |   |-- Kogan Travel
+|   |   |-- Kogan FIRST Membership
+|   |   `-- FIRST Giveaways
+|   |-- Popular Categories
+|   |   |-- LED Televisions
+|   |   |-- Heaters & Split Systems
+|   |   |-- Smartphones
+|   |   |-- Computer Monitors
+|   |   |-- Whitegoods
+|   |   |-- Vacuum Cleaners
+|   |   |-- Furniture
+|   |   |-- Headphones
+|   |   |-- Laptops
+|   |   |-- Tablets - Android, iPads, Kindles
+|   |   |-- Phones & Watches
+|   |   |-- Home Office Furniture
+|   |   |-- Precious Metals
+|   |   |-- Electric Massage Chairs
+|   |   `-- Video Games & Consoles
+|   `-- Popular Pages
+|       |-- TVs
+|       |-- Smart TV
+|       |-- 4K TVs
+|       |-- iPhones
+|       |-- Android Phones
+|       |-- Computer Monitors
+|       |-- Laptops
+|       |-- Vacuum Cleaners
+|       |-- Appliances & Whitegoods
+|       |-- TV Buying Guide
+|       |-- Bedding Buying Guide
+|       |-- Home Office Buying Guide
+|       `-- Kogan.com Shopping App
+|-- All Departments
+|   |-- Baby
+|   |-- Books, Magazines
+|   |-- Cameras
+|   |-- Clothing, Shoes & Accessories
+|   |-- Computers/Tablets & Networking
+|   |-- Crafts
+|   |-- Electronics
+|   |-- Health & Beauty
+|   |-- Home & Garden
+|   |-- Home Appliances
+|   |-- Home Entertainment
+|   |-- Industrial
+|   |-- Jewellery & Watches
+|   |-- Musical Instruments
+|   |-- Office
+|   |-- Pantry & Beverages
+|   |-- Pet Supplies
+|   |-- Phones, Wearables & Accessories
+|   |-- Sports, Outdoors & Travel
+|   |-- Toys & Hobbies
+|   |-- Vehicle Parts & Accessories
+|   `-- Video Games & Consoles
+|-- Baby
+|   |-- Shop by Category
+|   |   |-- Baby Monitors
+|   |   |-- Baby Toys
+|   |   |-- Pram & Stroller Accessories
+|   |   |-- Car & Booster Seats
+|   |   |-- Baby Sleeping Bags
+|   |   |-- Furniture
+|   |   |-- Nursery Bedding
+|   |   |-- Baby Carriers
+|   |   |-- Nappy Bags
+|   |   |-- Nappies & Wipes
+|   |   |-- Home Safety
+|   |   `-- Feeding
+|   |-- Category Index
+|   |   |-- Baby Body Care
+|   |   |-- Baby Carriers and Slings
+|   |   |-- Baby Wraps and Swaddles
+|   |   |-- Bathing, Grooming
+|   |   |-- Bedding
+|   |   |-- Car Accessories
+|   |   |-- DVDs, Baby Educational
+|   |   |-- Feeding
+|   |   |-- Furniture
+|   |   |-- Gifts
+|   |   |-- Home Safety
+|   |   |-- Keepsakes, Memory Books
+|   |   |-- Kids Lunchboxes
+|   |   |-- Nappies
+|   |   |-- Nursery Bedding
+|   |   |-- Nursery Decor
+|   |   |-- Other Baby Items
+|   |   |-- Potties and Toilet Trainers
+|   |   |-- Prams, Strollers & Accs
+|   |   |-- Toys
+|   |   `-- Trikes and Ride Ons
+|   `-- Related Department Links
+|       |-- Baby & Toddler
+|       `-- Toys & Hobbies
+|-- Books, Magazines
+|   |-- Shop by Category
+|   |   |-- Books
+|   |   `-- Movies & TV Shows
+|   |-- Category Index
+|   |   |-- Accessories, Gift Books
+|   |   |-- Antiquarian & Collectable
+|   |   |-- Audio Books
+|   |   |-- Biography Books
+|   |   |-- Children & Young Adults Books
+|   |   |-- Comic Books & Memorabilia
+|   |   |-- Fiction Books
+|   |   |-- Kids & Children
+|   |   |-- Kids Books
+|   |   |-- Music
+|   |   |-- Non-Fiction
+|   |   |-- Non-Fiction Books
+|   |   |-- Other Books
+|   |   |-- Sci-Fi Books
+|   |   |-- Textbooks, Education & Reference
+|   |   `-- Wholesale Lots
+|   |-- Children & Young Adults Books
+|   |   |-- Childrens Fiction
+|   |   |-- Children & YA Fiction
+|   |   |-- Kids & Children > Picture Books & Early Learning
+|   |   |-- Kids & Children > Children's Non-Fiction
+|   |   |-- Kids & Children > Educational Material
+|   |   `-- Magazines
+|   |-- Fiction Books
+|   |   |-- Modern & Contemporary Fiction
+|   |   |-- Graphic Novels
+|   |   |-- Mystery
+|   |   |-- Historical Fiction
+|   |   `-- Contemporary Fiction
+|   |-- Non-Fiction Books
+|   |   |-- Memoirs
+|   |   |-- Family & Relationships
+|   |   |-- Advice On Parenting
+|   |   |-- Natural History Books
+|   |   `-- Poetry By Individual Poets
+|   `-- Textbooks, Education & Reference
+|       `-- School Textbooks & Study Guides
+|-- Cameras
+|   |-- Shop by Category
+|   |   |-- Drones
+|   |   |-- Gimbals
+|   |   |-- Instant Cameras & Film
+|   |   |-- Action & Video Cameras
+|   |   |-- Mirrorless Cameras
+|   |   |-- Camera & Ring Lights
+|   |   |-- Lenses
+|   |   `-- Tripods & Monopods
+|   |-- Category Index
+|   |   |-- Action Cameras
+|   |   |-- Binoculars & Telescopes
+|   |   |-- Camera Drones
+|   |   |-- Camera, Drone & Photo Accessories
+|   |   |-- DSLR Cameras
+|   |   |-- Digital Cameras
+|   |   |-- Digital Photo Frames
+|   |   |-- Film Photography
+|   |   |-- Flashes & Flash Accessories
+|   |   |-- Lenses & Filters
+|   |   |-- Lighting & Studio
+|   |   |-- Mirrorless Cameras
+|   |   |-- Other Cameras, Accessories
+|   |   |-- Replacement Parts & Tools
+|   |   |-- Tripods & Supports
+|   |   |-- Video Cameras
+|   |   |-- Video Production & Editing
+|   |   `-- Vintage Movie & Photography
+|   `-- Related Department Links
+|       |-- Phones, Wearables & Accessories
+|       |-- Computers/Tablets & Networking
+|       `-- Electronics
+|-- Clothing, Shoes & Accessories
+|   |-- Shop by Category
+|   |   |-- Women's Shoes
+|   |   |-- Men's Shoes
+|   |   |-- Women's Fashion
+|   |   |-- Men's Fashion
+|   |   |-- Kids Shoes
+|   |   |-- Kids Fashion
+|   |   |-- Baby Shoes
+|   |   `-- Baby Fashion
+|   |-- Category Index
+|   |   |-- Baby Shoes & Fashion
+|   |   |-- Kids Shoes & Fashion
+|   |   |-- Men's Shoes & Fashion
+|   |   |-- Specialty
+|   |   |-- Unisex Shoes & Fashion
+|   |   `-- Women's Shoes & Fashion
+|   |-- Women's Shoes & Fashion
+|   |   |-- Activewear Tops
+|   |   |-- Hoodies & Sweatshirts
+|   |   |-- Pants
+|   |   |-- Shorts
+|   |   `-- Tops, Shirts & T-Shirts
+|   |-- Men's Shoes & Fashion
+|   |   |-- Men's Shoes
+|   |   |-- Men's Fashion
+|   |   |-- Workwear
+|   |   |-- Activewear
+|   |   `-- Accessories
+|   |-- Kids Shoes & Fashion
+|   |   |-- Kids Shoes
+|   |   |-- Kids Fashion
+|   |   `-- School and casual clothing
+|   `-- Baby Shoes & Fashion
+|       |-- Baby Shoes
+|       `-- Baby Fashion
+|-- Computers/Tablets & Networking
+|   |-- Shop by Category
+|   |   |-- New Release
+|   |   |-- Laptops
+|   |   |-- Computer Monitors
+|   |   |-- Tablets
+|   |   |-- PC Gaming
+|   |   |-- Desktops & Mini PCs
+|   |   |-- Computer Accessories
+|   |   |-- Printers & Scanners
+|   |   |-- Computer Hardware
+|   |   |-- Networking
+|   |   `-- 3D Printers & Supplies
+|   |-- Category Index
+|   |   |-- 3D Printers & Supplies
+|   |   |-- Computer Accessories
+|   |   |-- Computer Cables & Connectors
+|   |   |-- Computer Components & Parts
+|   |   |-- Computers
+|   |   |-- Drives, Storage & Blank Media
+|   |   |-- Enterprise Networking, Servers
+|   |   |-- Home Networking & Connectivity
+|   |   |-- Keyboards, Mice & Pointers
+|   |   |-- Laptops
+|   |   |-- Monitors, Projectors & Accs
+|   |   |-- Power Protection, Distribution
+|   |   |-- Printers, Scanners & Supplies
+|   |   |-- Tablet Accessories
+|   |   `-- Tablets
+|   `-- Related Department Links
+|       `-- Video Games & Consoles
+|-- Crafts
+|   |-- Category Index
+|   |   |-- Art Supplies
+|   |   |-- Beads & Jewellery Making
+|   |   |-- Candle Making & Soap Making
+|   |   |-- Craft Books, Magazines
+|   |   |-- Fabric
+|   |   |-- Fabric Painting & Decorating
+|   |   |-- Floral Crafts
+|   |   |-- Handcrafted Arts
+|   |   |-- Kids' Arts, Crafts
+|   |   |-- Leathercrafts
+|   |   |-- Multi-Purpose Craft Supplies
+|   |   |-- Needlecrafts & Yarn
+|   |   |-- Other Crafts
+|   |   |-- Scrapbooking & Paper Crafts
+|   |   |-- Sculpting, Moulding & Ceramics
+|   |   |-- Sewing
+|   |   |-- Stamping
+|   |   `-- Woodworking
+|   |-- Multi-Purpose Craft Supplies
+|   |   |-- Craft Markers & Pens
+|   |   |-- Adhesives & Tape
+|   |   |-- Crafting Paper
+|   |   |-- Crafting Pieces
+|   |   |-- Crafting Tools
+|   |   |-- Organisation & Storage
+|   |   |-- Other Multi-Purpose Crafting
+|   |   `-- Stencils & Templates
+|   |-- Sewing
+|   |   `-- Sewing Machines
+|   `-- Related Department Links
+|       |-- Collectables
+|       |-- Home & Garden
+|       `-- Toys & Hobbies
+|-- Electronics
+|   |-- Shop by Category
+|   |   |-- Headphones
+|   |   |-- Portable Speakers
+|   |   |-- Home Audio Systems
+|   |   |-- Cameras & Drones
+|   |   |-- Home Security
+|   |   |-- DJ & Musical Instruments
+|   |   |-- Data Storage
+|   |   |-- Virtual Reality
+|   |   `-- Batteries & Power
+|   |-- Category Index
+|   |   |-- GPS
+|   |   |-- GPS Accessories
+|   |   |-- Home Audio Stereos, Components
+|   |   |-- Multipurpose Batteries & Power
+|   |   |-- Other Electronics
+|   |   |-- Portable Audio & Headphones
+|   |   |-- Radio Communication
+|   |   |-- Smart Glasses
+|   |   |-- Smart Home & Surveillance
+|   |   |-- TV, Video & Audio Accessories
+|   |   |-- Torches
+|   |   `-- Virtual Reality
+|   `-- Related Department Links
+|       |-- Video Games & Consoles
+|       |-- Home & Garden
+|       `-- Computers/Tablets & Networking
+|-- Health & Beauty
+|   |-- Shop by Category
+|   |   |-- Massage & Relaxation
+|   |   |-- Fragrances
+|   |   |-- Grooming & Shaving
+|   |   |-- Haircare & Styling
+|   |   |-- Makeup
+|   |   |-- Skincare
+|   |   `-- Vitamins & Minerals
+|   |-- Category Index
+|   |   |-- Bath & Body
+|   |   |-- Dental & Oral Care
+|   |   |-- Fragrances
+|   |   |-- Hair Care & Styling
+|   |   |-- Health Care
+|   |   |-- Makeup
+|   |   |-- Massage
+|   |   |-- Mobility & Disability
+|   |   |-- Nail Care, Manicure & Pedicure
+|   |   |-- Natural & Alternative Remedies
+|   |   |-- Other Health & Beauty
+|   |   |-- Salon & Spa Equipment
+|   |   |-- Shaving & Hair Removal
+|   |   |-- Skin Care
+|   |   |-- Tattoos & Body Art
+|   |   |-- Vision Care
+|   |   |-- Vitamins & Lifestyle Supplements
+|   |   `-- Wholesale Beauty, Health
+|-- Home & Garden
+|   |-- Shop by Category
+|   |   |-- Hot Deals
+|   |   |-- Furniture
+|   |   |-- Garden & Outdoor Living
+|   |   |-- Manchester
+|   |   |-- Cleaning & Housekeeping
+|   |   |-- Lighting & Fans
+|   |   |-- Kitchen & Dining
+|   |   |-- Rugs
+|   |   |-- Pet Supplies
+|   |   |-- Children's Home & Furniture
+|   |   |-- Home Decor
+|   |   |-- Tools & Workshop
+|   |   `-- Bathroom
+|   |-- Category Index
+|   |   |-- Bathroom
+|   |   |-- Bedding
+|   |   |-- Children's Home & Furniture
+|   |   |-- Cleaning & Housekeeping
+|   |   |-- Curtains, Blinds & Accessories
+|   |   |-- DIY
+|   |   |-- Furniture
+|   |   |-- Home Decor
+|   |   |-- Home Security
+|   |   |-- Kitchen
+|   |   |-- Kitchen Fixtures
+|   |   |-- Kitchen, Dining, Bar
+|   |   |-- Lighting & Fans
+|   |   |-- Rugs & Carpets
+|   |   |-- Tools & Workshop Equipment
+|   |   `-- Yard, Garden & Outdoor Living
+|   |-- Furniture
+|   |   |-- Shop by Room
+|   |   |   |-- Living Room
+|   |   |   |-- Bedroom
+|   |   |   |-- Kitchen & Dining
+|   |   |   |-- Home Office
+|   |   |   |-- Outdoors
+|   |   |   |-- Children
+|   |   |   `-- Bathroom
+|   |   |-- Shop by Category
+|   |   |   |-- Home Storage
+|   |   |   |-- Outdoor Furniture
+|   |   |   |-- Chairs
+|   |   |   |-- Sofas
+|   |   |   |-- Office Desks
+|   |   |   |-- Entertainment Units
+|   |   |   |-- Beds & Bed Frames
+|   |   |   |-- Tables
+|   |   |   |-- Office Chairs
+|   |   |   |-- Stools
+|   |   |   |-- Sofa Beds
+|   |   |   |-- Mattresses
+|   |   |   `-- Slipcovers
+|   |   |-- Furniture Category Index
+|   |   |   |-- Antique Sofas & Chaises
+|   |   |   |-- Armchairs
+|   |   |   |-- Armoires & Wardrobes
+|   |   |   |-- Bathroom Sets
+|   |   |   |-- Bean Bags & Inflatables
+|   |   |   |-- Bedroom Sets & Suites
+|   |   |   |-- Beds & Mattresses
+|   |   |   |-- Benches, Stools & Bar Stools
+|   |   |   |-- Bookshelves
+|   |   |   |-- CD & Video Racks
+|   |   |   |-- Cabinets & Cupboards
+|   |   |   |-- Chairs
+|   |   |   |-- Chest of Drawers & Dressers
+|   |   |   |-- Dining Sets
+|   |   |   |-- Drinks Trolleys & Tea Trolleys
+|   |   |   |-- Furniture Accessories
+|   |   |   |-- Furniture Parts
+|   |   |   |-- Kitchen Carts
+|   |   |   |-- Kitchen Islands
+|   |   |   |-- Office Furniture
+|   |   |   |-- Other Home Furniture
+|   |   |   |-- Ottomans, Footstools & Poufs
+|   |   |   |-- Screens & Room Dividers
+|   |   |   |-- Sideboards & Buffets
+|   |   |   |-- Slipcovers
+|   |   |   |-- Sofa Beds
+|   |   |   |-- Sofas
+|   |   |   |-- TV Stands & Entertainment Units
+|   |   |   |-- Tables
+|   |   |   |-- Tables & Desks
+|   |   |   `-- Trunks & Chests
+|   |   |-- Bedroom Furniture
+|   |   |   |-- Beds & Bed Frames
+|   |   |   |-- Chest of Drawers
+|   |   |   |-- Mattresses
+|   |   |   |-- Bedside Tables
+|   |   |   |-- Bed Heads & Footboards
+|   |   |   |-- Manchester
+|   |   |   `-- Sofa Beds
+|   |   `-- Dining Room Furniture
+|   |       |-- Chairs
+|   |       |-- Dining Tables
+|   |       |-- Buffets & Sideboards
+|   |       |-- Benches, Bar Stools
+|   |       |-- Kitchen Trolleys
+|   |       `-- Bar Carts
+|   |-- Manchester
+|   |   |-- Shop by Category
+|   |   |   |-- Cooling Manchester
+|   |   |   |-- Bed Sheets & Sets
+|   |   |   |-- Quilts, Bedspreads & Doonas
+|   |   |   |-- Quilt Covers
+|   |   |   |-- Blankets & Throws
+|   |   |   |-- Mattress Toppers & Protectors
+|   |   |   |-- Bath Towels & Washcloths
+|   |   |   |-- Beach Towels
+|   |   |   `-- Bath Mats & Rugs
+|   |   `-- Related Text Links
+|   |       |-- Bed Linen
+|   |       |-- Bedding
+|   |       |-- Mattresses
+|   |       |-- Bathroom
+|   |       `-- Beach Towels
+|   `-- Related Department Links
+|       |-- Electronics
+|       |-- Home Appliances
+|       `-- Cameras
+|-- Home Appliances
+|   |-- Shop by Category
+|   |   |-- Cooling & Heating
+|   |   |-- Stick Vacuums
+|   |   |-- Robot Vacuums
+|   |   |-- Washers & Dryers
+|   |   |-- Fridges & Freezers
+|   |   |-- Dishwashers
+|   |   |-- Kitchen Appliances
+|   |   |-- Toasters & Kettles
+|   |   |-- Coffee & Tea Makers
+|   |   |-- Benchtop Cooking
+|   |   |-- Beverage Preparation
+|   |   |-- Ranges & Cooktops
+|   |   |-- Air Treatment
+|   |   |-- Specialty Appliances
+|   |   `-- Mixers & Blenders
+|   `-- Category Index
+|       |-- Carpet Cleaners
+|       |-- Coffee & Tea Makers
+|       |-- Dishwashing
+|       |-- Fridges & Freezers
+|       |-- Heating, Cooling & Air
+|       |-- Irons & Press Irons
+|       |-- Other Home Appliances
+|       |-- Ranges & Cooking Appliances
+|       |-- Small Kitchen Appliances
+|       |-- Steam Mops, Cleaners & Parts
+|       |-- Vacuum Cleaners
+|       `-- Washers & Dryers
+|-- Home Entertainment
+|   |-- Shop by Category
+|   |   |-- 43" & Below
+|   |   |-- 48" - 65"
+|   |   |-- 70" & Above
+|   |   |-- Projectors
+|   |   |-- TV Stands & Mounts
+|   |   |-- Soundbars
+|   |   |-- Entertainment Units
+|   |   |-- Accessories
+|   |   |-- Streaming
+|   |   |-- Projector Screens
+|   |   `-- Home Theatre Systems
+|   |-- Category Index
+|   |   |-- DVD & Blu-ray Players
+|   |   |-- DVRs, Hard Drive Recorders
+|   |   |-- Home Theatre Systems
+|   |   |-- Internet & Media Streamers
+|   |   |-- Other
+|   |   |-- Projector Screens
+|   |   |-- Projectors
+|   |   |-- Soundbars
+|   |   |-- TV Accessories
+|   |   |-- TV Reception & Set-Top Boxes
+|   |   `-- TVs
+|   `-- Related Department Links
+|       |-- Electronics
+|       |-- Cameras
+|       `-- Video Games & Consoles
+|-- Industrial
+|   |-- Category Index
+|   |   |-- Adhesives, Sealants & Tapes
+|   |   |-- Building Materials
+|   |   |-- CNC, Metalworking & Manufacturing
+|   |   |-- Cleaning & Janitorial Supplies
+|   |   |-- Electrical Equipment & Supplies
+|   |   |-- Facility Maintenance & Safety
+|   |   |-- Farming & Agriculture
+|   |   |-- Fasteners & Hardware
+|   |   |-- Fencing
+|   |   |-- HVAC & Refrigeration
+|   |   |-- Hand Tools
+|   |   |-- Hardware
+|   |   |-- Hardware Parts
+|   |   |-- Healthcare, Lab & Dental
+|   |   |-- Heavy Machinery, Parts & Attachments
+|   |   |-- Hydraulics, Pneumatics, Pumps & Plumbing
+|   |   |-- Industrial Automation & Motion Controls
+|   |   |-- Material Handling
+|   |   `-- Test, Measurement & Inspection
+|-- Jewellery & Watches
+|   |-- Shop by Category
+|   |   |-- Necklaces
+|   |   |-- Earrings
+|   |   |-- Bracelets
+|   |   |-- Rings
+|   |   |-- Women's Watches
+|   |   `-- Men's Watches
+|   |-- Category Index
+|   |   |-- Body Jewellery
+|   |   |-- Children's Jewellery
+|   |   |-- Engagement & Wedding
+|   |   |-- Fashion Jewellery
+|   |   |-- Fine Jewellery
+|   |   |-- Handcrafted Jewellery
+|   |   |-- Jewellery Boxes & Organisers
+|   |   |-- Jewellery Design & Repair
+|   |   |-- Loose Diamonds & Gemstones
+|   |   |-- Men's Jewellery
+|   |   |-- Other
+|   |   |-- Unisex Jewellery
+|   |   |-- Watches, Parts & Accessories
+|   |   `-- Wholesale, Bulk Lots
+|   |-- Fashion Jewellery
+|   |   |-- Rings
+|   |   `-- Jewellery Sets
+|   |-- Fine Jewellery
+|   |   |-- Sterling Silver Jewellery
+|   |   |-- Gold Plated Jewellery
+|   |   |-- Pearl Jewellery
+|   |   |-- Bracelets
+|   |   |-- Necklaces
+|   |   |-- Earrings
+|   |   `-- Bangles
+|   `-- Related Department Links
+|       |-- Home & Living
+|       |-- Toys & Hobbies
+|       `-- Phones, Wearables & Accessories
+|-- Musical Instruments
+|   |-- Shop by Category
+|   |   |-- Guitars & Basses
+|   |   |-- Percussion
+|   |   `-- Pianos & Keyboards
+|   `-- Category Index
+|       |-- Brass
+|       |-- DJ Equipment
+|       |-- Generic Accessories
+|       |-- Guitars & Basses
+|       |-- Instruction Books, CDs & Video
+|       |-- Other Musical Instruments
+|       |-- Percussion
+|       |-- Pianos, Keyboards & Organs
+|       |-- Pro Audio
+|       |-- Stage Lighting & Effects
+|       |-- String
+|       |-- Vintage Musical Instruments
+|       `-- Wind & Woodwind
+|-- Office
+|   |-- Shop by Category
+|   |   |-- Office Equipment
+|   |   |-- Stationary
+|   |   |-- Whiteboards
+|   |   |-- Water Dispensers
+|   |   `-- Cash Register & Accessories
+|   |-- Category Index
+|   |   |-- Bathroom
+|   |   |-- Business Cards
+|   |   |-- Cash Register & Accessories
+|   |   |-- Laminators
+|   |   |-- Office Equipment
+|   |   |-- Other
+|   |   |-- Paper Cutters
+|   |   |-- Printing Equipment
+|   |   |-- Restaurant & Food Service
+|   |   |-- Shop Equipment
+|   |   |-- Stationery
+|   |   |-- Water Coolers
+|   |   `-- Whiteboards
+|   `-- Related Department Links
+|       `-- Home & Garden
+|-- Pantry & Beverages
+|   |-- Shop by Category
+|   |   |-- Alcohol & Mixers
+|   |   |-- Non-Alcoholic Drinks
+|   |   |-- Soft Drinks & Beverages
+|   |   |-- Snacks
+|   |   |-- Confectionary
+|   |   |-- Pantry & Cereal
+|   |   |-- Vitamins & Supplements
+|   |   `-- Hampers
+|   `-- Category Index
+|       |-- Alcohol & Alcohol Mixers
+|       |-- Fresh Food & Chilled Drinks
+|       |-- Hampers & Gift Assortments
+|       |-- Non-Alcoholic Drinks
+|       |-- Other
+|       |-- Pantry
+|       `-- Soft Drinks & Beverages
+|-- Pet Supplies
+|   |-- Shop by Pet
+|   |   |-- Dogs
+|   |   |-- Cats
+|   |   |-- Birds
+|   |   |-- Fish
+|   |   |-- Small Animals
+|   |   `-- Pet Insurance
+|   |-- Shop by Category
+|   |   |-- Pet Cameras
+|   |   |-- Pet Dishes, Feeders & Fountains
+|   |   |-- Pet Cages & Enclosures
+|   |   |-- Pet Beds
+|   |   |-- Pet Care
+|   |   |-- Pet Food
+|   |   `-- Pet Medicine
+|   `-- Category Index
+|       |-- Backyard Poultry & Waterfowl
+|       |-- Birds
+|       |-- Cats
+|       |-- Dogs
+|       |-- Fish
+|       |-- Other Pet Supplies
+|       |-- Reptiles
+|       |-- Small Animals
+|       `-- Trackers
+|-- Phones, Wearables & Accessories
+|   |-- Shop by Category
+|   |   |-- New Release
+|   |   |-- Kogan Mobile
+|   |   |-- Apple iPhones
+|   |   |-- Android Phones
+|   |   |-- Smart Watches
+|   |   |-- Smart Rings
+|   |   |-- Wearable Technology
+|   |   |-- Phone Accessories
+|   |   |-- Home Phones
+|   |   `-- Radio Communication
+|   |-- Category Index
+|   |   |-- Home Telephones & Accessories
+|   |   |-- Mobile & Home Phone Mixed Lots
+|   |   |-- PDA Accessories
+|   |   |-- Phone Cards & SIM Cards
+|   |   |-- Smart Rings & Accessories
+|   |   |-- Smart Watch Accessories
+|   |   |-- Smart Watches
+|   |   |-- Smartphone Accessories
+|   |   |-- Smartphones
+|   |   `-- Wearable Technology
+|   `-- Related Department Links
+|       |-- Sports, Outdoors & Travel
+|       |-- Cameras
+|       |-- Electronics
+|       |-- Computers/Tablets & Networking
+|       |-- Video Games & Consoles
+|       |-- Jewellery & Watches
+|       `-- Vehicle Parts & Accessories
+|-- Sports, Outdoors & Travel
+|   |-- Shop by Category
+|   |   |-- Bikes & Scooters
+|   |   |-- Gym & Fitness
+|   |   |-- Sports
+|   |   |-- Camping & Hiking
+|   |   |-- Travel & Luggage
+|   |   `-- Fitness Electronics
+|   `-- Category Index
+|       |-- Outdoors
+|       |-- Sporting Goods
+|       `-- Travel
+|-- Toys & Hobbies
+|   |-- Shop by Toy Category
+|   |   |-- Gaming
+|   |   |-- Outdoor Play
+|   |   |-- Educational Toys
+|   |   |-- Pretend Play
+|   |   |-- Board & Card Games
+|   |   |-- LEGO & Building Toys
+|   |   |-- Action Figures
+|   |   |-- Toy Vehicles
+|   |   |-- Ride-On Toys
+|   |   |-- Dolls
+|   |   |-- Crafts
+|   |   `-- Puzzles
+|   `-- Category Index
+|       |-- Action Figures
+|       |-- Board & Card Games
+|       |-- Building Toys
+|       |-- Classic Toys
+|       |-- Collectable Card Games
+|       |-- Dolls, Bears
+|       |-- Educational Toys
+|       |-- Interactive Toys
+|       |-- Kid's Technology
+|       |-- Magic
+|       |-- Model Building
+|       |-- Musical Toys
+|       |-- Other
+|       |-- Outdoor Toys
+|       |-- Preschool Toys & Pretend Play
+|       |-- Puzzles
+|       |-- Remote & Radio Control Toys
+|       |-- Ride-On Toys
+|       |-- Role Play Toys
+|       |-- Slot Cars
+|       |-- Stuffed Animals
+|       |-- TV & Movie Character Toys
+|       |-- Train Sets & Model Trains
+|       |-- Vehicles & Diecast
+|       |-- Vehicles & Playsets
+|       |-- Vintage, Antique Toys, Games
+|       |-- Wholesale, Bulk Lots
+|       `-- Wooden Toys
+|-- Vehicle Parts & Accessories
+|   `-- Category Index
+|       |-- Automotive Tools & Supplies
+|       |-- Boat Parts, Accessories
+|       |-- Car & Truck Parts
+|       |-- Caravan Parts, Accessories
+|       |-- Clothing, Merchandise, Media
+|       |-- Commercial Truck Parts
+|       |-- Motorcycle Accessories
+|       |-- Motorcycle Parts
+|       |-- Other
+|       |-- Pocket Bike Accessories
+|       |-- Scooter Parts
+|       |-- Trailer Parts
+|       `-- Vehicle Electronics & GPS
+`-- Video Games & Consoles
+    |-- Shop by Category
+    |   |-- Pre-Order
+    |   |-- New Release
+    |   |-- Nintendo Switch 2
+    |   |-- Consoles
+    |   |-- Games
+    |   |-- PC Gaming
+    |   |-- VR
+    |   |-- Controllers & Attachments
+    |   |-- Gaming Headsets
+    |   |-- Bags, Skins & Travel Cases
+    |   |-- Cables & Adapters
+    |   |-- Gaming Furniture
+    |   |-- Retro & Arcade
+    |   |-- PlayStation
+    |   |-- Nintendo
+    |   |-- Xbox
+    |   `-- Steam Deck
+    |-- Category Index
+    |   |-- Coin-Operated & Arcade
+    |   |-- Manuals, Inserts & Box Art
+    |   |-- Replacement Parts & Tools
+    |   |-- Strategy Guides & Cheats
+    |   |-- Video Game Accessories
+    |   |-- Video Game Consoles
+    |   |-- Video Game Merchandise
+    |   `-- Video Games
+    `-- Related Department Links
+        |-- Computers/Tablets & Networking
+        |-- Electronics
+        |-- Toys & Hobbies
+        |-- Games
+        |-- Phones, Wearables & Accessories
+        |-- Cameras
+        |-- Home & Garden
+        `-- Home Entertainment
+
+Source pages checked:
+|-- https://www.kogan.com/au/
+|-- https://www.kogan.com/au/shop/
+|-- https://www.kogan.com/au/shop/category/baby-275/
+|-- https://www.kogan.com/au/shop/category/cameras-1001/
+|-- https://www.kogan.com/au/shop/category/clothing-shoes-accessories-1203/
+|-- https://www.kogan.com/au/shop/category/computerstablets-networking-1974/
+|-- https://www.kogan.com/au/shop/category/electronics-2920/
+|-- https://www.kogan.com/au/shop/category/health-beauty-3143/
+|-- https://www.kogan.com/au/shop/category/home-garden-3804/
+|-- https://www.kogan.com/au/c/furniture/
+|-- https://www.kogan.com/au/c/manchester/
+|-- https://www.kogan.com/au/shop/category/home-appliances-3579/
+|-- https://www.kogan.com/au/shop/category/home-entertainment-3762/
+|-- https://www.kogan.com/au/shop/category/industrial-5205/
+|-- https://www.kogan.com/au/shop/category/jewellery-watches-7621/
+|-- https://www.kogan.com/au/shop/category/musical-instruments-7923/
+|-- https://www.kogan.com/au/shop/category/office-494/
+|-- https://www.kogan.com/au/shop/category/pantry-beverages-0/
+|-- https://www.kogan.com/au/shop/category/pet-supplies-8324/
+|-- https://www.kogan.com/au/shop/category/phones-accessories-8450/
+|-- https://www.kogan.com/au/shop/category/sports-outdoors-travel/
+|-- https://www.kogan.com/au/shop/category/toys-hobbies-10279/
+|-- https://www.kogan.com/au/shop/category/vehicle-parts-accessories-10849/
+`-- https://www.kogan.com/au/shop/category/video-games-consoles-12166/

@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Traffic Radius — AI Lead Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #04060f;
+    --bg2: #080c1a;
+    --panel: rgba(8,14,32,0.85);
+    --panel-border: rgba(0,200,255,0.12);
+    --cyan: #00c8ff;
+    --cyan-dim: rgba(0,200,255,0.15);
+    --cyan-glow: rgba(0,200,255,0.4);
+    --green: #00e87a;
+    --green-dim: rgba(0,232,122,0.15);
+    --green-glow: rgba(0,232,122,0.4);
+    --amber: #ffb800;
+    --red: #ff3b5c;
+    --text: #c8d8f0;
+    --text-dim: rgba(200,216,240,0.45);
+    --text-bright: #eaf4ff;
+    --mono: 'Space Mono', monospace;
+    --sans: 'Space Grotesk', sans-serif;
+  }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); overflow-x: hidden; }
+  body { min-height: 100vh; }
+  #root { min-height: 100vh; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg2); }
+  ::-webkit-scrollbar-thumb { background: var(--cyan-dim); border-radius: 2px; }
+
+  /* Canvas BG */
+  #bg-canvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+
+  /* Scanlines */
+  .scanlines {
+    position: fixed; inset: 0; z-index: 1; pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 2px, rgba(0,0,0,0.04) 2px, rgba(0,0,0,0.04) 4px
+    );
+    animation: scanMove 8s linear infinite;
+  }
+  @keyframes scanMove { from { background-position: 0 0; } to { background-position: 0 200px; } }
+
+  /* Vignette */
+  .vignette {
+    position: fixed; inset: 0; z-index: 1; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(4,6,15,0.85) 100%);
+  }
+
+  .app { position: relative; z-index: 2; min-height: 100vh; padding-bottom: 60px; }
+
+  /* ── TOPBAR ── */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 32px; height: 64px;
+    background: linear-gradient(180deg, rgba(0,200,255,0.05) 0%, transparent 100%);
+    border-bottom: 1px solid var(--panel-border);
+    backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-icon { display: flex; align-items: flex-end; gap: 2px; height: 28px; }
+  .logo-bar { width: 4px; border-radius: 1px; background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .logo-bar:nth-child(1) { height: 12px; }
+  .logo-bar:nth-child(2) { height: 20px; }
+  .logo-bar:nth-child(3) { height: 28px; }
+  .logo-bar:nth-child(4) { height: 16px; }
+  .logo-wordmark { font-family: var(--sans); font-size: 18px; font-weight: 700; color: var(--text-bright); letter-spacing: -0.3px; }
+  .logo-wordmark span { color: var(--cyan); }
+  .logo-sub { font-size: 9px; color: var(--text-dim); font-weight: 400; letter-spacing: 1px; text-transform: uppercase; margin-top: -2px; }
+
+  .topbar-right { display: flex; align-items: center; gap: 24px; }
+  .conn-badge {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 11px; color: var(--green);
+    background: rgba(0,232,122,0.08); border: 1px solid rgba(0,232,122,0.2);
+    padding: 6px 14px; border-radius: 20px; letter-spacing: 0.5px;
+  }
+  .conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; box-shadow: 0 0 6px var(--green); } 50% { opacity:0.5; box-shadow: 0 0 14px var(--green); } }
+
+  .clock { font-family: var(--mono); font-size: 12px; color: var(--text-dim); letter-spacing: 1px; }
+
+  /* ── HERO ── */
+  .hero { text-align: center; padding: 52px 32px 40px; }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--cyan); background: rgba(0,200,255,0.07); border: 1px solid rgba(0,200,255,0.25);
+    padding: 6px 16px; border-radius: 20px; margin-bottom: 24px;
+  }
+  .hero-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); animation: pulse-cyan 1.5s ease-in-out infinite; }
+  @keyframes pulse-cyan { 0%,100% { box-shadow: 0 0 8px var(--cyan); } 50% { box-shadow: 0 0 18px var(--cyan); } }
+  .hero h1 {
+    font-size: clamp(36px, 5vw, 60px); font-weight: 700; line-height: 1.1;
+    letter-spacing: -1.5px; color: var(--text-bright);
+    text-shadow: 0 0 60px rgba(0,200,255,0.15);
+    margin-bottom: 10px;
+  }
+  .hero h1 em { font-style: normal; color: var(--cyan); }
+  .hero-sub { font-size: 14px; color: var(--text-dim); letter-spacing: 0.5px; margin-bottom: 32px; }
+  .hero-actions { display: flex; justify-content: center; gap: 12px; }
+  .btn-primary {
+    font-family: var(--sans); font-weight: 600; font-size: 13px; letter-spacing: 0.5px;
+    padding: 10px 24px; border-radius: 6px; border: none; cursor: pointer;
+    background: var(--green); color: #000;
+    box-shadow: 0 0 20px rgba(0,232,122,0.3);
+    transition: all 0.2s;
+  }
+  .btn-primary:hover { box-shadow: 0 0 32px rgba(0,232,122,0.55); transform: translateY(-1px); }
+  .btn-secondary {
+    font-family: var(--sans); font-weight: 500; font-size: 13px; letter-spacing: 0.5px;
+    padding: 10px 24px; border-radius: 6px; cursor: pointer;
+    background: transparent; color: var(--text); border: 1px solid var(--panel-border);
+    transition: all 0.2s;
+  }
+  .btn-secondary:hover { border-color: var(--cyan); color: var(--cyan); background: var(--cyan-dim); }
+
+  /* ── MAIN CONTAINER ── */
+  .main { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+  /* ── CREDIT CARDS ── */
+  .credits-panel {
+    background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: 12px; padding: 20px 24px; margin-bottom: 20px;
+    backdrop-filter: blur(20px); position: relative; overflow: hidden;
+  }
+  .credits-panel::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+    animation: shimmer 3s ease-in-out infinite;
+  }
+  @keyframes shimmer { 0%,100% { opacity:0.3; } 50% { opacity:1; } }
+  .credits-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .section-label { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); }
+  .credits-total { font-family: var(--mono); font-size: 12px; color: var(--text); }
+  .credits-total strong { color: var(--cyan); font-size: 18px; }
+  .credits-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .credit-card {
+    background: rgba(0,200,255,0.04); border: 1px solid rgba(0,200,255,0.1);
+    border-radius: 8px; padding: 14px 16px;
+    transition: all 0.3s;
+  }
+  .credit-card:hover { border-color: rgba(0,200,255,0.25); background: rgba(0,200,255,0.07); }
+  .credit-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .credit-name { font-size: 13px; font-weight: 600; color: var(--text-bright); }
+  .credit-status { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s ease-in-out infinite; }
+  .credit-used { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-bottom: 8px; }
+  .credit-bar-track { height: 3px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; margin-bottom: 6px; }
+  .credit-bar-fill { height: 100%; border-radius: 2px; transition: width 1.5s cubic-bezier(0.16,1,0.3,1); }
+  .credit-remain { font-family: var(--mono); font-size: 10px; color: var(--green); }
+
+  /* ── TABS ── */
+  .tab-bar { display: flex; gap: 2px; background: rgba(0,0,0,0.3); border: 1px solid var(--panel-border); border-radius: 8px; padding: 3px; margin-bottom: 20px; width: fit-content; }
+  .tab-btn {
+    font-family: var(--sans); font-size: 12px; font-weight: 500; letter-spacing: 0.3px;
+    padding: 8px 20px; border-radius: 6px; border: none; cursor: pointer;
+    background: transparent; color: var(--text-dim);
+    transition: all 0.2s;
+  }
+  .tab-btn.active { background: var(--green); color: #000; box-shadow: 0 0 16px rgba(0,232,122,0.3); }
+  .tab-btn:not(.active):hover { color: var(--text); background: rgba(255,255,255,0.05); }
+
+  /* ── CONTENT GRID ── */
+  .content-grid { display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
+
+  /* ── FORM PANEL ── */
+  .form-panel {
+    background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: 12px; padding: 24px; backdrop-filter: blur(20px);
+    position: relative; overflow: hidden;
+  }
+  .form-panel::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--green), transparent);
+    opacity: 0.3;
+  }
+  .panel-title { font-size: 13px; font-weight: 600; color: var(--text-bright); margin-bottom: 20px; letter-spacing: 0.3px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .form-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .field-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-dim); }
+  .field-select, .field-input {
+    font-family: var(--sans); font-size: 13px; color: var(--text-bright);
+    background: rgba(0,200,255,0.04); border: 1px solid rgba(0,200,255,0.12);
+    border-radius: 6px; padding: 9px 12px; width: 100%; outline: none;
+    appearance: none; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .field-select:focus, .field-input:focus { border-color: rgba(0,200,255,0.4); box-shadow: 0 0 0 3px rgba(0,200,255,0.06); }
+  .field-select option { background: #0a0f20; }
+  .field-input::placeholder { color: var(--text-dim); }
+
+  /* Toggle */
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.04); }
+  .toggle-info { }
+  .toggle-label { font-size: 13px; color: var(--text-bright); font-weight: 500; }
+  .toggle-desc { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .toggle-switch { position: relative; width: 44px; height: 24px; cursor: pointer; flex-shrink: 0; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-track {
+    position: absolute; inset: 0; border-radius: 12px;
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1);
+    transition: all 0.3s;
+  }
+  .toggle-switch.on .toggle-track { background: rgba(0,232,122,0.25); border-color: rgba(0,232,122,0.4); box-shadow: 0 0 10px rgba(0,232,122,0.2); }
+  .toggle-thumb {
+    position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+    border-radius: 50%; background: rgba(255,255,255,0.3);
+    transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .toggle-switch.on .toggle-thumb { transform: translateX(20px); background: var(--green); box-shadow: 0 0 8px var(--green); }
+
+  /* Generate Button */
+  .generate-btn {
+    width: 100%; margin-top: 20px; padding: 14px;
+    font-family: var(--sans); font-size: 14px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    border: none; border-radius: 8px; cursor: pointer;
+    background: linear-gradient(135deg, var(--green) 0%, #00c860 100%);
+    color: #000; position: relative; overflow: hidden;
+    box-shadow: 0 0 24px rgba(0,232,122,0.3), 0 4px 24px rgba(0,0,0,0.4);
+    transition: all 0.25s;
+  }
+  .generate-btn:hover { box-shadow: 0 0 40px rgba(0,232,122,0.5), 0 4px 32px rgba(0,0,0,0.4); transform: translateY(-2px); }
+  .generate-btn:active { transform: translateY(0); }
+  .generate-btn.loading { cursor: wait; opacity: 0.8; }
+  .generate-btn::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.2) 50%, transparent 100%);
+    transform: translateX(-100%);
+    animation: btnShimmer 2.5s ease-in-out infinite;
+  }
+  @keyframes btnShimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+
+  /* ── STATS PANEL ── */
+  .stats-panel {
+    background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: 12px; padding: 20px; backdrop-filter: blur(20px);
+    position: relative; overflow: hidden;
+  }
+  .stats-panel::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--green), transparent);
+    animation: shimmer 4s ease-in-out infinite 1s;
+  }
+  .stats-section { margin-bottom: 20px; }
+  .stats-section-title { font-family: var(--mono); font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .stat-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; }
+  .stat-key { font-size: 12px; color: var(--text-dim); }
+  .stat-val { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+  .stat-val.live { color: var(--green); animation: blinkVal 2s step-end infinite; }
+  @keyframes blinkVal { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+  .stat-val.cyan { color: var(--cyan); }
+  .stat-val.amber { color: var(--amber); }
+
+  /* Run stats header */
+  .run-stats-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+  .run-indicator { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 8px var(--amber); animation: pulse-amber 1.5s ease-in-out infinite; }
+  @keyframes pulse-amber { 0%,100%{ box-shadow: 0 0 6px var(--amber); } 50%{ box-shadow: 0 0 16px var(--amber); } }
+  .run-title { font-size: 13px; font-weight: 600; color: var(--text-bright); }
+
+  /* Credits legend */
+  .legend-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── SERVER PANEL ── */
+  .server-panel {
+    background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: 12px; padding: 20px 24px; margin-top: 16px;
+    backdrop-filter: blur(20px); position: relative;
+  }
+  .server-grid { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: flex-end; margin-top: 14px; }
+  .server-url-field {
+    font-family: var(--mono); font-size: 11px; color: var(--cyan);
+    background: rgba(0,200,255,0.04); border: 1px solid rgba(0,200,255,0.15);
+    border-radius: 6px; padding: 10px 14px; width: 100%; outline: none;
+    letter-spacing: 0.3px;
+    transition: all 0.2s;
+  }
+  .server-url-field:focus { border-color: rgba(0,200,255,0.4); box-shadow: 0 0 0 3px rgba(0,200,255,0.06); }
+  .connect-btn {
+    font-family: var(--sans); font-size: 12px; font-weight: 600; letter-spacing: 0.5px;
+    padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer;
+    background: var(--green); color: #000;
+    box-shadow: 0 0 16px rgba(0,232,122,0.25);
+    white-space: nowrap; transition: all 0.2s;
+  }
+  .connect-btn:hover { box-shadow: 0 0 28px rgba(0,232,122,0.45); }
+  .server-hint { font-family: var(--mono); font-size: 10px; color: var(--text-dim); line-height: 1.6; }
+  .server-hint code { color: var(--cyan); font-size: 10px; }
+
+  /* ── ACTIVITY TICKER ── */
+  .activity-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+    height: 32px; background: rgba(4,6,15,0.95); border-top: 1px solid var(--panel-border);
+    display: flex; align-items: center; gap: 0; overflow: hidden;
+  }
+  .activity-label { font-family: var(--mono); font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--cyan); padding: 0 16px; white-space: nowrap; flex-shrink: 0; border-right: 1px solid var(--panel-border); }
+  .activity-track { flex: 1; overflow: hidden; position: relative; }
+  .activity-ticker { display: flex; gap: 48px; white-space: nowrap; animation: tickerRoll 30s linear infinite; }
+  .activity-item { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+  .activity-item span { color: var(--green); margin-right: 4px; }
+  @keyframes tickerRoll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; top: 80px; right: 24px; z-index: 200;
+    background: rgba(8,14,32,0.97); border: 1px solid var(--green);
+    border-radius: 8px; padding: 14px 20px;
+    box-shadow: 0 0 32px rgba(0,232,122,0.2);
+    animation: toastIn 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    display: flex; align-items: center; gap: 12px;
+    font-family: var(--mono); font-size: 12px; color: var(--green);
+  }
+  @keyframes toastIn { from { transform: translateX(100px); opacity:0; } to { transform: translateX(0); opacity:1; } }
+  .toast-icon { font-size: 16px; }
+
+  /* Refresh btn */
+  .refresh-btn {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 1px;
+    padding: 5px 12px; border-radius: 4px; border: 1px solid var(--panel-border);
+    background: transparent; color: var(--text-dim); cursor: pointer;
+    transition: all 0.2s;
+  }
+  .refresh-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+
+  /* Number animation */
+  .num-animate { transition: all 0.5s; }
+
+  /* AI thinking animation */
+  .thinking-dots span { animation: thinking 1.4s ease-in-out infinite; }
+  .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes thinking { 0%,80%,100% { opacity:0.2; } 40% { opacity:1; } }
+
+  /* Corner decoration */
+  .corner-tl, .corner-br {
+    position: absolute; width: 16px; height: 16px;
+  }
+  .corner-tl { top: 8px; left: 8px; border-top: 1px solid var(--cyan); border-left: 1px solid var(--cyan); opacity: 0.4; }
+  .corner-br { bottom: 8px; right: 8px; border-bottom: 1px solid var(--cyan); border-right: 1px solid var(--cyan); opacity: 0.4; }
+
+  @media (max-width: 900px) {
+    .content-grid { grid-template-columns: 1fr; }
+    .credits-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<canvas id="bg-canvas"></canvas>
+<div class="scanlines"></div>
+<div class="vignette"></div>
+<div id="root"></div>
+
+<script>
+// ── Particle Network Background ──
+(function() {
+  const canvas = document.getElementById('bg-canvas');
+  const ctx = canvas.getContext('2d');
+  let W, H, particles = [], frame = 0;
+
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+
+  function Particle() {
+    this.x = Math.random() * W;
+    this.y = Math.random() * H;
+    this.vx = (Math.random() - 0.5) * 0.3;
+    this.vy = (Math.random() - 0.5) * 0.3;
+    this.r = Math.random() * 1.5 + 0.5;
+    this.alpha = Math.random() * 0.5 + 0.1;
+    this.type = Math.random() > 0.7 ? 'cyan' : 'green';
+  }
+
+  function init() {
+    particles = [];
+    const count = Math.min(80, Math.floor(W * H / 14000));
+    for (let i = 0; i < count; i++) particles.push(new Particle());
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Grid
+    ctx.strokeStyle = 'rgba(0,200,255,0.03)';
+    ctx.lineWidth = 1;
+    const gSize = 80;
+    for (let x = 0; x < W; x += gSize) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+    for (let y = 0; y < H; y += gSize) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+    // Horizon glow
+    const gy = ctx.createLinearGradient(0, H*0.3, 0, H*0.7);
+    gy.addColorStop(0, 'rgba(0,200,255,0.0)');
+    gy.addColorStop(0.5, 'rgba(0,200,255,0.025)');
+    gy.addColorStop(1, 'rgba(0,200,255,0.0)');
+    ctx.fillStyle = gy;
+    ctx.fillRect(0, H*0.3, W, H*0.4);
+
+    // Particles + connections
+    particles.forEach((p, i) => {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0 || p.x > W) p.vx *= -1;
+      if (p.y < 0 || p.y > H) p.vy *= -1;
+      const col = p.type === 'cyan' ? '0,200,255' : '0,232,122';
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(${col},${p.alpha})`;
+      ctx.fill();
+      for (let j = i+1; j < particles.length; j++) {
+        const q = particles[j];
+        const dx = p.x-q.x, dy = p.y-q.y, d = Math.sqrt(dx*dx+dy*dy);
+        if (d < 150) {
+          const a = (1 - d/150) * 0.12;
+          ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(q.x,q.y);
+          ctx.strokeStyle = `rgba(${col},${a})`; ctx.lineWidth = 0.5; ctx.stroke();
+        }
+      }
+    });
+
+    frame++;
+    requestAnimationFrame(draw);
+  }
+
+  resize(); init(); draw();
+  window.addEventListener('resize', () => { resize(); init(); });
+})();
+</script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+function useCountUp(target, duration = 1500) {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    let start = null;
+    const step = (ts) => {
+      if (!start) start = ts;
+      const p = Math.min((ts - start) / duration, 1);
+      const ease = 1 - Math.pow(1 - p, 3);
+      setVal(Math.floor(ease * target));
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [target]);
+  return val;
+}
+
+function Clock() {
+  const [time, setTime] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="clock">
+      {time.toLocaleTimeString('en-AU', {hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+    </div>
+  );
+}
+
+function CreditCard({ name, used, total, color }) {
+  const pct = used / total;
+  const remain = total - used;
+  const barColor = color === 'green' ? 'var(--green)' : color === 'cyan' ? 'var(--cyan)' : 'var(--amber)';
+  const usedNum = useCountUp(used, 1200);
+  const remainNum = useCountUp(remain, 1200);
+  return (
+    <div className="credit-card">
+      <div className="credit-card-top">
+        <span className="credit-name">{name}</span>
+        <span className="credit-status"></span>
+      </div>
+      <div className="credit-used">{usedNum.toLocaleString()} / {total.toLocaleString()} credits used</div>
+      <div className="credit-bar-track">
+        <div className="credit-bar-fill" style={{width: `${pct*100}%`, background: barColor, boxShadow: `0 0 6px ${barColor}`}}></div>
+      </div>
+      <div className="credit-remain">{remainNum.toLocaleString()} searches remaining</div>
+    </div>
+  );
+}
+
+function StatRow({ label, value, className }) {
+  return (
+    <div className="stat-row">
+      <span className="stat-key">{label}</span>
+      <span className={`stat-val ${className||''}`}>{value}</span>
+    </div>
+  );
+}
+
+function Toast({ msg, onClose }) {
+  useEffect(() => { const t = setTimeout(onClose, 3500); return () => clearTimeout(t); }, []);
+  return <div className="toast"><span className="toast-icon">⬡</span>{msg}</div>;
+}
+
+const TICKER_ITEMS = [
+  { tag: 'SCAN', msg: 'Apollo API: 1,000 credits available' },
+  { tag: 'INDEX', msg: 'SEMrush: 50,000 organic searches ready' },
+  { tag: 'READY', msg: 'Contact enrichment module: standby' },
+  { tag: 'NET', msg: 'SerpAPI connected — Hunter.io active' },
+  { tag: 'AI', msg: 'Neural lead scoring: operational' },
+  { tag: 'DATA', msg: 'Lusha: 1,000 credits available' },
+  { tag: 'SYS', msg: 'Traffic Radius engine v5.0 — all systems nominal' },
+  { tag: 'SCAN', msg: 'Apollo API: 1,000 credits available' },
+  { tag: 'INDEX', msg: 'SEMrush: 50,000 organic searches ready' },
+  { tag: 'READY', msg: 'Contact enrichment module: standby' },
+  { tag: 'NET', msg: 'SerpAPI connected — Hunter.io active' },
+  { tag: 'AI', msg: 'Neural lead scoring: operational' },
+  { tag: 'DATA', msg: 'Lusha: 1,000 credits available' },
+  { tag: 'SYS', msg: 'Traffic Radius engine v5.0 — all systems nominal' },
+];
+
+function App() {
+  const [tab, setTab] = useState('cities');
+  const [country, setCountry] = useState('Australia');
+  const [cityTier, setCityTier] = useState('Tier 2 cities');
+  const [city, setCity] = useState('Ballarat');
+  const [maxLeads, setMaxLeads] = useState('0');
+  const [minSearch, setMinSearch] = useState('100');
+  const [enrichment, setEnrichment] = useState(false);
+  const [serverUrl, setServerUrl] = useState('https://leadforgegenerator-24-4-2026-production.up.railway.app');
+  const [generating, setGenerating] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [runStats, setRunStats] = useState({ paid: '—', organic: '—', total: '—', phone: '—', email: '—', personal: '—', direct: '—', semrush: '—', apollo: '—', lusha: '—', hunter: '—', serp: '—' });
+  const totalRemain = useCountUp(77000, 2000);
+
+  const handleGenerate = () => {
+    setGenerating(true);
+    setToast('Initialising AI lead scan...');
+    setTimeout(() => {
+      setRunStats({ paid: '0', organic: '0', total: '0', phone: '0', email: '0', personal: '0', direct: '0', semrush: '1', apollo: '0', lusha: '0', hunter: '0', serp: '1' });
+    }, 1200);
+    setTimeout(() => { setGenerating(false); setToast('Scan complete — results ready'); }, 4000);
+  };
+
+  const CITIES = { 'Australia': ['Ballarat','Melbourne','Sydney','Brisbane','Perth','Adelaide','Geelong','Bendigo'], 'United States': ['New York','Los Angeles','Chicago','Houston','Phoenix'], 'United Kingdom': ['London','Manchester','Birmingham','Leeds','Glasgow'] };
+  const cities = CITIES[country] || ['—'];
+
+  return (
+    <div className="app">
+      {/* TOPBAR */}
+      <header className="topbar">
+        <div className="logo">
+          <div className="logo-icon">
+            <div className="logo-bar"></div><div className="logo-bar"></div>
+            <div className="logo-bar"></div><div className="logo-bar"></div>
+          </div>
+          <div>
+            <div className="logo-wordmark">Traffic <span>Radius</span></div>
+            <div className="logo-sub">Growing Your Business the Smart Way</div>
+          </div>
+        </div>
+        <div className="topbar-right">
+          <Clock />
+          <div className="conn-badge">
+            <span className="conn-dot"></span>
+            Connected to Server
+          </div>
+        </div>
+      </header>
+
+      {/* HERO */}
+      <section className="hero">
+        <div className="hero-badge">
+          <span className="hero-badge-dot"></span>
+          AI-Powered Lead Generation
+        </div>
+        <h1>Leads that you<br /><em>need. Indeed.</em></h1>
+        <p className="hero-sub">Autonomous multi-source intelligence &mdash; Apollo · Lusha · SEMrush · Hunter.io · SerpAPI</p>
+        <div className="hero-actions">
+          <button className="btn-primary" onClick={handleGenerate}>Start Generating</button>
+          <button className="btn-secondary">See Results</button>
+        </div>
+      </section>
+
+      <div className="main">
+        {/* CREDITS */}
+        <div className="credits-panel">
+          <div className="corner-tl"></div>
+          <div className="corner-br"></div>
+          <div className="credits-header">
+            <span className="section-label">⬡ API Credits &amp; Lead Searches</span>
+            <div style={{display:'flex',alignItems:'center',gap:16}}>
+              <div className="credits-total">Total remaining: <strong>{totalRemain.toLocaleString()}</strong></div>
+              <button className="refresh-btn">↻ REFRESH</button>
+            </div>
+          </div>
+          <div className="credits-grid">
+            <CreditCard name="Apollo" used={0} total={1000} color="green" />
+            <CreditCard name="Lusha" used={0} total={1000} color="cyan" />
+            <CreditCard name="SEMrush" used={0} total={50000} color="amber" />
+          </div>
+        </div>
+
+        {/* TABS */}
+        <div className="tab-bar">
+          <button className={`tab-btn ${tab==='industries'?'active':''}`} onClick={()=>setTab('industries')}>Generate leads through industries</button>
+          <button className={`tab-btn ${tab==='cities'?'active':''}`} onClick={()=>setTab('cities')}>Generate leads through cities</button>
+        </div>
+
+        {/* CONTENT GRID */}
+        <div className="content-grid">
+          {/* FORM */}
+          <div className="form-panel">
+            <div className="corner-tl"></div>
+            <div className="corner-br"></div>
+            <div className="panel-title">⬡ Configure Your Search</div>
+            <div className="form-row">
+              <div className="form-field">
+                <label className="field-label">State / Country</label>
+                <select className="field-select" value={country} onChange={e=>{setCountry(e.target.value);setCity(CITIES[e.target.value]?.[0]||'');}}>
+                  <option>Australia</option>
+                  <option>United States</option>
+                  <option>United Kingdom</option>
+                  <option>Canada</option>
+                  <option>New Zealand</option>
+                </select>
+              </div>
+              <div className="form-field">
+                <label className="field-label">City Tier</label>
+                <select className="field-select" value={cityTier} onChange={e=>setCityTier(e.target.value)}>
+                  <option>Tier 1 cities</option>
+                  <option>Tier 2 cities</option>
+                  <option>Tier 3 cities</option>
+                  <option>All cities</option>
+                </select>
+              </div>
+            </div>
+            <div className="form-field">
+              <label className="field-label">City</label>
+              <select className="field-select" value={city} onChange={e=>setCity(e.target.value)}>
+                {cities.map(c=><option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="form-row">
+              <div className="form-field">
+                <label className="field-label">Max Leads (0 = unlimited)</label>
+                <input className="field-input" type="number" value={maxLeads} onChange={e=>setMaxLeads(e.target.value)} />
+              </div>
+              <div className="form-field">
+                <label className="field-label">Min Search Volume</label>
+                <input className="field-input" type="number" value={minSearch} onChange={e=>setMinSearch(e.target.value)} />
+              </div>
+            </div>
+            <div className="toggle-row">
+              <div className="toggle-info">
+                <div className="toggle-label">Contact Enrichment</div>
+                <div className="toggle-desc">Reveal phone and email only for selected leads.</div>
+              </div>
+              <label className={`toggle-switch ${enrichment?'on':''}`} onClick={()=>setEnrichment(!enrichment)}>
+                <div className="toggle-track"></div>
+                <div className="toggle-thumb"></div>
+              </label>
+            </div>
+            <button className={`generate-btn ${generating?'loading':''}`} onClick={handleGenerate}>
+              {generating ? <span>Processing<span className="thinking-dots"> <span>.</span><span>.</span><span>.</span></span></span> : '⬡ Generate Leads'}
+            </button>
+          </div>
+
+          {/* STATS */}
+          <div className="stats-panel">
+            <div className="corner-tl"></div>
+            <div className="corner-br"></div>
+            <div className="run-stats-header">
+              <div className="run-indicator"></div>
+              <div className="run-title">Run Statistics</div>
+            </div>
+
+            <div className="stats-section">
+              <div className="stats-section-title">Lead Sources</div>
+              <StatRow label="Paid" value={runStats.paid} className={runStats.paid!=='—'?'cyan':''} />
+              <StatRow label="Organic" value={runStats.organic} className={runStats.organic!=='—'?'green':''} />
+              <StatRow label="Total" value={runStats.total} className={runStats.total!=='—'?'live':''} />
+            </div>
+
+            <div className="stats-section">
+              <div className="stats-section-title">Contact Coverage</div>
+              <StatRow label="With Phone" value={runStats.phone} />
+              <StatRow label="With Email" value={runStats.email} />
+              <StatRow label="Personal Emails" value={runStats.personal} />
+              <StatRow label="Direct Phones" value={runStats.direct} />
+            </div>
+
+            <div className="stats-section">
+              <div className="stats-section-title">API Calls This Run</div>
+              <StatRow label="SEMrush" value={runStats.semrush} className={runStats.semrush!=='—'?'amber':''} />
+              <StatRow label="Apollo" value={runStats.apollo} />
+              <StatRow label="Lusha" value={runStats.lusha} />
+              <StatRow label="Hunter.io" value={runStats.hunter} />
+              <StatRow label="SerpAPI" value={runStats.serp} className={runStats.serp!=='—'?'cyan':''} />
+            </div>
+
+            <div className="stats-section" style={{marginBottom:0}}>
+              <div className="stats-section-title">Credits Used</div>
+              <div className="legend-row">
+                <div className="legend-dot" style={{background:'var(--amber)'}}></div>
+                <span style={{fontSize:10,color:'var(--text-dim)',fontFamily:'var(--mono)'}}>total</span>
+              </div>
+              <div className="legend-row" style={{marginBottom:10}}>
+                <div className="legend-dot" style={{background:'var(--green)'}}></div>
+                <span style={{fontSize:10,color:'var(--text-dim)',fontFamily:'var(--mono)'}}>per lead avg</span>
+              </div>
+              <StatRow label="Apollo phone" value="—" />
+              <StatRow label="Apollo email" value="—" />
+              <StatRow label="Apollo remaining" value="—" />
+            </div>
+          </div>
+        </div>
+
+        {/* SERVER CONNECTION */}
+        <div className="server-panel">
+          <div className="corner-tl"></div>
+          <div className="section-label" style={{marginBottom:8}}>⬡ Server Connection</div>
+          <div className="server-hint">
+            Start the server: <code>python V5.py</code> (same folder as index.html)
+          </div>
+          <div className="server-grid">
+            <div className="form-field" style={{marginBottom:0}}>
+              <label className="field-label">Server URL</label>
+              <input className="server-url-field" value={serverUrl} onChange={e=>setServerUrl(e.target.value)} />
+            </div>
+            <button className="connect-btn" onClick={()=>setToast('Connecting to server...')}>Connect</button>
+          </div>
+        </div>
+      </div>
+
+      {/* ACTIVITY TICKER */}
+      <div className="activity-bar">
+        <div className="activity-label">⬡ LIVE</div>
+        <div className="activity-track">
+          <div className="activity-ticker">
+            {TICKER_ITEMS.map((item,i)=>(
+              <div className="activity-item" key={i}>
+                <span>[{item.tag}]</span>{item.msg}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {toast && <Toast msg={toast} onClose={()=>setToast(null)} />}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

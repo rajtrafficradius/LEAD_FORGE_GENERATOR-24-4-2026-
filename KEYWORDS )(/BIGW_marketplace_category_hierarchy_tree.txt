@@ -1,0 +1,694 @@
+BIG W MARKETPLACE CATEGORY HIERARCHY TREE
+Snapshot basis: BIG W Marketplace category pages reviewed on 2026-05-12
+
+BIG W Marketplace
+|-- Home & Appliances
+|   |-- Appliances
+|   |   |-- Shop all Appliances
+|   |   |-- Air Conditioners
+|   |   |-- Air Fryers
+|   |   |-- Air Treatment
+|   |   |-- Can Openers & Kitchen Tools
+|   |   |-- Coffee Machines & Grinders
+|   |   |-- Cookers & Steamers
+|   |   |-- Fans
+|   |   |-- Food Dehydrators
+|   |   |-- Food Vacuum Sealers
+|   |   |-- Fryers, Electric Frypans & Grills
+|   |   |-- Heaters
+|   |   |-- Hot Water Systems
+|   |   |-- Hot Water Urns
+|   |   |-- Ice Makers
+|   |   |-- Irons & Garment Steamers
+|   |   |-- Juicers & Blenders
+|   |   |-- Kettles
+|   |   |-- Meat Grinders & Mincers
+|   |   |-- Microwaves & Mini Ovens
+|   |   |-- Mixers & Food Processors
+|   |   |-- Novelty Appliances
+|   |   |-- Portable Cooktops
+|   |   |-- Sandwich Press & Snack Makers
+|   |   |-- Soda Makers & Drink Makers
+|   |   |-- Toaster & Kettle Sets
+|   |   |-- Toasters
+|   |   |-- Vacuum Cleaners & Steam Mops
+|   |   |-- Water Dispenser Pumps
+|   |   `-- White Goods
+|   |-- Barware
+|   |   |-- Shop all Barware
+|   |   |-- Bar Accessories
+|   |   |-- Bartender & Mixing Tools
+|   |   |-- Decanters & Carafes
+|   |   |-- Drink Dispensers
+|   |   |-- Ice & Wine Buckets
+|   |   |-- Ice Tools
+|   |   |-- Wine Racks & Holders
+|   |   `-- Wine Tools
+|   |-- Bath
+|   |   |-- Shop all Bath
+|   |   |-- Bath Mats
+|   |   |-- Bathroom Accessories
+|   |   |-- Bathroom Basins
+|   |   |-- Bathroom Cabinets
+|   |   |-- Bathroom Heat Lamps
+|   |   |-- Bathroom Tap & Sink Hardware
+|   |   |-- Bathroom Taps
+|   |   |-- Bathroom Vanities
+|   |   |-- Bathtubs
+|   |   |-- Bidets
+|   |   |-- Shower Bases
+|   |   |-- Shower Drains
+|   |   |-- Shower Heads & Arms
+|   |   |-- Shower Screens
+|   |   |-- Shower Sets
+|   |   |-- Toilets
+|   |   `-- Towels
+|   |-- Bedding
+|   |   |-- Shop all Bedding
+|   |   |-- Bed Sheets
+|   |   |-- Bed Skirts & Valances
+|   |   |-- Blankets & Throws
+|   |   |-- Comforters & Coverlets
+|   |   |-- Electric Blankets & Heated Throws
+|   |   |-- Kids Bedding
+|   |   |-- Mattress & Pillow Protectors
+|   |   |-- Mattress Toppers & Underlays
+|   |   |-- Mattresses
+|   |   |-- Pillows & Pillowcases
+|   |   `-- Quilts & Quilt Covers
+|   |-- Decor & Furnishings
+|   |   |-- Shop all Decor & Furnishings
+|   |   |-- Artificial Plants & Flowers
+|   |   |-- Bean Bags
+|   |   |-- Bookends
+|   |   |-- Clocks
+|   |   |-- Curtains & Blinds
+|   |   |-- Cushions & Covers
+|   |   |-- Decor Accessories
+|   |   |-- Door Stoppers
+|   |   |-- Home Fragrance
+|   |   |-- Jewellery Trees & Holders
+|   |   |-- Lighting
+|   |   |-- Mirrors
+|   |   |-- Ornaments & Sculptures
+|   |   |-- Photo Albums
+|   |   |-- Photo Frames
+|   |   |-- Room Dividers
+|   |   |-- Rugs & Mats
+|   |   |-- Vases
+|   |   `-- Wall Art
+|   |-- Dining
+|   |   |-- Shop all Dining
+|   |   |-- Cups & Glasses
+|   |   |-- Cutlery
+|   |   |-- Dinnerware
+|   |   |-- Drinkware
+|   |   |-- Outdoor Dining
+|   |   |-- Servingware
+|   |   `-- Table Linen & Tablecloths
+|   |-- Furniture
+|   |   |-- Shop all Furniture
+|   |   |-- Bedroom Furniture
+|   |   |-- Dining Furniture
+|   |   |-- Entry & Hallway Furniture
+|   |   |-- Furniture Covers
+|   |   |-- Kids Furniture & Decor
+|   |   |-- Living Room Furniture
+|   |   `-- Office Furniture
+|   |-- Gardening & Outdoor
+|   |   |-- Shop all Gardening & Outdoor
+|   |   |-- BBQs & Accessories
+|   |   |-- Garden & Outdoor Decor
+|   |   |-- Garden Care
+|   |   |-- Garden Sheds
+|   |   |-- Hammocks
+|   |   |-- Letter Boxes
+|   |   |-- Outdoor Furniture
+|   |   |-- Outdoor Heaters
+|   |   |-- Outdoor Kitchens
+|   |   |-- Outdoor Lighting
+|   |   |-- Outdoor Power Equipment
+|   |   |-- Outdoor Shade
+|   |   |-- Outdoor Showers
+|   |   |-- Pest Control
+|   |   `-- Pots & Planters
+|   |-- Home Improvement
+|   |   |-- Shop all Home Improvement
+|   |   |-- Adhesive & Filler
+|   |   |-- Adhesive Hooks & Hanging
+|   |   |-- Batteries & Power Supplies
+|   |   |-- Fencing
+|   |   |-- Generators & Power
+|   |   |-- Hand Tools
+|   |   |-- Home Hardware
+|   |   |-- Home Security
+|   |   |-- Industrial Tools
+|   |   |-- Ladders
+|   |   |-- Light Bulbs
+|   |   |-- Material Handling
+|   |   |-- Painting
+|   |   |-- Power Tools
+|   |   |-- Safety Equipment
+|   |   |-- Scaffolding
+|   |   |-- Small Engines
+|   |   |-- Solar Energy Supplies
+|   |   |-- Stick On Tiles
+|   |   |-- Test & Measure Equipment
+|   |   |-- Tool Accessories
+|   |   |-- Torches
+|   |   |-- Water Pumps
+|   |   |-- Welding
+|   |   `-- Work Lights
+|   |-- Kitchen
+|   |   |-- Shop all Kitchen
+|   |   |-- Baking
+|   |   |-- Cookware
+|   |   |-- Food Preparation
+|   |   |-- Food Storage
+|   |   |-- Kitchen Accessories
+|   |   |-- Kitchen Fixtures
+|   |   |-- Kitchen Organisers
+|   |   |-- Kitchen Utensils
+|   |   |-- Knives & Scissors
+|   |   |-- Lunch Boxes & Water Bottles
+|   |   |-- Preserving Jars & Kits
+|   |   |-- Rubbish Bins & Liners
+|   |   |-- Teapots & Accessories
+|   |   `-- Water Filters & Purifiers
+|   |-- Laundry
+|   |   |-- Shop all Laundry
+|   |   |-- Clotheslines & Clothes Airers
+|   |   |-- Ironing Boards & Covers
+|   |   |-- Laundry Accessories
+|   |   |-- Laundry Baskets & Hampers
+|   |   |-- Laundry Cabinets
+|   |   |-- Laundry Sinks & Tubs
+|   |   `-- Laundry Taps
+|   `-- Storage
+|       |-- Shop all Storage
+|       |-- Drawers
+|       |-- Garage Storage
+|       |-- Jewellery Boxes
+|       |-- Magazine Racks
+|       |-- Plastic Storage Containers
+|       |-- Storage Bags
+|       |-- Storage Baskets
+|       |-- Storage Boxes
+|       |-- Storage Furniture
+|       |-- Vacuum Storage Bags
+|       |-- Wall Hooks & Racks
+|       `-- Wardrobe Storage
+|-- Toys
+|   |-- Toddler & Pre-School Toys
+|   |-- Dolls & Playsets
+|   |-- Toy Vehicles & Playsets
+|   |-- LEGO
+|   |-- Outdoor Toys & Play Equipment
+|   |-- Role Play
+|   |-- Plush & Soft Toys
+|   |-- Baby Toys
+|   |-- Action Figures & Playsets
+|   |-- Interactive Toys
+|   |-- Art & Craft
+|   |-- Gaming
+|   |-- Board Games & Puzzles
+|   |-- Toy Blasters
+|   |-- Kids Bikes
+|   |-- Wooden Toys
+|   |-- Science & Activities
+|   |-- Kids Tech
+|   |-- Childrens Books
+|   |-- Pre-order Toys
+|   `-- Category Index
+|       |-- Action Figures & Playsets
+|       |-- Block & Brick Sets
+|       |-- Board Games & Puzzles
+|       |-- Dolls
+|       |-- Educational & Science Toys
+|       |-- Interactive Toys
+|       |-- LEGO
+|       |-- Models & Kits
+|       |-- Musical Instruments for Kids
+|       |-- Novelty Toys
+|       |-- Outdoor Toys & Activities
+|       |-- Plush & Soft Toys
+|       |-- Role Play
+|       |-- Toddler & Preschool Toys
+|       |-- Toy Blasters
+|       |-- Toy Vehicles & Playsets
+|       |-- Trading Cards
+|       `-- Wooden Toys
+|-- Womens Clothing
+|   |-- Tops & Tees
+|   |-- Dresses
+|   |-- Jackets, Coats & Vests
+|   |-- Pants & Leggings
+|   |-- Plus Size
+|   |-- Pyjamas & Loungewear
+|   |-- Jeans & Jeggings
+|   |-- Shoes & Slippers
+|   |-- Activewear
+|   |-- Jumpers, Cardigans & Hoodies
+|   |-- Skirts
+|   |-- Bras, Underwear & Lingerie
+|   |-- Licensed Clothing
+|   |-- Accessories & Jewellery
+|   |-- Shorts
+|   |-- Bags, Handbags & Wallets
+|   |-- Socks & Hosiery
+|   `-- Category Index
+|       |-- Accessories & Jewellery
+|       |-- Activewear & Gym Clothes
+|       |-- Bags, Handbags & Wallets
+|       |-- Dresses, Playsuits & Jumpsuits
+|       |-- Jackets, Coats & Vests
+|       |-- Jeans & Jeggings
+|       |-- Jumpers, Cardigans & Hoodies
+|       |-- Licensed Clothing
+|       |-- Linen Blend Clothing
+|       |-- Loungewear
+|       |-- Maternity Clothes
+|       |-- Pants & Leggings
+|       |-- Plus Size
+|       |-- Shoes
+|       |-- Shorts
+|       |-- Skirts
+|       |-- Sleepwear & Loungewear
+|       |-- Socks & Hosiery
+|       |-- Swimwear & Beachwear
+|       |-- Tops, Tees & Shirts
+|       |-- Underwear & Lingerie
+|       `-- Workwear
+|-- Mens Clothing
+|   |-- Tops & Tees
+|   |-- Jumpers & Hoodies
+|   |-- Activewear
+|   |-- Shirts
+|   |-- Jackets
+|   |-- Pants
+|   |-- Jeans
+|   |-- Shorts
+|   |-- Licensed Clothing
+|   |-- Pyjamas & Sleepwear
+|   |-- Underwear
+|   |-- Shoes
+|   |-- King Size
+|   |-- Workwear
+|   |-- Socks
+|   |-- Accessories
+|   `-- Category Index
+|       |-- Accessories
+|       |-- Activewear & Gym
+|       |-- Big Mens Clothing
+|       |-- Businesswear
+|       |-- Jackets, Coats & Vests
+|       |-- Jeans
+|       |-- Jumpers, Hoodies & Knitwear
+|       |-- Licensed Clothing
+|       |-- Linen Blend Clothing
+|       |-- Organic Clothing
+|       |-- Pants
+|       |-- Shirts
+|       |-- Shoes
+|       |-- Shorts
+|       |-- Sleepwear & Pyjamas
+|       |-- Socks
+|       |-- Swimwear
+|       |-- Tops & T-Shirts
+|       |-- Underwear
+|       `-- Workwear
+|-- Baby Clothing & Nursery
+|   |-- Baby Clothing
+|   |-- Baby Character Shop
+|   |-- Nappies
+|   |-- Car Seats & Accessories
+|   |-- Feeding & Nursing
+|   |-- Wipes, Toiletries & Health
+|   |-- Baby Food & Formula
+|   |-- Nappy Bags & Disposal
+|   |-- Bathing
+|   |-- Bedding
+|   |-- Child Safety
+|   |-- Furniture
+|   |-- Maternity Clothes
+|   |-- Gifts
+|   |-- Strollers, Carriers & Accessories
+|   |-- Toys, Walkers & Activity
+|   |-- Baby & Toddler Books
+|   |-- Baby Monitors
+|   |-- Night Lights
+|   |-- White Noise Machines
+|   `-- Category Index
+|       |-- Bathing
+|       |-- Bedding
+|       |-- Bulk Baby Care
+|       |-- Car Seats & Accessories
+|       |-- Character Shop
+|       |-- Child Safety
+|       |-- Clothes
+|       |-- Feeding & Nursing
+|       |-- Food & Formula
+|       |-- Furniture
+|       |-- Nappies
+|       |-- Organic Clothing
+|       |-- Strollers, Carriers & Accessories
+|       |-- Toys
+|       `-- Wipes, Toiletries & Health
+|-- Kids Clothing
+|   |-- Girls Clothing 1-7
+|   |-- Girls Clothing 8-16
+|   |-- Boys Clothing 1-7
+|   |-- Boys Clothing 8-16
+|   |-- Character Shop
+|   |-- Pyjamas & Sleepwear
+|   |-- Accessories
+|   |-- Shoes
+|   |-- Socks & Underwear
+|   |-- School Uniforms
+|   `-- Category Index
+|       |-- Accessories
+|       |-- Boys Clothes
+|       |-- Character Shop
+|       |-- Girls Clothes
+|       |-- Linen Blend Clothing
+|       |-- Pyjamas & Sleepwear
+|       |-- School Uniforms
+|       |-- Shoes
+|       |-- Socks & Underwear
+|       `-- Swimwear
+|-- Books
+|   |-- All Fiction
+|   |-- Crime & Thriller Fiction
+|   |-- Modern Fiction
+|   |-- Sci-Fi & Fantasy Fiction
+|   |-- Romance Fiction
+|   |-- Historical Fiction
+|   |-- All Non-Fiction
+|   |-- Biographies
+|   |-- Cookbooks
+|   |-- Mind, Body & Spirit
+|   |-- General Interest
+|   |-- True Crime
+|   |-- Teen & Young Adult Books
+|   |-- Young Reader Books
+|   |-- Kids Box Sets
+|   |-- Baby & Toddler Books
+|   |-- Picture Books
+|   |-- Colouring & Activity Books
+|   |-- Early Readers
+|   `-- Category Index
+|       |-- Audio Books
+|       |-- Best Sellers
+|       |-- Book Accessories
+|       |-- BookTok
+|       |-- Childrens Books
+|       |-- Education Books
+|       |-- Fiction Books
+|       |-- Graphic Novels & Manga
+|       |-- Non-Fiction Books
+|       |-- Teen & Young Adult Books
+|       `-- eBooks
+|-- Gaming
+|   |-- Nintendo Switch 2 Consoles
+|   |-- Nintendo Switch 2 Games
+|   |-- Nintendo Switch 2 Accessories
+|   |-- Nintendo Switch Consoles
+|   |-- Nintendo Switch Games
+|   |-- Nintendo Switch Controllers
+|   |-- Nintendo Switch Accessories
+|   |-- PS5 Consoles
+|   |-- PS5 Games
+|   |-- PS5 Controllers
+|   |-- PS5 Accessories
+|   |-- XBOX Consoles
+|   |-- XBOX Games
+|   |-- XBOX Controllers
+|   |-- XBOX Accessories
+|   |-- PS4 Games
+|   |-- PS4 Accessories
+|   |-- Headsets
+|   |-- Gaming Collectables
+|   |-- Gaming Accessories
+|   |-- Gaming Furniture
+|   |-- VR
+|   `-- Category Index
+|       |-- Gaming Accessories
+|       |-- Gaming Bundles
+|       |-- Gaming Collectables
+|       |-- Gaming Headsets
+|       |-- Nintendo Switch
+|       |-- Nintendo Switch 2
+|       |-- PC Gaming
+|       |-- PS4
+|       |-- PS5
+|       |-- Retro Gaming
+|       |-- VR
+|       `-- Xbox
+|-- Tech & Audio
+|   |-- Apple
+|   |-- Headphones, Earphones & Earbuds
+|   |-- Mobile Phones & Accessories
+|   |-- Smart Watches & Fitness Trackers
+|   |-- TVs
+|   |-- Speakers
+|   |-- Tablets & Accessories
+|   |-- Laptops & Chromebooks
+|   |-- Computer Accessories
+|   |-- Smart Home
+|   |-- Cameras, Film & Photos
+|   |-- Printers & Ink
+|   |-- DVD & Blu-ray Players & Projectors
+|   |-- Kids Tech
+|   |-- Gaming
+|   `-- Category Index
+|       |-- Apple
+|       |-- Cameras, Film & Photos
+|       |-- Car Electronics
+|       |-- Computers & Laptops
+|       |-- DVD & Blu-ray Players & Projectors
+|       |-- Drones & Quadcopters
+|       |-- Gadgets
+|       |-- Headphones & Earphones
+|       |-- Home Phones & Landline Phones
+|       |-- Home Security
+|       |-- Kids Tech
+|       |-- Mobile Phones
+|       |-- Movies, TV Shows & Music
+|       |-- Musical Instruments
+|       |-- Smart Home
+|       |-- Smart Watches & Fitness Trackers
+|       |-- Speakers & Audio
+|       |-- TVs & Accessories
+|       `-- Tablets & Accessories
+|-- Sports, Travel & Outdoor
+|   |-- Luggage & Travel
+|   |-- Pools & Accessories
+|   |-- Camping & Outdoor
+|   |-- Bikes & Accessories
+|   |-- Exercise & Fitness
+|   |-- Beach Gear
+|   |-- Sports Equipment
+|   |-- Outdoor Toys & Activities
+|   |-- Scooters & Skates
+|   |-- Indoor & Outdoor Games
+|   |-- Backpacks
+|   |-- Fishing
+|   `-- Category Index
+|       |-- Beach Gear
+|       |-- Bikes & Accessories
+|       |-- Camping & Outdoor
+|       |-- Exercise & Fitness
+|       |-- Fishing
+|       |-- Games & Leisure
+|       |-- Luggage, Backpacks & Travel Bags
+|       |-- Motoring
+|       |-- Outdoor Clothing
+|       |-- Pools & Spas
+|       |-- Rock Climbing
+|       |-- Scooters & Skates
+|       |-- Snow Sports
+|       |-- Sports Equipment
+|       `-- Water Sports
+|-- Party
+|   |-- Costumes & Accessories
+|   |-- Party Balloons
+|   |-- Party Decorations
+|   |-- Party Tableware
+|   |-- Party Supplies
+|   |-- Cards & Wrap
+|   `-- Theme & Colour Index
+|       |-- Minecraft
+|       |-- Hot Wheels
+|       |-- Bluey
+|       |-- Paw Patrol
+|       |-- Red
+|       |-- Yellow
+|       |-- Green
+|       |-- Blue
+|       |-- Pink
+|       `-- Purple
+|-- Gift Ideas
+|   |-- Gifts for Her
+|   |-- Gifts for Him
+|   |-- Gifts for Teens
+|   |-- Gifts for Kids
+|   |-- Gifts for Babies
+|   |-- Gifts for Pets
+|   `-- Occasion & Price Index
+|       |-- Mother's Day
+|       |-- Baby Shower
+|       |-- Engagement
+|       |-- Housewarming
+|       |-- Personalised Gifts
+|       |-- Anniversary
+|       |-- Under $20
+|       |-- $20-$50
+|       |-- $50-$100
+|       `-- $100+
+|-- Health & Beauty
+|   |-- Makeup & Cosmetics
+|   |-- Skincare
+|   |-- Bath, Body & Soap
+|   |-- Shaving & Grooming
+|   |-- Hair Care
+|   |-- Straighteners, Dryers & Curlers
+|   |-- Korean Beauty
+|   |-- Gift Sets
+|   |-- Dental & Oral Hygiene
+|   |-- Deodorant
+|   |-- Fragrances & Colognes
+|   |-- Sunscreen
+|   |-- Health Care
+|   |-- Tanning
+|   |-- Feminine Hygiene
+|   |-- Travel Toiletries
+|   |-- Makeup Mirrors
+|   |-- Massagers
+|   |-- Mobility & Accessibility
+|   `-- Category Index
+|       |-- Bulk Health & Personal Care
+|       |-- Bath & Body
+|       |-- Dental
+|       |-- Deodorant & Fragrances
+|       |-- Hair Care
+|       |-- Health Care
+|       |-- Makeup
+|       |-- Massaging
+|       |-- Mobility
+|       |-- Shaving & Grooming
+|       |-- Skincare
+|       `-- Travel Toiletries
+|-- Pet Food, Care & Accessories
+|   |-- Dog
+|   |   |-- Dog Food
+|   |   |-- Dog Treats
+|   |   |-- Dog Toys
+|   |   |-- Dog Beds & Blankets
+|   |   |-- Dog Grooming
+|   |   |-- Dog Flea, Tick & Worming
+|   |   |-- Dog Clothing & Jackets
+|   |   |-- Dog Bowls & Feeders
+|   |   |-- Dog Collars, Leads & Harnesses
+|   |   `-- Dog Accessories
+|   |-- Cat
+|   |   |-- Cat Food
+|   |   |-- Cat Treats
+|   |   |-- Cat Toys
+|   |   |-- Cat Bedding
+|   |   |-- Cat Grooming
+|   |   |-- Cat Flea, Tick & Worming
+|   |   |-- Cat Litter
+|   |   |-- Cat Bowls & Feeders
+|   |   |-- Cat Scratchers
+|   |   `-- Cat Collars
+|   |-- Bird
+|   |   |-- Bird Food
+|   |   `-- Bird Accessories
+|   |-- Fish
+|   |   |-- Fish Food
+|   |   `-- Fish Tanks & Accessories
+|   `-- Other Pets
+|       `-- Other Pets
+|-- School, Office & Art Supplies
+|   |-- Stationery
+|   |   |-- Paper & Notebooks
+|   |   |-- Pens & Pencils
+|   |   |-- Drawing & Colouring
+|   |   |-- Markers & Highlighters
+|   |   |-- Pencil Cases
+|   |   |-- Fashion Stationery
+|   |   |-- Glue & Tape
+|   |   |-- Erasers
+|   |   |-- Pencil Sharpeners
+|   |   |-- Correction Pens, Tape & Fluid
+|   |   |-- Printer Paper
+|   |   |-- Calendars
+|   |   |-- Rulers
+|   |   `-- Maths Sets
+|   |-- Hobbies & Design
+|   |   |-- Design Machines
+|   |   |-- Sewing & Embroidery
+|   |   |-- Knitting & Crochet
+|   |   |-- Design Markers
+|   |   |-- Sketching Pencils
+|   |   |-- Art Paper & Visual Diaries
+|   |   |-- Art Canvas
+|   |   |-- Craft Blanks
+|   |   `-- Glue Guns & Refills
+|   `-- Art & Craft
+|       |-- DIY Craft Kits
+|       |-- Modelling & Slime
+|       |-- Colouring & Activity Books
+|       |-- Craft Embellishments
+|       |-- Paint & Brushes
+|       |-- Art Books & Coloured Paper
+|       |-- Jewellery Making
+|       |-- Canvas & Boards
+|       |-- Etching & Scratch Art
+|       `-- Drawing & Colouring
+|-- Cleaning & Household Essentials
+|   |-- Toilet Paper
+|   |-- Dishwashing
+|   |-- Laundry Detergents
+|   |-- Fabric Softener
+|   |-- Stain Remover
+|   |-- All Purpose Cleaners
+|   |-- Air Fresheners
+|   |-- Bathroom Cleaners
+|   |-- Disinfectants
+|   |-- Glass & Window Cleaner
+|   |-- Disposable & Rubber Gloves
+|   |-- Food Wraps & Bags
+|   |-- Floor Cleaners
+|   |-- Paper Towels
+|   |-- Wipes & Cloths
+|   |-- Sponges & Scourers
+|   |-- Rubbish Bags
+|   |-- Brooms, Mops & Brushes
+|   |-- Buckets
+|   |-- Vacuum Cleaners
+|   |-- Carpet Cleaner
+|   |-- Steam Cleaner
+|   `-- Category Index
+|       |-- Bulk Household & Cleaning
+|       |-- Cleaning Products
+|       |-- Laundry Care
+|       |-- Shopping Bags & Trolleys
+|       |-- Spray Bottles
+|       `-- Steam Cleaners
+`-- Snacks & Drinks
+    |-- Chocolate
+    |-- Chips
+    |-- Lollies & Confectionery
+    |-- Drinks
+    |-- Chocolate Boxes & Gifts
+    |-- Gifts & Hampers
+    |-- Lunchbox Snacks
+    |-- Gluten Free
+    |-- Biscuits & Crackers
+    |-- Tea & Coffee
+    |-- Protein Shakes & Bars
+    |-- Soda Makers
+    |-- Home Brewing
+    `-- Category Index
+        `-- Bulk Buys and Deals across snack and drink families

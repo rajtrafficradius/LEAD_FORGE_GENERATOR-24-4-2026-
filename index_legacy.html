@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeadForge — AI Lead Generation</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0a;--bg-card:rgba(255,255,255,0.03);--border:rgba(255,255,255,0.08);
+  --text:#f0f0f0;--text-muted:#888;--accent:#33cc80;--accent-dim:rgba(51,204,128,0.15);
+  --input-bg:#1a1a1a;--radius:12px;
+}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;overflow-x:hidden}
+h1,h2,h3{font-family:'Space Grotesk',sans-serif}
+
+/* Hero */
+.hero{text-align:center;padding:130px 20px 12px;position:relative;overflow:hidden}
+.hero-bg{position:absolute;inset:0;z-index:0}
+.hero-bg img{width:100%;height:100%;object-fit:cover;opacity:0.4}
+.hero-bg .overlay{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(10,10,10,0.6),rgba(10,10,10,0.3),rgba(10,10,10,1))}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 50% at 50% 30%,rgba(51,204,128,0.06),transparent);pointer-events:none;z-index:1}
+.hero>*:not(.hero-bg){position:relative;z-index:2}
+.badge{display:inline-flex;align-items:center;gap:9px;padding:8px 20px;border-radius:999px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);backdrop-filter:blur(8px);font-size:13px;font-weight:500;color:rgba(255,255,255,0.8);margin-bottom:18px;box-shadow:0 0 20px -4px rgba(255,255,255,0.08);letter-spacing:.3px}
+.badge .dot{width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 8px 2px rgba(255,255,255,0.4);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.hero h1{font-size:clamp(2rem,5vw,3.5rem);font-weight:700;background:linear-gradient(135deg,#fff,#999);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1.15;margin-bottom:18px}
+.hero-buttons{display:flex;gap:10px;justify-content:center;margin-bottom:0}
+.btn-hero{display:inline-flex;align-items:center;justify-content:center;padding:11px 28px;border-radius:12px;font-size:14px;font-weight:500;font-family:'Inter',sans-serif;color:rgba(255,255,255,0.9);background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.15);backdrop-filter:blur(8px);cursor:pointer;transition:all .25s;box-shadow:inset 0 1px 0 0 rgba(255,255,255,0.06),0 0 16px -4px rgba(255,255,255,0.06)}
+.btn-hero:hover{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.25)}
+
+.glass{background:var(--bg-card);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:var(--radius);padding:24px}
+.container{max-width:800px;margin:0 auto;padding:0 20px}
+.container-wide{max-width:100%;margin:0 auto;padding:0 20px}
+
+/* Form */
+.form-section{margin-bottom:16px}
+.form-section h3{font-size:15px;font-weight:600;margin-bottom:14px;color:var(--text)}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form-grid.full{grid-template-columns:1fr}
+.form-group{display:flex;flex-direction:column;gap:4px}
+.form-group label{font-size:12px;color:var(--text-muted);font-weight:500}
+.form-group input,.form-group select{background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;font-family:'Inter',sans-serif;outline:none;transition:border-color .2s}
+.form-group input:focus,.form-group select:focus{border-color:var(--accent)}
+.form-group select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+.form-group select option{background:#1a1a1a;color:#f0f0f0}
+.form-group select:disabled,.form-group input:disabled{opacity:0.5;cursor:not-allowed}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;font-family:'Inter',sans-serif;cursor:pointer;border:none;transition:all .2s}
+.btn-primary{background:var(--accent);color:#000;width:100%}
+.btn-primary:hover{background:#28b870;transform:translateY(-1px)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-download{background:rgba(51,204,128,0.12);color:var(--accent);border:1px solid rgba(51,204,128,0.3)}
+.btn-download:hover{background:rgba(51,204,128,0.2)}
+.btn-cancel{background:rgba(255,255,255,0.06);color:var(--text-muted);border:1px solid var(--border)}
+.btn-cancel:hover{background:rgba(255,255,255,0.1)}
+
+/* Mode slider toggle */
+.mode-toggle{display:flex;justify-content:center;margin:10px auto 22px;max-width:760px}
+.mode-toggle-inner{display:inline-flex;align-items:center;gap:18px;background:var(--bg-card);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:999px;padding:6px 14px}
+.mode-label{font-size:13px;font-weight:600;color:var(--text-muted);padding:8px 6px;cursor:pointer;transition:color .2s;font-family:'Space Grotesk',sans-serif;letter-spacing:.2px}
+.mode-label.active{color:var(--accent)}
+.mode-switch{position:relative;width:52px;height:28px;background:var(--input-bg);border-radius:999px;cursor:pointer;transition:background .2s;flex-shrink:0;border:1px solid var(--border)}
+.mode-switch::after{content:'';position:absolute;top:2px;left:2px;width:22px;height:22px;background:var(--accent);border-radius:50%;transition:transform .22s ease;box-shadow:0 0 10px rgba(51,204,128,0.5)}
+.mode-switch.on::after{transform:translateX(24px)}
+
+/* Enrichment toggle (compact) */
+.toggle-row{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;font-size:13px}
+.toggle-row .tlabel{flex:1;font-weight:500}
+.toggle-row .thelp{font-size:11px;color:var(--text-muted);margin-top:2px}
+.mini-switch{position:relative;width:42px;height:22px;background:#2a2a2a;border-radius:999px;cursor:pointer;transition:background .2s;flex-shrink:0}
+.mini-switch::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;background:#888;border-radius:50%;transition:all .2s}
+.mini-switch.on{background:var(--accent-dim)}
+.mini-switch.on::after{background:var(--accent);transform:translateX(20px)}
+
+/* Progress */
+.progress-section{margin-top:20px;display:none}
+.progress-section.active{display:block}
+.progress-bar-container{height:6px;background:var(--input-bg);border-radius:3px;overflow:hidden;margin-bottom:8px}
+.progress-bar{height:100%;background:var(--accent);border-radius:3px;transition:width .3s ease;width:0%}
+.progress-status{font-size:13px;color:var(--text-muted);margin-bottom:12px}
+.log-panel{background:#0d0d0d;border:1px solid var(--border);border-radius:8px;padding:12px;max-height:200px;overflow-y:auto;font-family:'Consolas','Courier New',monospace;font-size:12px;color:var(--text-muted);line-height:1.6;display:none}
+.log-panel.active{display:block}
+.log-panel .success{color:#2ecc71}
+.log-panel .error{color:#e74c3c}
+.log-panel .warning{color:#f39c12}
+
+/* Results */
+.results-section{margin-top:24px;display:none}
+.results-section.active{display:block}
+.results-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.results-header h2{font-size:18px}
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead{background:rgba(255,255,255,0.04)}
+th{padding:10px 12px;text-align:left;font-weight:600;color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.04);white-space:nowrap}
+tr:hover{background:rgba(255,255,255,0.02)}
+.email-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:500}
+.email-badge.personal{background:rgba(51,204,128,0.15);color:#33cc80}
+.email-badge.generic{background:rgba(255,255,255,0.08);color:var(--text-muted)}
+
+.csv-preview{margin-top:20px;display:none}
+.csv-preview.active{display:block}
+.csv-preview h3{font-size:15px;font-weight:600;margin-bottom:10px}
+.csv-raw{background:#0d0d0d;border:1px solid var(--border);border-radius:8px;padding:14px;max-height:300px;overflow:auto;font-family:'Consolas','Courier New',monospace;font-size:11px;color:var(--text-muted);line-height:1.5;white-space:pre}
+
+.spacer{height:60px}
+
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:3px}
+
+@media(max-width:600px){
+  .form-grid{grid-template-columns:1fr}
+  .hero h1{font-size:2rem}
+  .credits-grid{grid-template-columns:1fr !important}
+  .mode-toggle-inner{gap:8px;padding:5px 10px}
+  .mode-label{font-size:11px;padding:6px 4px}
+}
+
+/* Nav */
+nav{position:fixed;top:0;left:0;right:0;z-index:50;padding:8px 24px;display:flex;align-items:center;justify-content:space-between;background:rgba(10,10,10,0.05);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+nav .logo{display:flex;align-items:center;position:relative}
+nav .logo img{height:108px;width:auto;position:relative;z-index:1;filter:drop-shadow(0 0 18px rgba(255,255,255,1)) drop-shadow(0 0 40px rgba(255,255,255,0.95)) drop-shadow(0 0 80px rgba(255,255,255,0.7)) drop-shadow(0 0 120px rgba(255,255,255,0.4)) brightness(1.15)}
+nav .logo::before{content:'';position:absolute;inset:-18px -27px;background:radial-gradient(ellipse at center,rgba(255,255,255,0.85) 0%,rgba(255,255,255,0.55) 30%,rgba(255,255,255,0.10) 55%,rgba(255,255,255,0.03) 68%,transparent 80%);border-radius:50%;z-index:0;pointer-events:none}
+
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.status-dot.connected{background:#2ecc71}
+.status-dot.disconnected{background:#e74c3c}
+.status-dot.connecting{background:#f39c12;animation:pulse 1s infinite}
+.connection-info{font-size:12px;color:var(--text-muted);display:flex;align-items:center}
+.server-config{margin-bottom:0;display:flex;gap:8px;align-items:end}
+.server-config .form-group{flex:1}
+.server-config .btn{padding:10px 16px;height:auto}
+
+/* Credits Dashboard — minimal */
+.credits-dashboard{margin-bottom:20px}
+.credits-dashboard h3{font-size:15px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.credits-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:14px}
+.credit-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.credit-card .service-name{font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;display:flex;align-items:center;justify-content:space-between}
+.credit-card .service-name .status-icon{font-size:10px}
+.credit-card .credit-numbers{font-size:11px;color:var(--text-muted);margin-bottom:10px}
+.credit-bar-bg{height:6px;background:var(--input-bg);border-radius:3px;overflow:hidden;margin-bottom:6px}
+.credit-bar-fill{height:100%;border-radius:3px;transition:width .5s ease}
+.credit-bar-fill.green{background:#2ecc71}
+.credit-bar-fill.orange{background:#f39c12}
+.credit-bar-fill.red{background:#e74c3c}
+.credit-card .searches-remaining{font-size:11px;font-weight:600;color:var(--text)}
+.credit-pools{margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.06);display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:10px;color:var(--text-muted)}
+.credit-pools .pool-val{color:var(--text);font-weight:600}
+.credits-summary{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.credits-summary .total-searches{font-size:12px;color:var(--text-muted)}
+.credits-summary .total-searches strong{color:var(--text);font-size:15px}
+.refresh-btn{background:rgba(255,255,255,0.06);color:var(--text-muted);border:1px solid var(--border);border-radius:8px;padding:5px 12px;font-size:11px;font-family:'Inter',sans-serif;cursor:pointer;transition:all .2s}
+.refresh-btn:hover{background:rgba(255,255,255,0.1)}
+.credits-alerts{display:flex;flex-direction:column;gap:6px}
+.credit-alert{padding:6px 10px;border-radius:8px;font-size:11px;font-weight:500}
+.credit-alert.warning{background:rgba(243,156,18,0.1);border:1px solid rgba(243,156,18,0.25);color:#f39c12}
+.credit-alert.critical{background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.25);color:#e74c3c}
+.credit-alert.error{background:rgba(231,76,60,0.08);border:1px solid rgba(231,76,60,0.2);color:#e74c3c}
+.credits-loading{text-align:center;padding:20px;color:var(--text-muted);font-size:13px}
+
+/* Phase 2: auth chip + master-DB card */
+.auth-chip{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-muted);margin-left:16px}
+.auth-chip .user{color:#fff;font-weight:600}
+.auth-chip .admin-pill{background:#3a2b00;color:#ffb638;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;letter-spacing:0.4px}
+.auth-chip a{color:#4f9cff;text-decoration:none}
+.auth-chip a:hover{text-decoration:underline}
+
+.master-card{margin-bottom:16px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.master-card .ms-label{font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px}
+.master-card .ms-value{font-size:26px;font-weight:700;color:#fff}
+.master-card .ms-meta{font-size:11px;color:var(--text-muted)}
+.master-card .ms-right{display:flex;align-items:center;gap:14px}
+.master-card .ms-refresh{background:transparent;border:1px solid #333;color:#bbb;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px}
+.master-card .ms-refresh:hover{border-color:#4f9cff;color:#4f9cff}
+
+/* DB Viewer Panel */
+.db-viewer{margin-top:24px;margin-bottom:0}
+.db-viewer-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.db-viewer-header h3{font-size:15px;font-weight:600;margin:0}
+.db-viewer-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.db-select{background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:8px 32px 8px 12px;color:var(--text);font-size:13px;font-family:'Inter',sans-serif;outline:none;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;min-width:180px}
+.db-select:focus{border-color:var(--accent)}
+.db-select option{background:#1a1a1a;color:#f0f0f0}
+.db-refresh-btn{background:rgba(255,255,255,0.06);color:var(--text-muted);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:12px;font-family:'Inter',sans-serif;cursor:pointer;transition:all .2s;white-space:nowrap}
+.db-refresh-btn:hover{background:rgba(255,255,255,0.12);color:var(--text)}
+.db-status-row{font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.db-status-row .db-count{color:#fff;font-weight:600}
+.db-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:#0d0d0d}
+.db-table{width:100%;border-collapse:collapse;font-size:12px}
+.db-table thead th{background:rgba(255,255,255,0.04);padding:10px 12px;text-align:left;font-weight:600;color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:0.4px;border-bottom:1px solid var(--border);white-space:nowrap}
+.db-table tbody td{padding:9px 12px;color:var(--text);border-bottom:1px solid rgba(255,255,255,0.04);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.db-table tbody tr:last-child td{border-bottom:none}
+.db-table tbody tr:hover{background:rgba(255,255,255,0.025)}
+.db-empty{text-align:center;padding:32px;color:var(--text-muted);font-size:13px}
+.db-pagination{display:flex;align-items:center;justify-content:space-between;margin-top:10px;font-size:12px;color:var(--text-muted)}
+.db-pag-btns{display:flex;gap:6px}
+.db-pag-btn{background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text-muted);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;font-family:'Inter',sans-serif;transition:all .2s}
+.db-pag-btn:hover:not(:disabled){background:rgba(255,255,255,0.12);color:var(--text)}
+.db-pag-btn:disabled{opacity:.35;cursor:not-allowed}
+.db-loading{text-align:center;padding:28px;color:var(--text-muted);font-size:13px}
+.db-error{color:#e74c3c;padding:14px;font-size:12px;text-align:center}
+.db-pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:600}
+.db-pill.done{background:rgba(51,204,128,0.15);color:#33cc80}
+.db-pill.running{background:rgba(79,156,255,0.15);color:#4f9cff}
+.db-pill.error{background:rgba(231,76,60,0.15);color:#e74c3c}
+.db-pill.cancelled{background:rgba(255,255,255,0.08);color:#888}
+.db-pill.paid{background:rgba(255,182,56,0.12);color:#ffb638}
+.db-pill.organic{background:rgba(51,204,128,0.12);color:#33cc80}
+.db-pill.competitor{background:rgba(79,156,255,0.12);color:#4f9cff}
+.db-pill.secondary{background:rgba(200,100,255,0.12);color:#c864ff}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo"><img src="Traffic-Radius-Logo.png" alt="Traffic Radius"></div>
+  <div class="connection-info">
+    <span class="status-dot disconnected" id="statusDot"></span>
+    <span id="connectionText">Not connected</span>
+  </div>
+  <div class="auth-chip" id="authChip" style="display:none">
+    <span>Signed in as <span class="user" id="authUsername">…</span></span>
+    <span class="admin-pill" id="authAdminPill" style="display:none">ADMIN</span>
+    <a href="/admin" id="authAdminLink" style="display:none">Admin</a>
+    <a href="/logout">Logout</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="hero-bg">
+    <img src="hero-bg.jpg" alt="">
+    <div class="overlay"></div>
+  </div>
+  <div class="badge"><span class="dot"></span> AI-Powered Lead Generation</div>
+  <h1>Leads that you<br>need Indeed</h1>
+  <div class="hero-buttons">
+    <button class="btn-hero" onclick="document.getElementById('formArea').scrollIntoView({behavior:'smooth'})">Start Generating</button>
+    <button class="btn-hero" onclick="document.getElementById('resultsSection').scrollIntoView({behavior:'smooth'})">See Results</button>
+  </div>
+</div>
+
+<div class="container" id="formArea">
+
+  <!-- MODE SLIDER TOGGLE — industry | city -->
+  <div class="mode-toggle">
+    <div class="mode-toggle-inner">
+      <span class="mode-label active" id="modeLabelLeft" onclick="setMode('industry')">Generate leads through industries</span>
+      <div class="mode-switch" id="modeSwitch" onclick="toggleMode()"></div>
+      <span class="mode-label" id="modeLabelRight" onclick="setMode('city')">Generate leads through cities</span>
+    </div>
+  </div>
+
+  <!-- Phase 2: Master DB (shared leads database) snapshot -->
+  <div class="glass master-card" id="masterCard">
+    <div>
+      <div class="ms-label">Master Database — Total Leads</div>
+      <div class="ms-value" id="masterTotalLeads">—</div>
+      <div class="ms-meta" id="masterStatsMeta">No master-DB call yet.</div>
+    </div>
+    <div class="ms-right">
+      <button class="ms-refresh" onclick="loadMasterStats()">Refresh</button>
+    </div>
+  </div>
+
+  <!-- Credits Dashboard (minimal, shows per-service + Apollo breakdown) -->
+  <div class="glass credits-dashboard" id="creditsDashboard" style="margin-bottom:16px">
+    <h3>API Credits
+      <button class="refresh-btn" onclick="refreshCredits()">Refresh</button>
+    </h3>
+    <div id="creditsContent">
+      <div class="credits-loading">Loading credits...</div>
+    </div>
+  </div>
+
+  <!-- Two-column layout shared by both modes: configure (left) + stats sidebar (right) -->
+  <div style="display:grid;grid-template-columns:1.55fr 1fr;gap:16px;align-items:start;margin-bottom:16px">
+
+    <!-- LEFT: Configure Your Search (mode-specific) -->
+    <div>
+      <div class="glass" style="margin-bottom:12px">
+        <div class="form-section" style="margin-bottom:0">
+          <h3 id="configTitle">Configure Your Search</h3>
+
+          <!-- INDUSTRY MODE FIELDS -->
+          <div id="industryFields">
+            <div class="form-grid full" style="margin-bottom:14px">
+              <div class="form-group">
+                <label>Industry</label>
+                <select id="industry" onchange="onIndustryChange()">
+                  <option value="">Select an industry</option>
+                  <option value="__all__">⚡ All Industries — Parallel Mode (auto-splits quota equally)</option>
+                  <option>Dentist</option>
+                  <option>Doctor / General Practitioner</option>
+                  <option>Lawyer / Attorney</option>
+                  <option>Accountant</option>
+                  <option>Plumber</option>
+                  <option>Electrician</option>
+                  <option>Real Estate Agent</option>
+                  <option>Restaurant / Cafe</option>
+                  <option>Gym / Fitness</option>
+                  <option>Auto Repair / Mechanic</option>
+                  <option>Salon / Spa / Beauty</option>
+                  <option>Chiropractor</option>
+                  <option>Veterinarian</option>
+                  <option>Insurance Agent</option>
+                  <option>Financial Advisor</option>
+                  <option>Photographer</option>
+                  <option>Landscaping</option>
+                  <option>HVAC</option>
+                  <option>Roofing</option>
+                  <option>Pest Control</option>
+                  <option>Cleaning Service</option>
+                  <option>IT Services</option>
+                  <option>Marketing Agency</option>
+                  <option>Construction</option>
+                  <option>Architecture</option>
+                  <option>Physiotherapy</option>
+                  <option>Pharmacy</option>
+                  <option>Wedding Planner / Event Planner</option>
+                  <option>Tattoo Artist / Body Art</option>
+                  <option>Florist / Flower Shop</option>
+                  <option>Baker / Bakery</option>
+                  <option>Caterer / Catering</option>
+                  <option>Personal Trainer</option>
+                  <option>Yoga / Pilates Studio</option>
+                  <option>Massage Therapist</option>
+                  <option>Interior Designer</option>
+                  <option>Web Developer / Web Design</option>
+                  <option>Graphic Designer</option>
+                  <option>Copywriter / Content Writer</option>
+                  <option>Tutor / Education</option>
+                  <option>Music Teacher / Music School</option>
+                  <option>Driving School</option>
+                  <option>Pet Grooming</option>
+                  <option>Locksmith</option>
+                  <option>Moving Company</option>
+                  <option>Printing Service</option>
+                  <option>Optometrist / Eye Care</option>
+                  <option>Podiatrist</option>
+                  <option>Dermatologist</option>
+                  <option>Home Inspector</option>
+                  <option>Painter / Decorator</option>
+                  <option>Solar Panel Installation</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Parallel config — shown only when "All Industries" is selected -->
+            <div id="parallelConfig" style="display:none;margin-bottom:12px;padding:12px 14px;background:rgba(51,204,128,0.05);border-radius:10px;border:1px solid rgba(51,204,128,0.2)">
+              <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:10px">⚡ Parallel Mode — agents run simultaneously, each targeting an equal share of leads</div>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>Parallel Workers <span id="parallelWorkersLabel" style="color:var(--accent)">4</span></label>
+                  <input type="range" id="parallelWorkers" min="2" max="8" value="4" style="accent-color:var(--accent);width:100%"
+                    oninput="getEl('parallelWorkersLabel').textContent=this.value">
+                </div>
+                <div class="form-group">
+                  <label>Select specific industries <span style="font-weight:400;color:var(--text-muted)">(leave blank = all)</span></label>
+                  <select id="parallelIndustrySel" multiple size="3" style="height:70px;background:var(--input-bg);border:1px solid var(--border);border-radius:8px;padding:4px 10px;color:var(--text);font-size:13px;width:100%">
+                    <!-- populated from /industries on first parallel select -->
+                  </select>
+                </div>
+              </div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:8px">
+                Target: <strong id="parallelQuotaText" style="color:var(--accent)">—</strong>
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Country</label>
+                <select id="country">
+                  <option value="AU">Australia</option>
+                  <option value="USA">United States</option>
+                  <option value="UK">United Kingdom</option>
+                  <option value="India">India</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Max Leads (0 = unlimited)</label>
+                <input type="number" id="maxLeads" value="10" min="0">
+              </div>
+              <div class="form-group">
+                <label>Min Search Volume</label>
+                <input type="number" id="minVolume" value="100" min="0">
+              </div>
+              <div class="form-group">
+                <label>Min CPC ($)</label>
+                <input type="number" id="minCpc" value="1.0" min="0" step="0.1">
+              </div>
+            </div>
+          </div>
+
+          <!-- CITY MODE FIELDS -->
+          <div id="cityFields" style="display:none">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>State / Region</label>
+                <select id="cityState">
+                  <option value="AUSTRALIA">Australia (whole country)</option>
+                  <!-- state options injected by JS -->
+                </select>
+              </div>
+              <div class="form-group">
+                <label>City Tier</label>
+                <select id="cityTier">
+                  <option value="tier_1">Tier 1 — Capitals / Metros</option>
+                  <option value="tier_2">Tier 2 — Major Regionals</option>
+                  <option value="tier_3">Tier 3 — Regional Hubs</option>
+                  <option value="all">All Tiers</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>City</label>
+                <select id="cityName">
+                  <option value="all">All cities in tier</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Max Leads</label>
+                <input type="number" id="cityMaxLeads" value="20" min="1">
+              </div>
+              <div class="form-group">
+                <label>Min Search Volume</label>
+                <input type="number" id="cityMinVolume" value="100" min="0">
+              </div>
+              <div class="form-group">
+                <label>Parallel Workers <span id="cityWorkersLabel" style="color:var(--accent)">4</span></label>
+                <input type="range" id="cityWorkers" min="1" max="8" value="4" style="accent-color:var(--accent);width:100%"
+                  oninput="getEl('cityWorkersLabel').textContent=this.value">
+              </div>
+              <div class="form-group" style="justify-content:flex-end">
+                <label style="visibility:hidden">.</label>
+                <div style="font-size:11px;color:var(--text-muted);line-height:1.5">
+                  <span id="cityIndustryPreview">Max Leads % = industry-share cap for the state. 100+ searches every industry.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ENRICHMENT TOGGLE (shared by both modes) -->
+          <div style="margin-top:14px">
+            <div class="toggle-row" onclick="toggleEnrichment()">
+              <div>
+                <div class="tlabel">Enrichment <span id="enrichStateLabel" style="color:var(--accent)">ON</span></div>
+                <div class="thelp">On: phone + email retrieval via Apollo/Lusha. Off: only name / company / domain / role (saves credits).</div>
+              </div>
+              <div class="mini-switch on" id="enrichSwitch"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-primary" id="generateBtn" onclick="generateLeads()">Generate Leads</button>
+        <button class="btn btn-cancel" id="cancelBtn" onclick="cancelGeneration()" style="display:none;width:auto;padding:12px 24px">Cancel</button>
+      </div>
+    </div>
+
+    <!-- RIGHT: Stats sidebar -->
+    <div class="glass" id="statsPanel" style="font-size:13px">
+      <h3 style="margin:0 0 12px 0;font-size:14px;color:var(--accent)">Run Statistics</h3>
+
+      <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.07)">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px">Leads</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;color:var(--text-muted);line-height:1.8">
+          <span>Total:</span><span id="statsTotalLeads" style="color:var(--accent);font-weight:700">—</span>
+          <span>With Phone:</span><span id="statsPhone" style="color:var(--text);font-weight:600">—</span>
+          <span>With Email:</span><span id="statsEmail" style="color:var(--text);font-weight:600">—</span>
+          <span>Personal Emails:</span><span id="statsPersonal" style="color:#33cc80;font-weight:600">—</span>
+        </div>
+      </div>
+
+      <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.07)">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px">Apollo Credits This Run</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;color:var(--text-muted);line-height:1.8">
+          <span>Export calls:</span><span id="statsApollo" style="color:var(--text);font-weight:600">—</span>
+          <span>Email credits:</span><span id="statsApolloEmail" style="color:var(--text);font-weight:600">—</span>
+          <span>Phone credits:</span><span id="statsApolloPhone" style="color:var(--text);font-weight:600">—</span>
+        </div>
+      </div>
+
+      <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.07)">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px">Other APIs</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;color:var(--text-muted);line-height:1.8">
+          <span>SEMrush:</span><span id="statsSemrush" style="color:var(--text);font-weight:600">—</span>
+          <span>Lusha:</span><span id="statsLusha" style="color:var(--text);font-weight:600">—</span>
+          <span>SerpAPI:</span><span id="statsSerpapi" style="color:var(--text);font-weight:600">—</span>
+          <span>OpenAI:</span><span id="statsOpenai" style="color:var(--text);font-weight:600">—</span>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px">Run Total</div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
+          <span id="statsCreditsTotal" style="font-size:22px;font-weight:700;color:#ffaa33">—</span>
+          <span style="font-size:11px;color:#666">credits used</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted)">
+          <span id="statsCreditsPerLead" style="color:#ffaa33;font-weight:600">—</span> per lead avg
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end 2-col grid -->
+
+  <!-- Progress -->
+  <div class="progress-section" id="progressSection">
+    <div class="progress-bar-container"><div class="progress-bar" id="progressBar"></div></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+      <div class="progress-status" id="progressStatus" style="margin:0">Starting...</div>
+      <div id="timerChip" style="display:none;padding:4px 12px;background:rgba(255,255,255,0.07);border-radius:20px;font-size:12px;display:inline-flex;gap:14px;align-items:center">
+        <span style="color:var(--text-muted)">Elapsed: <b id="timerElapsed">0s</b></span>
+        <span style="color:var(--accent)">Est. remaining: <b id="timerRemaining">—</b></span>
+      </div>
+    </div>
+    <div class="log-panel active" id="logPanel"></div>
+  </div>
+
+</div><!-- end .container -->
+
+<!-- Results -->
+<div class="container-wide">
+  <div class="results-section" id="resultsSection">
+    <div class="results-header">
+      <h2>Generated Leads</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-download" id="downloadTopBtn" onclick="downloadCSV('top')">Download TOP CSV</button>
+        <button class="btn btn-download" id="downloadAllBtn" onclick="downloadCSV('all')" style="display:none">Download ALL CSV</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Name</th><th>Company</th><th>Domain</th><th>Role</th><th>Phone</th><th>Email</th><th>Email Type</th>
+          </tr>
+        </thead>
+        <tbody id="leadsBody"></tbody>
+      </table>
+    </div>
+    <p id="leadsCount" style="font-size:12px;color:var(--text-muted);margin-top:8px"></p>
+  </div>
+
+  <div class="csv-preview" id="csvPreview">
+    <h3>CSV File Output</h3>
+    <pre class="csv-raw" id="csvRaw"></pre>
+  </div>
+</div>
+
+<div class="container">
+  <div class="glass" style="margin-top:32px">
+    <div class="form-section" style="margin-bottom:0">
+      <h3>Server Connection</h3>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">
+        Start the server: <code style="background:var(--input-bg);padding:2px 6px;border-radius:4px">python V5.py</code> (same folder as index.html)
+      </p>
+      <div class="server-config">
+        <div class="form-group">
+          <label>Server URL</label>
+          <input type="text" id="serverUrl" value="http://localhost:5001" placeholder="http://localhost:5001">
+        </div>
+        <button class="btn btn-primary" style="width:auto;padding:10px 20px" onclick="testConnection()">Connect</button>
+      </div>
+    </div>
+  </div>
+  <div class="spacer"></div>
+
+  <!-- Database Viewer Panel -->
+  <div class="glass db-viewer" id="dbViewerPanel">
+    <div class="db-viewer-header">
+      <h3>MySQL Database Viewer</h3>
+      <div class="db-viewer-controls">
+        <select class="db-select" id="dbTableSelect" onchange="dbViewerLoad(1)">
+          <option value="master-leads">master_leads — All Unique Leads</option>
+          <option value="run-history">run_history — Pipeline Runs</option>
+        </select>
+        <button class="db-refresh-btn" onclick="dbViewerLoad(dbViewerPage)">Refresh</button>
+        <button class="db-refresh-btn" style="background:#3a1212;border-color:#5b1f1f;color:#ff8a8a" onclick="dbClearAll()">Clear All</button>
+      </div>
+    </div>
+    <div class="db-status-row" id="dbStatusRow">Loading...</div>
+    <div class="db-table-wrap">
+      <table class="db-table">
+        <thead id="dbThead"></thead>
+        <tbody id="dbTbody"></tbody>
+      </table>
+      <div class="db-loading" id="dbLoading" style="display:none">Loading...</div>
+      <div class="db-empty" id="dbEmpty" style="display:none">No records found.</div>
+      <div class="db-error" id="dbError" style="display:none"></div>
+    </div>
+    <div class="db-pagination">
+      <span id="dbPageInfo"></span>
+      <div class="db-pag-btns">
+        <button class="db-pag-btn" id="dbPrevBtn" onclick="dbViewerLoad(dbViewerPage-1)" disabled>Prev</button>
+        <button class="db-pag-btn" id="dbNextBtn" onclick="dbViewerLoad(dbViewerPage+1)" disabled>Next</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+</div>
+
+<script>
+/* Phase 2: global fetch wrapper — auto-attach same-origin cookies so
+   Flask-Login sessions work, and bounce to /login on any 401 response. */
+(function() {
+  const _nativeFetch = window.fetch.bind(window);
+  window.fetch = function(url, opts) {
+    opts = opts || {};
+    if (!opts.credentials) opts.credentials = 'same-origin';
+    return _nativeFetch(url, opts).then(function(resp) {
+      if (resp.status === 401) {
+        const nxt = encodeURIComponent(location.pathname + location.search);
+        location.href = '/login?next=' + nxt;
+      }
+      return resp;
+    });
+  };
+})();
+
+let serverUrl = (window.location.protocol !== 'file:' && window.location.origin !== 'null')
+  ? window.location.origin
+  : 'http://localhost:5001';
+let topCsvData = null;
+let allCsvData = null;
+let creditsRefreshTimer = null;
+let isConnected = false;
+let currentMode = 'industry';          // 'industry' | 'city'
+let enrichmentOn = true;
+let auCities = null;                    // cached /api/au-cities payload
+let _parallelIndustriesLoaded = false;
+
+function getEl(id) { return document.getElementById(id); }
+
+/* ── MODE TOGGLE ────────────────────────────────────────────────── */
+function setMode(mode) {
+  currentMode = mode;
+  const isCity = (mode === 'city');
+  getEl('modeSwitch').classList.toggle('on', isCity);
+  getEl('modeLabelLeft').classList.toggle('active', !isCity);
+  getEl('modeLabelRight').classList.toggle('active', isCity);
+  getEl('industryFields').style.display = isCity ? 'none' : 'block';
+  getEl('cityFields').style.display = isCity ? 'block' : 'none';
+  getEl('configTitle').textContent = isCity ? 'Configure City Search' : 'Configure Your Search';
+  if (isCity && !auCities) loadAuCities();
+}
+function toggleMode() { setMode(currentMode === 'industry' ? 'city' : 'industry'); }
+
+/* ── PARALLEL (inline in industry mode) ─────────────────────────── */
+function onIndustryChange() {
+  const val = getEl('industry').value;
+  const isAll = (val === '__all__');
+  getEl('parallelConfig').style.display = isAll ? 'block' : 'none';
+  if (isAll && !_parallelIndustriesLoaded) _loadParallelIndustriesList();
+  if (isAll) _updateParallelQuota();
+}
+
+function _loadParallelIndustriesList() {
+  fetch(serverUrl + '/industries').then(r => {
+    if (!r.headers.get('content-type')?.includes('application/json')) return null;
+    return r.json();
+  }).then(data => {
+    if (!data) return;
+    _parallelIndustriesLoaded = true;
+    const sel = getEl('parallelIndustrySel');
+    sel.innerHTML = '';
+    (data.industries || []).forEach(ind => {
+      const opt = document.createElement('option');
+      opt.value = ind; opt.textContent = ind;
+      sel.appendChild(opt);
+    });
+    _updateParallelQuota();
+  }).catch(() => {});
+}
+
+function _getParallelIndustries() {
+  const sel = getEl('parallelIndustrySel');
+  const selected = Array.from(sel.selectedOptions).map(o => o.value);
+  return selected.length > 0 ? selected : [];  // [] = all
+}
+
+function _updateParallelQuota() {
+  const sel = getEl('parallelIndustrySel');
+  const maxLeads = parseInt(getEl('maxLeads').value) || 50;
+  const selected = Array.from(sel.selectedOptions).map(o => o.value);
+  const allOpts  = sel.options.length;
+  const count    = selected.length > 0 ? selected.length : (allOpts || 50);
+  const quota    = count > 0 ? Math.max(1, Math.floor(maxLeads / count)) : 1;
+  const qtEl = getEl('parallelQuotaText');
+  if (qtEl) qtEl.textContent = quota + ' leads × ' + count + ' industries = target ' + (quota * count);
+}
+
+/* ── ENRICHMENT TOGGLE ──────────────────────────────────────────── */
+function toggleEnrichment() {
+  enrichmentOn = !enrichmentOn;
+  getEl('enrichSwitch').classList.toggle('on', enrichmentOn);
+  getEl('enrichStateLabel').textContent = enrichmentOn ? 'ON' : 'OFF';
+  getEl('enrichStateLabel').style.color = enrichmentOn ? 'var(--accent)' : '#f39c12';
+}
+
+/* ── CITIES DATA ────────────────────────────────────────────────── */
+async function loadAuCities() {
+  try {
+    const r = await fetch(serverUrl + '/api/au-cities');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    auCities = await r.json();
+    populateStatesDropdown();
+    populateCityDropdown();  // initial Australia/Tier1 state
+  } catch (e) {
+    console.warn('au-cities load failed:', e);
+  }
+}
+function populateStatesDropdown() {
+  if (!auCities) return;
+  const sel = getEl('cityState');
+  // Preserve the first "Australia" option; append state entries.
+  sel.innerHTML = '<option value="AUSTRALIA">Australia (whole country)</option>';
+  (auCities.states || []).forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.code;
+    o.textContent = s.code + ' — ' + s.name;
+    sel.appendChild(o);
+  });
+}
+function getCitiesForTier(stateCode, tier) {
+  if (!auCities) return [];
+  if (stateCode === 'AUSTRALIA') {
+    const aus = auCities.australia || {};
+    if (tier === 'all') return [].concat(aus.tier_1 || [], aus.tier_2 || [], aus.tier_3 || []);
+    return aus[tier] || [];
+  }
+  const state = (auCities.states || []).find(s => s.code === stateCode);
+  if (!state) return [];
+  if (tier === 'all') return [].concat(state.tier_1 || [], state.tier_2 || [], state.tier_3 || []);
+  return state[tier] || [];
+}
+function populateCityDropdown() {
+  const stateCode = getEl('cityState').value;
+  const tier = getEl('cityTier').value;
+  const cities = getCitiesForTier(stateCode, tier);
+  const sel = getEl('cityName');
+  sel.innerHTML = '<option value="all">All cities in tier</option>';
+  cities.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c;
+    o.textContent = c;
+    sel.appendChild(o);
+  });
+}
+
+/* ── CONNECTION ─────────────────────────────────────────────────── */
+async function testConnection() {
+  serverUrl = getEl('serverUrl').value.replace(/\/+$/, '');
+  const dot = getEl('statusDot');
+  const txt = getEl('connectionText');
+  dot.className = 'status-dot connecting';
+  txt.textContent = 'Connecting...';
+  try {
+    const r = await fetch(serverUrl + '/health', { method: 'GET' });
+    if (r.ok) {
+      dot.className = 'status-dot connected';
+      txt.textContent = 'Connected to server';
+      isConnected = true;
+      loadCredits(false);
+      loadAuCities();
+      loadWhoami();
+      loadMasterStats();
+    } else { throw new Error('Not OK'); }
+  } catch (e) {
+    dot.className = 'status-dot disconnected';
+    txt.textContent = 'Not connected — start server first';
+    isConnected = false;
+    getEl('creditsContent').innerHTML =
+      '<div class="credits-loading">Waiting for server connection...</div>';
+  }
+}
+
+/* ── CREDITS DASHBOARD ──────────────────────────────────────────── */
+async function loadCredits(force) {
+  const url = force ? serverUrl + '/api/credits/refresh' : serverUrl + '/api/credits';
+  const opts = force ? { method: 'POST' } : { method: 'GET' };
+  try {
+    const r = await fetch(url, opts);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    renderCredits(data);
+  } catch (e) {
+    getEl('creditsContent').innerHTML =
+      '<div class="credits-loading" style="color:#e74c3c">Could not load credits: ' + esc(e.message) + '</div>';
+  }
+}
+function refreshCredits() { loadCredits(true); }
+
+/* Phase 2: /whoami → populate the nav auth chip */
+async function loadWhoami() {
+  try {
+    const r = await fetch(serverUrl + '/whoami');
+    if (!r.ok) return;
+    const u = await r.json();
+    getEl('authChip').style.display = 'flex';
+    getEl('authUsername').textContent = u.username || '';
+    if (u.is_admin || u.role === 'admin') {
+      getEl('authAdminPill').style.display = 'inline-block';
+      getEl('authAdminLink').style.display = 'inline';
+    }
+  } catch (e) { /* silent — page still works without it */ }
+}
+
+/* Phase 2: /api/master-stats → populate the Master Database card */
+async function loadMasterStats() {
+  const valEl = getEl('masterTotalLeads');
+  const metaEl = getEl('masterStatsMeta');
+  if (valEl) valEl.textContent = '…';
+  try {
+    const r = await fetch(serverUrl + '/api/master-stats');
+    const data = await r.json();
+    if (r.ok && typeof data.total_leads === 'number') {
+      valEl.textContent = data.total_leads.toLocaleString();
+      const ts = data.timestamp ? new Date(data.timestamp * 1000).toLocaleTimeString() : '';
+      metaEl.textContent = 'Updated ' + ts + (data.cached ? ' (cached)' : '');
+    } else {
+      valEl.textContent = '—';
+      metaEl.textContent = data.error === 'db_unavailable'
+        ? 'Database unavailable.'
+        : ('Error: ' + (data.error || 'unknown'));
+    }
+  } catch (e) {
+    valEl.textContent = '—';
+    metaEl.textContent = 'Network error: ' + e.message;
+  }
+}
+
+function renderCredits(data) {
+  const services = data.services || {};
+  const order = ['apollo', 'lusha', 'semrush'];
+  let cardsHtml = '';
+  order.forEach(key => {
+    const s = services[key];
+    if (!s) return;
+    const pct = s.pct_remaining || 0;
+    let barClass = 'green';
+    if (pct <= 10) barClass = 'red';
+    else if (pct <= 25) barClass = 'orange';
+    const statusIcon = s.status === 'ok'
+      ? '<span class="status-icon" style="color:#2ecc71">&#9679;</span>'
+      : '<span class="status-icon" style="color:#e74c3c">&#9679;</span>';
+    let poolsHtml = '';
+    if (key === 'apollo') {
+      // Phase 2 (2026-05-06): compact 4-row Apollo breakdown.
+      // Backend (_apollo) returns flat fields export_remaining, phone_remaining,
+      // email_remaining + matching *_total even when Apollo's response shape
+      // changes. Rows always render (— when a pool isn't exposed by the plan).
+      const _r = (lab, rem, tot) => '<span>' + lab + ':</span><span class="pool-val">' +
+        (typeof rem === 'number' ? rem.toLocaleString() : '—') +
+        (tot ? ' / ' + tot.toLocaleString() : '') + '</span>';
+      poolsHtml = '<div class="credit-pools">' +
+        _r('Total',  s.remaining,        s.total) +
+        _r('Export', s.export_remaining, s.export_total) +
+        _r('Phone',  s.phone_remaining,  s.phone_total) +
+        _r('Email',  s.email_remaining,  s.email_total) +
+        '</div>';
+    }
+    cardsHtml += `
+      <div class="credit-card">
+        <div class="service-name">${esc(s.service)} ${statusIcon}</div>
+        <div class="credit-numbers">${(s.used||0).toLocaleString()} / ${(s.total||0).toLocaleString()} credits used</div>
+        <div class="credit-bar-bg"><div class="credit-bar-fill ${barClass}" style="width:${pct}%"></div></div>
+        <div class="searches-remaining">${(s.searches_remaining||0).toLocaleString()} searches remaining</div>
+        ${poolsHtml}
+      </div>`;
+  });
+  const alerts = (data.alerts || []).map(a =>
+    `<div class="credit-alert ${a.level}">${esc(a.message)}</div>`
+  ).join('');
+  const ts = data.timestamp ? new Date((typeof data.timestamp === 'number' ? data.timestamp * 1000 : data.timestamp)).toLocaleTimeString() : '';
+  getEl('creditsContent').innerHTML = `
+    <div class="credits-grid">${cardsHtml}</div>
+    <div class="credits-summary">
+      <div class="total-searches">Total searches remaining: <strong>${(data.total_searches_remaining || 0).toLocaleString()}</strong></div>
+      <span style="font-size:11px;color:var(--text-muted)">${ts}${data.cached ? ' (cached)' : ''}</span>
+    </div>
+    <div class="credits-alerts">${alerts}</div>`;
+}
+
+/* ── LEAD GENERATION ────────────────────────────────────────────── */
+function generateLeads() {
+  if (!isConnected) { alert('Server not connected. Start the server, then click Connect.'); return; }
+
+  let endpoint, payload;
+  if (currentMode === 'city') {
+    const maxL = parseInt(getEl('cityMaxLeads').value) || 0;
+    if (maxL <= 0) { alert('Max Leads must be > 0 in City Mode.'); return; }
+    endpoint = '/generate-city';
+    payload = {
+      state_code: getEl('cityState').value,
+      tier: getEl('cityTier').value,
+      city: getEl('cityName').value,
+      min_volume: parseInt(getEl('cityMinVolume').value) || 100,
+      max_leads: maxL,
+      enrichment: enrichmentOn,
+      country: 'AU',
+      n_workers: parseInt(getEl('cityWorkers').value) || 4,
+    };
+  } else {
+    const industry = getEl('industry').value;
+    if (!industry) { alert('Please select an industry.'); return; }
+    const maxLeads = parseInt(getEl('maxLeads').value) || 0;
+    if (industry === '__all__') {
+      // Parallel multi-industry mode — internally calls /generate-multi
+      endpoint = '/generate-multi';
+      payload = {
+        max_leads: maxLeads || 50,
+        enrichment: enrichmentOn,
+        country: getEl('country').value,
+        min_volume: parseInt(getEl('minVolume').value) || 100,
+        min_cpc: parseFloat(getEl('minCpc').value) || 0.05,
+        n_workers: parseInt(getEl('parallelWorkers').value) || 4,
+        industries: _getParallelIndustries(),
+      };
+    } else {
+      endpoint = '/generate';
+      payload = {
+        industry: industry,
+        country: getEl('country').value,
+        min_volume: parseInt(getEl('minVolume').value) || 100,
+        min_cpc: parseFloat(getEl('minCpc').value) || 1.0,
+        max_leads: maxLeads,
+        enrichment: enrichmentOn,
+      };
+    }
+  }
+
+  getEl('progressSection').classList.add('active');
+  getEl('resultsSection').classList.remove('active');
+  getEl('csvPreview').classList.remove('active');
+  getEl('progressBar').style.width = '0%';
+  getEl('progressStatus').textContent = 'Starting pipeline...';
+  getEl('timerChip').style.display = 'none';
+  getEl('logPanel').innerHTML = '';
+  getEl('logPanel').classList.add('active');
+  getEl('generateBtn').disabled = true;
+  getEl('cancelBtn').style.display = 'inline-flex';
+  topCsvData = null; allCsvData = null;
+
+  serverUrl = getEl('serverUrl').value.replace(/\/+$/, '');
+
+  fetch(serverUrl + endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then(r => {
+    const ct = r.headers.get('content-type') || '';
+    if (r.status === 401 || r.redirected) {
+      appendLog('Session expired — please log in again.', 'error');
+      resetButtons();
+      setTimeout(() => { window.location.href = '/login'; }, 1500);
+      return null;
+    }
+    if (!ct.includes('application/json')) {
+      throw new Error('Server returned non-JSON (HTTP ' + r.status + '). Restart the server or refresh.');
+    }
+    return r.json();
+  }).then(data => {
+    if (!data) return;
+    if (data.error) { appendLog('Error: ' + data.error, 'error'); resetButtons(); return; }
+    pollProgress(data.job_id);
+  }).catch(err => {
+    appendLog('Failed to connect to server: ' + err.message, 'error');
+    resetButtons();
+  });
+}
+
+function pollProgress(jobId) {
+  let _localElapsed = 0, _remSeconds = 0;
+  const fmt = s => s < 60 ? s + 's' : Math.floor(s/60) + 'm' + (s%60 ? ' ' + (s%60) + 's' : '');
+  const ticker = setInterval(() => {
+    _localElapsed++;
+    getEl('timerElapsed').textContent = fmt(_localElapsed);
+  }, 1000);
+
+  const interval = setInterval(() => {
+    fetch(serverUrl + '/status/' + jobId).then(r => {
+      if (r.status === 401 || r.redirected) {
+        clearInterval(interval); clearInterval(ticker);
+        appendLog('Session expired — please log in again.', 'error');
+        resetButtons();
+        return null;
+      }
+      return r.json();
+    }).then(data => {
+      if (!data) return;
+      getEl('progressBar').style.width = data.progress + '%';
+      // Phase 2 (2026-05-06): live valid-lead count appended to status text.
+      // Backend tags [VALID-LEADS] log lines and parses the count into
+      // valid_leads_in_progress; we surface it inline so the user sees it
+      // tick up without having to scan the log.
+      let _statusText = data.status_text || '';
+      if (typeof data.valid_leads_in_progress === 'number' && data.valid_leads_in_progress > 0) {
+        _statusText = _statusText + '  •  ' + data.valid_leads_in_progress + ' valid lead' +
+          (data.valid_leads_in_progress === 1 ? '' : 's');
+      }
+      if (_statusText) getEl('progressStatus').textContent = _statusText;
+      if (data.state === 'running' && data.progress > 2) {
+        if (data.elapsed_seconds !== undefined) _localElapsed = data.elapsed_seconds;
+        if (data.time_remaining_seconds !== undefined) _remSeconds = data.time_remaining_seconds;
+        getEl('timerElapsed').textContent = fmt(_localElapsed);
+        getEl('timerRemaining').textContent = _remSeconds > 0 ? '~' + fmt(_remSeconds) : '—';
+        getEl('timerChip').style.display = 'inline-flex';
+      }
+      (data.new_logs || []).forEach(log => {
+        let cls = '';
+        if (log.includes('Done') || log.includes('Saved') || log.includes('Total')) cls = 'success';
+        else if (log.includes('Error') || log.includes('error')) cls = 'error';
+        else if (log.includes('Warning') || log.includes('warning')) cls = 'warning';
+        appendLog(log, cls);
+      });
+      if (data.state === 'done') {
+        clearInterval(interval); clearInterval(ticker);
+        resetButtons();
+        getEl('timerChip').style.display = 'none';
+        if (data.leads && data.leads.length > 0) {
+          showResults(data.leads, data.summary);
+          topCsvData = data.top_csv; allCsvData = data.all_csv;
+          if (allCsvData) getEl('downloadAllBtn').style.display = 'inline-flex';
+          showCsvPreview(data.top_csv);
+        } else {
+          appendLog('No leads found. Try a different scope or lower thresholds.', 'warning');
+        }
+        loadCredits(true);
+        loadMasterStats();   // Phase 2: refresh master-DB count after each run
+      } else if (data.state === 'error') {
+        clearInterval(interval); clearInterval(ticker); resetButtons();
+        getEl('timerChip').style.display = 'none';
+        appendLog('Pipeline error: ' + (data.error || 'Unknown error'), 'error');
+        if (data.partial_csv_available) {
+          appendLog('Leads collected before the error are available below.', 'warning');
+          _showPartialDownloadLink(jobId, data.partial_csv_filename);
+        }
+      } else if (data.state === 'cancelled') {
+        clearInterval(interval); clearInterval(ticker); resetButtons();
+        getEl('timerChip').style.display = 'none';
+        appendLog('Pipeline cancelled.', 'warning');
+        if (data.partial_csv_available) {
+          appendLog('Leads collected before cancel are available below.', 'warning');
+          _showPartialDownloadLink(jobId, data.partial_csv_filename);
+        }
+      }
+    }).catch(err => {
+      clearInterval(interval); clearInterval(ticker);
+      appendLog('Lost connection to server: ' + err.message, 'error');
+      resetButtons();
+    });
+  }, 1000);
+}
+
+function cancelGeneration() {
+  fetch(serverUrl + '/cancel', { method: 'POST' }).catch(() => {});
+  getEl('cancelBtn').style.display = 'none';
+}
+
+// Phase 2 (2026-05-06): partial-CSV download link injected into the log
+// panel when a run finishes in cancelled/error state. The CSV is served by
+// /download-partial/<job_id> and was NOT inserted into master_leads.
+function _showPartialDownloadLink(jobId, filename) {
+  if (!jobId) return;
+  // Avoid duplicate links if status polling fires multiple final-state ticks.
+  if (document.getElementById('partialDownload-' + jobId)) return;
+  const panel = getEl('logPanel');
+  if (!panel) return;
+  const a = document.createElement('a');
+  a.id = 'partialDownload-' + jobId;
+  a.href = serverUrl + '/download-partial/' + jobId;
+  a.textContent = '⬇ Download partial CSV (' + (filename || 'partial leads') + ')';
+  a.target = '_blank';
+  a.rel = 'noopener';
+  a.style.cssText = 'display:inline-block;margin:8px 0;padding:6px 14px;background:#ffaa33;color:#1a1a1a;text-decoration:none;border-radius:4px;font-weight:600;';
+  panel.appendChild(a);
+}
+
+function appendLog(msg, cls) {
+  const panel = getEl('logPanel');
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = msg;
+  panel.appendChild(line);
+  panel.scrollTop = panel.scrollHeight;
+}
+
+function resetButtons() {
+  getEl('generateBtn').disabled = false;
+  getEl('cancelBtn').style.display = 'none';
+}
+
+function showResults(leads, summary) {
+  getEl('resultsSection').classList.add('active');
+  const tbody = getEl('leadsBody');
+  tbody.innerHTML = '';
+  leads.forEach((lead, i) => {
+    const tr = document.createElement('tr');
+    const emailType = lead.email_type || lead['Email Type'] || '';
+    const badgeCls = emailType.toLowerCase() === 'personal' ? 'personal' : 'generic';
+    tr.innerHTML =
+      '<td>' + (i + 1) + '</td>' +
+      '<td>' + esc(lead.name || lead.Name || '') + '</td>' +
+      '<td>' + esc(lead.company || lead['Company Name'] || '') + '</td>' +
+      '<td>' + esc(lead.domain || lead.Domain || '') + '</td>' +
+      '<td>' + esc(lead.role || lead.Role || '') + '</td>' +
+      '<td>' + esc(lead.phone || lead['Phone Number'] || '') + '</td>' +
+      '<td>' + esc(lead.email || lead.Email || '') + '</td>' +
+      '<td>' + (emailType ? '<span class="email-badge ' + badgeCls + '">' + esc(emailType) + '</span>' : '') + '</td>';
+    tbody.appendChild(tr);
+  });
+  getEl('leadsCount').textContent = leads.length + ' leads generated';
+  if (summary) showSummary(summary);
+}
+
+function showSummary(summary) {
+  const s = (id, v) => { const el = getEl(id); if (el) el.textContent = v; };
+  s('statsTotalLeads', summary.total_leads || 0);
+  s('statsPhone', summary.with_phone || 0);
+  s('statsEmail', summary.with_email || 0);
+  s('statsPersonal', summary.personal_emails || 0);
+  s('statsApollo', summary.apollo_tokens || 0);
+  // Derive Apollo email/phone credits from breakdown (Apollo enrich returns email+phone per call)
+  // We show apollo_tokens as export calls, and phone/email counts as actual deliveries.
+  s('statsApolloEmail', summary.personal_emails || summary.with_email || 0);
+  s('statsApolloPhone', summary.with_phone || summary.direct_phones || 0);
+  s('statsSemrush', summary.semrush_tokens || 0);
+  s('statsLusha', summary.lusha_tokens || 0);
+  const apiUsage = summary.api_usage || {};
+  s('statsSerpapi', apiUsage.serpapi || summary.serpapi_tokens || 0);
+  s('statsOpenai', apiUsage.openai || summary.openai_tokens || 0);
+  if (summary.total_credits_used !== undefined) {
+    const t = summary.total_credits_used || 0;
+    const p = summary.avg_credits_per_lead || 0;
+    s('statsCreditsTotal', t.toLocaleString(undefined, {maximumFractionDigits: 0}));
+    s('statsCreditsPerLead', p.toFixed(1));
+  }
+}
+
+function showCsvPreview(csvText) {
+  if (!csvText) return;
+  getEl('csvPreview').classList.add('active');
+  getEl('csvRaw').textContent = csvText;
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+
+function downloadCSV(type) {
+  const data = type === 'top' ? topCsvData : allCsvData;
+  if (!data) { alert('No CSV data available.'); return; }
+  const blob = new Blob([data], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'leads_' + type + '_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ── DB Viewer ────────────────────────────────────────────────── */
+let dbViewerPage = 1;
+const DB_PAGE_SIZE = 50;
+
+const DB_COLS = {
+  'master-leads': [
+    {key:'id',label:'ID'},
+    {key:'display_name',label:'Name'},
+    {key:'company_name',label:'Company'},
+    {key:'root_domain',label:'Domain'},
+    {key:'role',label:'Role'},
+    {key:'phone_e164',label:'Phone'},
+    {key:'primary_email',label:'Email'},
+    {key:'email_type',label:'Email Type'},
+    {key:'traffic_source',label:'Source',pill:true},
+    {key:'industry',label:'Industry'},
+    {key:'country',label:'Country'},
+    {key:'organic_traffic',label:'Org Traffic'},
+    {key:'paid_traffic',label:'Paid Traffic'},
+    {key:'organic_keywords',label:'Org Kw'},
+    {key:'paid_keywords',label:'Paid Kw'},
+    {key:'revenue',label:'Revenue'},
+    {key:'first_seen_at',label:'First Seen',date:true},
+  ],
+  'run-history': [
+    {key:'id',label:'ID'},
+    {key:'job_uuid',label:'Job'},
+    {key:'username',label:'User'},
+    {key:'industry',label:'Industry'},
+    {key:'country',label:'Cntry'},
+    {key:'mode',label:'Mode'},
+    {key:'max_leads',label:'Max'},
+    {key:'leads_total',label:'Total'},
+    {key:'leads_new',label:'New'},
+    {key:'leads_deduped_out',label:'Deduped'},
+    {key:'duration_seconds',label:'Dur(s)'},
+    {key:'state',label:'State',pill:true},
+    {key:'started_at',label:'Started',date:true},
+    {key:'finished_at',label:'Finished',date:true},
+    {key:'error_text',label:'Error'},
+  ],
+};
+
+function dbViewerLoad(page) {
+  page = Math.max(1, page || 1);
+  dbViewerPage = page;
+  const table = getEl('dbTableSelect').value;
+  const cols = DB_COLS[table];
+  const thead = getEl('dbThead');
+  const tbody = getEl('dbTbody');
+  const loading = getEl('dbLoading');
+  const empty = getEl('dbEmpty');
+  const errEl = getEl('dbError');
+  const statusRow = getEl('dbStatusRow');
+
+  thead.innerHTML = '<tr>' + cols.map(c => '<th>' + esc(c.label) + '</th>').join('') + '</tr>';
+  tbody.innerHTML = '';
+  empty.style.display = 'none';
+  errEl.style.display = 'none';
+  loading.style.display = 'block';
+  statusRow.textContent = 'Loading...';
+  getEl('dbPrevBtn').disabled = true;
+  getEl('dbNextBtn').disabled = true;
+
+  fetch('/api/db/' + table + '?page=' + page + '&page_size=' + DB_PAGE_SIZE, {credentials:'same-origin'})
+    .then(r => r.json())
+    .then(data => {
+      loading.style.display = 'none';
+      if (data.error) {
+        errEl.textContent = 'Error: ' + (data.detail || data.error);
+        errEl.style.display = 'block';
+        statusRow.textContent = 'Failed to load.';
+        return;
+      }
+      const rows = data.rows || [];
+      const total = data.total || 0;
+      const pages = data.pages || 1;
+      statusRow.innerHTML = 'Page <span class="db-count">' + page + '</span> of <span class="db-count">' + pages + '</span> — <span class="db-count">' + total.toLocaleString() + '</span> total records';
+      getEl('dbPageInfo').textContent = 'Page ' + page + ' / ' + pages;
+      getEl('dbPrevBtn').disabled = page <= 1;
+      getEl('dbNextBtn').disabled = page >= pages;
+      if (!rows.length) { empty.style.display = 'block'; return; }
+      tbody.innerHTML = rows.map(row => {
+        return '<tr>' + cols.map(c => {
+          let v = row[c.key];
+          if (v == null || v === '') return '<td><span style="color:#444">&#8212;</span></td>';
+          if (c.date) {
+            v = String(v).replace('T',' ').replace(/\.\d+$/,'');
+            return '<td style="color:#888;font-size:11px">' + esc(v) + '</td>';
+          }
+          if (c.pill) {
+            const cls = String(v).toLowerCase().replace(/[^a-z]/g,'');
+            return '<td><span class="db-pill ' + cls + '">' + esc(v) + '</span></td>';
+          }
+          return '<td title="' + esc(String(v)) + '">' + esc(String(v)) + '</td>';
+        }).join('') + '</tr>';
+      }).join('');
+    })
+    .catch(err => {
+      loading.style.display = 'none';
+      errEl.textContent = 'Network error: ' + err;
+      errEl.style.display = 'block';
+      statusRow.textContent = 'Failed.';
+    });
+}
+
+function dbClearAll() {
+  if (!confirm('This wipes ALL records in master_leads and run_history. Users are preserved. Continue?')) return;
+  fetch('/api/db/clear-all', {method:'POST', credentials:'same-origin'})
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        alert('Failed: ' + (data.detail || data.error));
+        return;
+      }
+      const d = data.deleted || {};
+      alert('Cleared. master_leads: ' + (d.master_leads||0) + ', run_history: ' + (d.run_history||0));
+      dbViewerLoad(1);
+      // refresh master-stats card too
+      fetch('/api/master-stats',{credentials:'same-origin'}).then(r=>r.json()).then(s=>{
+        const el = document.getElementById('masterDbCount');
+        if (el && typeof s.total_leads === 'number') el.textContent = s.total_leads.toLocaleString();
+      }).catch(()=>{});
+    })
+    .catch(err => alert('Network error: ' + err));
+}
+
+/* ── init ─────────────────────────────────────────────────────── */
+getEl('cityState').addEventListener('change', populateCityDropdown);
+getEl('cityTier').addEventListener('change', populateCityDropdown);
+getEl('maxLeads').addEventListener('input', _updateParallelQuota);
+getEl('parallelIndustrySel').addEventListener('change', _updateParallelQuota);
+
+window.addEventListener('load', () => {
+  getEl('serverUrl').value = serverUrl;
+  testConnection();
+  creditsRefreshTimer = setInterval(() => {
+    if (isConnected) loadCredits(false);
+  }, 30000);
+  dbViewerLoad(1);
+});
+</script>
+</body>
+</html>
