@@ -709,7 +709,16 @@ class CityLeadPipeline:
         # paid-lead source and gets priority over the regular geo-search.
         if _serp_full_budget < 10**8:
             serp._call_budget = _serp_full_budget
-        if _pass2_active and not self._cancelled and serp._available:
+        # 2026-06-09 BUGFIX: PASS 2a is the SerpAPI google_ads sweep — the PRIMARY
+        # paid-advertiser source. It was wrongly sharing PASS 2's SEMrush-family
+        # gate (_pass2_active = BOTH/SEMRUSH_ONLY), so in GOOGLE_ONLY mode (SEMrush
+        # dead OR the "SerpAPI only" toggle) it was SKIPPED — the exact mode where
+        # SerpAPI IS the paid source. That starved discovery (ads=0 → only Places/
+        # Apollo) and capped big runs at a handful of leads. The ads sweep must run
+        # whenever SerpAPI is alive — i.e. every mode EXCEPT APOLLO_ONLY (no key).
+        _pass2a_active = mode in (
+            DiscoveryMode.BOTH, DiscoveryMode.SEMRUSH_ONLY, DiscoveryMode.GOOGLE_ONLY)
+        if _pass2a_active and not self._cancelled and serp._available:
             # 2026-05-28: PRIMARY paid source. The ads[] block is Google's LIVE
             # paid placements — strongest confirmed-advertiser signal. Scales
             # with max_leads; bounded by SERP_ADS_MAX_QUERIES (default 80) AND
@@ -722,7 +731,30 @@ class CityLeadPipeline:
                 _ads_q_cap = min(_ads_q_cap, _budget_left_now)
             _ads_kw_n = max(8, min(40, int(self.max_leads or 0) or 8))
             _ads_city_n = 4
-            _ads_kws = kws_to_scan[:_ads_kw_n]
+            # 2026-06-09: daily-rotating keyword window for SUSTAINABLE volume.
+            # Cross-run DB dedup (lifetime 2/domain) means hitting the SAME top
+            # keywords every day surfaces the same advertisers → diminishing new
+            # leads. We always keep the top half (highest-intent → quality) and
+            # rotate the other half by day-of-epoch through the rest of the
+            # ~54k keyword bank, so each day's run reaches FRESH advertisers
+            # while still covering the best terms. Net: quantity AND quality.
+            import time as _t_rot
+            _half = max(1, _ads_kw_n // 2)
+            _top_kws = kws_to_scan[:_half]
+            _rest_pool = kws_to_scan[_half:] or kws_to_scan
+            _day = int(_t_rot.time() // 86400)
+            _need = max(0, _ads_kw_n - len(_top_kws))
+            if _need and _rest_pool:
+                _start = (_day * _need) % len(_rest_pool)
+                _rot_slice = (_rest_pool[_start:] + _rest_pool[:_start])[:_need]
+            else:
+                _rot_slice = []
+            # de-dup while preserving order (top first, then rotating slice)
+            _seen_kw, _ads_kws = set(), []
+            for _k in (_top_kws + _rot_slice):
+                _kl = (_k or "").strip().lower()
+                if _kl and _kl not in _seen_kw:
+                    _seen_kw.add(_kl); _ads_kws.append(_k)
             _ads_cities = list(self._cities_to_search or [])[:_ads_city_n]
             _ads_added = 0
             _ads_calls = 0

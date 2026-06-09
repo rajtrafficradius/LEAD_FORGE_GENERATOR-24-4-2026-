@@ -350,6 +350,19 @@ class TestSerpApiBudget(unittest.TestCase):
         # Cache hit returns WITHOUT touching the network or the budget.
         self.assertEqual(c.find_person_on_linkedin("John", "Acme"), "John Smith")
 
+    def test_ads_sweep_runs_in_google_only(self):
+        """REGRESSION: the SerpAPI google_ads sweep (PASS 2a) — the primary paid
+        source — must run in GOOGLE_ONLY mode (SEMrush dead / SerpAPI-only
+        toggle), not just BOTH/SEMRUSH_ONLY. A prior copy-paste gate skipped it
+        in GOOGLE_ONLY → ads=0 → runs starved to a few leads."""
+        src = (_ROOT / "city_pipeline.py").read_text(encoding="utf-8")
+        self.assertIn("_pass2a_active = mode in (", src)
+        # the PASS 2a gate must include GOOGLE_ONLY
+        i = src.index("_pass2a_active = mode in (")
+        gate = src[i:i + 200]
+        self.assertIn("GOOGLE_ONLY", gate)
+        self.assertIn("if _pass2a_active and not self._cancelled and serp._available:", src)
+
     def test_credit_saver_budget_math(self):
         # The documented sizing: credit-saver ≈14/lead (floor 12); regular ≈80/lead.
         for ml in (1, 5, 20):
