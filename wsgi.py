@@ -599,11 +599,20 @@ def db_master_leads():
     """Paginated master_leads viewer. Query params: page (1-based), page_size (max 200)."""
     page = int(request.args.get("page", 1) or 1)
     page_size = int(request.args.get("page_size", 50) or 50)
+    if not _db_ready:
+        return jsonify({"error": "db_unavailable",
+                        "detail": _db_startup_error or "MySQL not configured on this host"}), 503
     try:
         rows, total = db.MasterLeadRepo.list_page(page=page, page_size=page_size)
         for r in rows:
             if r.get("first_seen_at") and hasattr(r["first_seen_at"], "isoformat"):
                 r["first_seen_at"] = r["first_seen_at"].isoformat()
+            # DECIMAL/NULL → float for JSON; keep None so old leads stay blank.
+            if r.get("cost_per_lead_usd") is not None:
+                try:
+                    r["cost_per_lead_usd"] = float(r["cost_per_lead_usd"])
+                except (TypeError, ValueError):
+                    r["cost_per_lead_usd"] = None
         return jsonify({
             "rows": rows,
             "total": total,
@@ -623,12 +632,22 @@ def db_run_history():
     """Paginated run_history viewer. Query params: page (1-based), page_size (max 200)."""
     page = int(request.args.get("page", 1) or 1)
     page_size = int(request.args.get("page_size", 50) or 50)
+    if not _db_ready:
+        return jsonify({"error": "db_unavailable",
+                        "detail": _db_startup_error or "MySQL not configured on this host"}), 503
     try:
         rows, total = db.RunHistoryRepo.list_page(page=page, page_size=page_size)
         for r in rows:
             for k in ("started_at", "finished_at"):
                 if r.get(k) and hasattr(r[k], "isoformat"):
                     r[k] = r[k].isoformat()
+            # DECIMAL columns → float (JSON-safe).
+            for k in ("cost_usd", "cost_per_lead_usd", "min_cpc"):
+                if r.get(k) is not None:
+                    try:
+                        r[k] = float(r[k])
+                    except (TypeError, ValueError):
+                        r[k] = None
             if isinstance(r.get("api_usage_json"), (bytes, str)):
                 try:
                     r["api_usage_json"] = json.loads(r["api_usage_json"])
@@ -645,6 +664,36 @@ def db_run_history():
         return jsonify({"error": "db_unavailable", "detail": str(e)}), 503
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ── 2026-06-08: API pricing config (Cost / Pricing tab) ─────────────────────
+# NOTE: this is the DEPLOYED app (gunicorn wsgi:app). The matching routes also
+# exist in V5.py:main_web for local `python V5.py` runs — keep both in sync.
+# No login decorator: login is disabled app-wide and pricing is non-sensitive.
+@app.route("/api/pricing", methods=["GET"])
+def api_get_pricing():
+    try:
+        import pricing as _pr
+        cfg = _pr.load_pricing()
+        return jsonify({
+            "pricing": cfg,
+            "line_items": list(_pr.LINE_ITEMS),
+            "unit_prices": _pr.unit_prices(cfg),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/pricing", methods=["POST"])
+def api_save_pricing():
+    try:
+        import pricing as _pr
+        body = request.get_json(silent=True) or {}
+        cfg = body.get("pricing") if isinstance(body.get("pricing"), dict) else body
+        saved = _pr.save_pricing(cfg)
+        return jsonify({"ok": True, "pricing": saved, "unit_prices": _pr.unit_prices(saved)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 # ── Shared run-execution helper ─────────────────────────────────────────────
@@ -721,10 +770,23 @@ def _finalize_run(
     try:
         api_usage = dict(getattr(pipeline, "_api_counter", {}) or {})
         duration = max(0, int(time.time() - job.start_time))
+        # 2026-06-08: freeze this run's dollar cost using the saved pricing.
+        # Reuses V5's shared helper so the number matches the local app exactly.
+        try:
+            from V5 import _v5_run_cost as _v5_run_cost_fn
+            _cost_usage, _run_cost_usd, _run_cpl_usd, _cost_per_item = _v5_run_cost_fn(pipeline)
+        except Exception:
+            _cost_usage, _run_cost_usd, _run_cpl_usd, _cost_per_item = {}, 0.0, 0.0, {}
+        api_usage["_cost_usage"]        = _cost_usage
+        api_usage["_cost_per_item_usd"] = _cost_per_item
+        api_usage["_cost_total_usd"]    = _run_cost_usd
+        api_usage["_cost_per_lead_usd"] = _run_cpl_usd
         new_inserted = 0
         if state == "done":
             try:
                 rows = _pipeline_leads_to_master_rows(pipeline, industry, country, job.run_id)
+                for _r in rows:           # frozen per-lead cost (blank stays blank for old rows)
+                    _r["cost_per_lead_usd"] = _run_cpl_usd
                 log.info("_finalize_run: inserting %d leads into master_leads (run_id=%s)", len(rows), job.run_id)
                 new_inserted = db.MasterLeadRepo.bulk_insert_new(rows, job.run_id, industry, country)
                 log.info("_finalize_run: master_leads inserted=%d (run_id=%s)", new_inserted, job.run_id)
@@ -748,10 +810,29 @@ def _finalize_run(
             competitor_depth_reached=int(getattr(pipeline, "_competitor_depth_reached", 0) or 0),
             api_usage=api_usage,
             error_text=error_text,
+            cost_usd=_run_cost_usd,
+            cost_per_lead_usd=_run_cpl_usd,
         )
         log.info("_finalize_run: run_history updated run_id=%s state=%s", job.run_id, state)
     except Exception as e:
         log.exception("_finalize_run failed for run_id=%s: %s", job.run_id, e)
+
+
+def _run_cpl(job) -> float:
+    """Live per-lead dollar cost for the Generate table (cached on the job so we
+    compute once per run). Same maths as the value frozen into the DB."""
+    v = getattr(job, "_cpl_cache", None)
+    if v is None:
+        try:
+            from V5 import _v5_run_cost
+            v = float(_v5_run_cost(job.pipeline)[2])
+        except Exception:
+            v = 0.0
+        try:
+            job._cpl_cache = v
+        except Exception:
+            pass
+    return v
 
 
 # ── /generate ───────────────────────────────────────────────────────────────
@@ -772,6 +853,8 @@ def generate():
         min_cpc = float(data.get("min_cpc", 0.05))
         max_leads = int(data.get("max_leads", 0))
         enrichment = bool(data.get("enrichment", True))
+        # 2026-06-08: "SerpAPI only" toggle — bypass SEMrush even if it has credits.
+        disable_semrush = bool(data.get("disable_semrush", data.get("serp_only", False)))
         if not industry:
             return jsonify({"error": "Industry is required"}), 400
 
@@ -815,7 +898,7 @@ def generate():
             min_cpc=min_cpc, output_folder=output_folder,
             progress_callback=progress_cb, log_callback=log_cb,
             max_leads=max_leads, enrichment_enabled=enrichment,
-            lead_pool=lead_pool,
+            lead_pool=lead_pool, disable_semrush=disable_semrush,
         )
         job.pipeline = pipeline
 
@@ -860,6 +943,11 @@ def generate():
                                 "phone": row.get("Phone Number", ""),
                                 "email": row.get("Email", ""),
                                 "email_type": row.get("Email Type", ""),
+                                "source": row.get("Source", "") or "Apollo",
+                                "_traffic_source": (row.get("Traffic Source") or "").strip(),
+                                "_google_intent": ((row.get("Traffic Source") or "").strip() == "Google Intent"),
+                                "keyword": row.get("Keyword", ""),
+                                "cost_per_lead": _run_cpl(job),
                             })
                     for fname in os.listdir(output_folder):
                         if fname.startswith("leads_ALL_") and fname.endswith(".csv"):
@@ -961,6 +1049,8 @@ def generate_city():
         max_leads = int(data.get("max_leads", 0))
         enrichment = bool(data.get("enrichment", True))
         country = data.get("country", "AU")
+        # 2026-06-08: "SerpAPI only" toggle — bypass SEMrush even if it has credits.
+        disable_semrush = bool(data.get("disable_semrush", data.get("serp_only", False)))
 
         if max_leads <= 0:
             return jsonify({"error": "Max Leads must be > 0 in City Mode"}), 400
@@ -1003,6 +1093,7 @@ def generate_city():
             enrichment_enabled=enrichment, country=country,
             quota_guarantee=True,
             progress_callback=progress_cb, log_callback=log_cb,
+            disable_semrush=disable_semrush,
         )
         job.pipeline = pipeline
 
@@ -1045,6 +1136,11 @@ def generate_city():
                                 "phone": row.get("Phone Number", ""),
                                 "email": row.get("Email", ""),
                                 "email_type": row.get("Email Type", ""),
+                                "source": row.get("Source", "") or "Apollo",
+                                "_traffic_source": (row.get("Traffic Source") or "").strip(),
+                                "_google_intent": ((row.get("Traffic Source") or "").strip() == "Google Intent"),
+                                "keyword": row.get("Keyword", ""),
+                                "cost_per_lead": _run_cpl(job),
                             })
                     for fname in os.listdir(output_folder):
                         if fname.startswith("leads_ALL_") and fname.endswith(".csv"):
@@ -1217,6 +1313,11 @@ def generate_multi():
                                 "phone": row.get("Phone Number", ""),
                                 "email": row.get("Email", ""),
                                 "email_type": row.get("Email Type", ""),
+                                "source": row.get("Source", "") or "Apollo",
+                                "_traffic_source": (row.get("Traffic Source") or "").strip(),
+                                "_google_intent": ((row.get("Traffic Source") or "").strip() == "Google Intent"),
+                                "keyword": row.get("Keyword", ""),
+                                "cost_per_lead": _run_cpl(job),
                             })
 
                 _credit_costs = {"semrush": 10, "apollo": 1, "lusha": 1, "serpapi": 1, "openai": 0.01, "hunter": 1}

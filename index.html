@@ -853,7 +853,7 @@ function Splash({onDone,theme}){
       <canvas id="splash-cv"></canvas>
       <div className="splash-inner">
         <div className="splash-logo-wrap">
-          <img src="uploads/pasted-1776998089687-0.png" className="splash-logo-img" alt="Traffic Radius"/>
+          <img src="Traffic-Radius-Logo.png" className="splash-logo-img" alt="Traffic Radius"/>
         </div>
         <div className="splash-tag">Lead Intelligence Platform</div>
         <div className="splash-rings">
@@ -2049,14 +2049,38 @@ function CostView(){
   const [saving,setSaving]=useState(false);
   const [savedAt,setSavedAt]=useState(null);
   const [err,setErr]=useState('');
+  // Built-in line items so the tab still renders if the server's /api/pricing
+  // is missing/old (e.g. mid-deploy) instead of throwing a JSON parse error.
+  const FALLBACK_ITEMS=[
+    {key:'serpapi',label:'SerpAPI',group:'SerpAPI',unit:'searches'},
+    {key:'google_places',label:'Google Places',group:'Google Places',unit:'calls'},
+    {key:'semrush_units',label:'SEMrush',group:'SEMrush',unit:'units'},
+    {key:'apollo_email',label:'Apollo — Email',group:'Apollo',unit:'email credits'},
+    {key:'apollo_phone',label:'Apollo — Phone',group:'Apollo',unit:'mobile credits'},
+    {key:'apollo_export',label:'Apollo — Regular',group:'Apollo',unit:'export credits'},
+    {key:'lusha',label:'Lusha',group:'Lusha',unit:'credits'},
+    {key:'hunter',label:'Hunter.io',group:'Hunter.io',unit:'requests'},
+    {key:'openai',label:'OpenAI',group:'OpenAI',unit:'calls'},
+    {key:'gemini',label:'Gemini',group:'Gemini',unit:'calls'},
+  ];
   useEffect(()=>{(async()=>{
     try{
       const r=await fetch(base+'/api/pricing');
-      const j=await r.json();
-      setItems((j.pricing&&j.pricing.items)||{});
-      setLineItems(j.line_items||[]);
-      setCurrency((j.pricing&&j.pricing.currency)||'$');
-    }catch(e){setErr(e.message||String(e));}
+      const txt=await r.text();
+      let j=null; try{j=JSON.parse(txt);}catch(_){}
+      if(j&&Array.isArray(j.line_items)&&j.line_items.length){
+        setItems((j.pricing&&j.pricing.items)||{});
+        setLineItems(j.line_items);
+        setCurrency((j.pricing&&j.pricing.currency)||'$');
+      }else{
+        // Endpoint missing/old build → show defaults; Save still works once updated.
+        setLineItems(FALLBACK_ITEMS);
+        setErr('Pricing API not available on the server yet — showing defaults. Your Save will apply once the server has the latest build.');
+      }
+    }catch(e){
+      setLineItems(FALLBACK_ITEMS);
+      setErr('Could not reach the pricing API — showing defaults.');
+    }
     setLoading(false);
   })();},[base]);
   const upd=(k,field,val)=>setItems(prev=>({...prev,[k]:{...(prev[k]||{credits:0,paid:0,monthly:false}),[field]:val}}));
@@ -2780,7 +2804,7 @@ function Sidebar({nav,setNav,srvUrl,setSrvUrl,onConnect,credits,lastDrain,detail
   // For "Total" we always show the Apollo aggregate remaining (always present).
   const apolloTotal=apolloSvc.remaining!=null?apolloSvc.remaining:(credits?credits.Apollo:0);
   return(<aside className="sb">
-    <div className="sb-logo"><img src="uploads/pasted-1776998089687-0.png" alt="Traffic Radius"/></div>
+    <div className="sb-logo"><img src="Traffic-Radius-Logo.png" alt="Traffic Radius"/></div>
     <div className="sb-nav">
       {NAV.map(n=>(
         <div key={n.id} className={`nav-item ${nav===n.id?'on':''}`} onClick={()=>setNav(n.id)}>
