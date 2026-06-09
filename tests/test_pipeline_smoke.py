@@ -307,6 +307,58 @@ class TestCostAndSemrushToggle(unittest.TestCase):
         self.assertIn("/api/pricing", html)             # CostView talks to the endpoint
 
 
+# ── 2026-06-09: run-wide SerpAPI budget (credit-saving) ─────────────────────
+
+
+class TestSerpApiBudget(unittest.TestCase):
+
+    def _client(self, shared):
+        _stub_external_modules()
+        import V5
+        c = V5.SerpApiClient("k1,k2")   # 2 fake keys → keys-alive check passes
+        c._counter = shared
+        return c
+
+    def test_shared_budget_caps_availability(self):
+        shared = {"serpapi": 0, "serpapi_budget": 5}
+        c = self._client(shared)
+        self.assertTrue(c._available)          # 0/5
+        shared["serpapi"] = 5
+        self.assertFalse(c._available)         # 5/5 → budget hit → all calls stop
+        shared["serpapi"] = 4
+        self.assertTrue(c._available)          # back under budget
+
+    def test_budget_is_shared_across_instances(self):
+        # Two clients sharing one counter (mirrors discovery + enrichment clients).
+        shared = {"serpapi": 0, "serpapi_budget": 3}
+        a = self._client(shared)
+        b = self._client(shared)
+        shared["serpapi"] = 3
+        self.assertFalse(a._available)
+        self.assertFalse(b._available)         # one budget binds BOTH instances
+
+    def test_regular_mode_uncapped(self):
+        # No shared budget set → falls back to (high) per-instance budget.
+        c = self._client({"serpapi": 9999})
+        c._call_budget = 10**9
+        self.assertTrue(c._available)
+
+    def test_linkedin_cache_avoids_second_call(self):
+        shared = {"serpapi": 0, "serpapi_budget": 0}
+        c = self._client(shared)
+        c._counter.setdefault("_serp_li_cache", {})["john|acme"] = "John Smith"
+        # Cache hit returns WITHOUT touching the network or the budget.
+        self.assertEqual(c.find_person_on_linkedin("John", "Acme"), "John Smith")
+
+    def test_credit_saver_budget_math(self):
+        # The documented sizing: credit-saver ≈14/lead (floor 12); regular ≈80/lead.
+        for ml in (1, 5, 20):
+            saver = max(12, ml * 14)
+            regular = max(60, ml * 80)
+            self.assertLessEqual(saver, 15 * max(1, ml) + 12)   # ~≤15/lead band
+            self.assertGreater(regular, saver)
+
+
 if __name__ == "__main__":
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
@@ -316,6 +368,7 @@ if __name__ == "__main__":
         TestGoogleIntentGateRelaxation,
         TestNoRegression,
         TestCostAndSemrushToggle,
+        TestSerpApiBudget,
     ):
         suite.addTests(loader.loadTestsFromTestCase(cls))
     result = unittest.TextTestRunner(verbosity=2).run(suite)

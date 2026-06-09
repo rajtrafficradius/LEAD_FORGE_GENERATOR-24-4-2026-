@@ -855,6 +855,9 @@ def generate():
         enrichment = bool(data.get("enrichment", True))
         # 2026-06-08: "SerpAPI only" toggle — bypass SEMrush even if it has credits.
         disable_semrush = bool(data.get("disable_semrush", data.get("serp_only", False)))
+        # 2026-06-09: credit-saving mode ON by default; UI "Regular mode" toggle
+        # sends credit_saver=false to run the thorough (more-credits) path.
+        credit_saver = bool(data.get("credit_saver", True))
         if not industry:
             return jsonify({"error": "Industry is required"}), 400
 
@@ -899,6 +902,7 @@ def generate():
             progress_callback=progress_cb, log_callback=log_cb,
             max_leads=max_leads, enrichment_enabled=enrichment,
             lead_pool=lead_pool, disable_semrush=disable_semrush,
+            credit_saver=credit_saver,
         )
         job.pipeline = pipeline
 
@@ -1051,6 +1055,9 @@ def generate_city():
         country = data.get("country", "AU")
         # 2026-06-08: "SerpAPI only" toggle — bypass SEMrush even if it has credits.
         disable_semrush = bool(data.get("disable_semrush", data.get("serp_only", False)))
+        # 2026-06-09: credit-saving mode ON by default; UI "Regular mode" toggle
+        # sends credit_saver=false to run the thorough (more-credits) path.
+        credit_saver = bool(data.get("credit_saver", True))
 
         if max_leads <= 0:
             return jsonify({"error": "Max Leads must be > 0 in City Mode"}), 400
@@ -1094,6 +1101,7 @@ def generate_city():
             quota_guarantee=True,
             progress_callback=progress_cb, log_callback=log_cb,
             disable_semrush=disable_semrush,
+            credit_saver=credit_saver,
         )
         job.pipeline = pipeline
 

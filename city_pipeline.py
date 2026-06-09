@@ -78,6 +78,7 @@ class CityLeadPipeline:
         progress_callback=None,
         log_callback=None,
         disable_semrush: bool = False,
+        credit_saver: bool = True,
     ):
         self.state_code = (state_code or "AUSTRALIA").upper()
         self.tier = (tier or "all").lower()
@@ -90,6 +91,8 @@ class CityLeadPipeline:
         self.country = country
         # 2026-06-08: "SerpAPI only" toggle — bypass SEMrush for the whole run.
         self.disable_semrush = bool(disable_semrush)
+        # 2026-06-09: credit-saving mode (DEFAULT) — run-wide SerpAPI cap.
+        self.credit_saver = bool(credit_saver)
         self.progress_callback = progress_callback or (lambda *a: None)
         self.log_callback = log_callback or (lambda *a: None)
         self._cancelled = False
@@ -472,18 +475,31 @@ class CityLeadPipeline:
         # balance (keeping a reserve for future runs) scaled by max_leads.
         try:
             _serp_live_total = int(getattr(serp, "total_remaining_searches", lambda: 0)())
+            _ml = max(1, int(self.max_leads or 0))
             if _serp_live_total <= 0:
                 _serp_run_budget = 0
             else:
                 _reserve = min(40, _serp_live_total // 3)
-                _serp_run_budget = max(8, min(_serp_live_total - _reserve,
-                                              max(20, int(self.max_leads or 0) * 6)))
+                # credit-saving (default): ≈14 calls/lead, the hard run-wide cap
+                # that covers BOTH discovery AND per-person enrichment. regular:
+                # thorough but still bounded so one run can't drain the key.
+                if self.credit_saver:
+                    _target = max(12, _ml * 14)
+                else:
+                    _target = max(60, _ml * 80)
+                _serp_run_budget = max(8, min(_serp_live_total - _reserve, _target))
             serp._call_budget = int(_serp_run_budget)
             serp._calls_used = 0
             self._serp_run_budget = int(_serp_run_budget)
+            # SHARED budget set BEFORE any sweep — every SerpApiClient instance in
+            # this run (discovery + inner-enrichment + host) reads it from the
+            # common _counter, so the cap is truly run-wide.
+            self._api_counter["serpapi_budget"] = int(_serp_run_budget)
+            self._api_counter["serpapi_budget_warned"] = False
             self._log(
-                f"   [SerpAPI] per-run call budget = {_serp_run_budget} "
-                f"(live balance {_serp_live_total}, reserve kept for future runs)"
+                f"   [SerpAPI] run-wide budget = {_serp_run_budget} calls "
+                f"({'credit-saver' if self.credit_saver else 'regular'}, "
+                f"max_leads={_ml}, live balance {_serp_live_total}, reserve kept)"
             )
         except Exception as _sbe:
             self._serp_run_budget = 10**9
@@ -995,6 +1011,11 @@ class CityLeadPipeline:
                 # which is already populated by Phase 1+2 of the host run.
                 _gp_cities = list(self._cities_to_search or [])
                 _gp_kw_n = 15 if mode == DiscoveryMode.GOOGLE_ONLY else 5
+                # Credit-saving: scale the Places keyword axis to the target so a
+                # 1-lead run doesn't fire 20+ Places queries (cuts unnecessary
+                # Google Places usage). Floor of 3 keeps discovery viable.
+                if self.credit_saver:
+                    _gp_kw_n = min(_gp_kw_n, max(3, int(self.max_leads or 0) * 3))
                 # 2026-06-09: SMART KEYWORD POOL. The Google Places sweep is what
                 # picks which businesses we discover; generic travel/hospitality
                 # keywords (e.g. "booking ...") return big-brand HOTELS/airlines —
@@ -1126,6 +1147,11 @@ class CityLeadPipeline:
                     int(os.environ.get("ATC_VERIFY_MAX", "120") or "120")
                     if _atc is not None else _GP_VERIFY_MAX
                 )
+                # 2026-06-09: in credit-saving mode, don't verify 120 names for a
+                # tiny target — scale ATC/verify lookups to the lead count so we
+                # stop hammering ATC (and the SerpAPI fallback) unnecessarily.
+                if self.credit_saver:
+                    _verify_cap = min(_verify_cap, max(15, int(self.max_leads or 0) * 12))
                 # 2026-06-01: STRICT_PAID_ONLY=1 → no Places-backfill of
                 # non-advertisers (volume_floor=0). Only ATC/SEMrush/SerpAPI
                 # -confirmed advertisers survive. Use when you'd rather get
@@ -1485,6 +1511,7 @@ class CityLeadPipeline:
             max_leads=inner_max,
             enrichment_enabled=self.enrichment_enabled,
             disable_semrush=self.disable_semrush,
+            credit_saver=self.credit_saver,
             preset_keywords=keywords,
             preset_domains=domains,
             confirmed_paid_domains=self._confirmed_paid,
@@ -1794,6 +1821,7 @@ class CityLeadPipeline:
             enrichment_enabled=self.enrichment_enabled,
             quota_guarantee=self.quota_guarantee,
             disable_semrush=self.disable_semrush,
+            credit_saver=self.credit_saver,
             # 2026-06-02 (CRITICAL): the FINAL CSV selection happens here, in
             # this host's Phase 6. Without the advertiser sets, host._advertiser_tier
             # saw EMPTY sets → every lead tier 0 → paid-first ordering was a

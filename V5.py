@@ -3343,11 +3343,17 @@ class SerpApiClient:
 
     @property
     def _available(self) -> bool:
-        """True iff (a) the caller hasn't externally disabled this client AND
-        (b) at least one key is still alive."""
-        return bool(self._avail_scope) and (
-            len(self._dead) < max(1, len(self._keys))
-        ) and bool(self._keys)
+        """True iff (a) the caller hasn't externally disabled this client,
+        (b) at least one key is still alive, AND (c) the run-wide SerpAPI
+        budget isn't spent. Because EVERY public method begins with
+        `if not self._available: return …`, making this budget-aware turns it
+        into the single chokepoint that caps total SerpAPI spend run-wide
+        (credit-saving mode) — discovery AND per-person enrichment alike."""
+        if not (bool(self._avail_scope)
+                and len(self._dead) < max(1, len(self._keys))
+                and bool(self._keys)):
+            return False
+        return self._budget_left()
 
     @_available.setter
     def _available(self, val) -> None:
@@ -3363,8 +3369,36 @@ class SerpApiClient:
             self._retire_current_key("HTTP 429 / run out of searches")
 
     def _budget_left(self) -> bool:
-        """True if this client may make another call within its per-run budget.
-        Logs once when the budget is first hit so the user sees it stop."""
+        """True if another SerpAPI call is allowed under the per-run budget.
+
+        2026-06-09: prefer the SHARED, cross-instance budget stored in the
+        common `_counter` dict. A single run spins up several SerpApiClient
+        instances (city discovery + inner enrichment + export host) that all
+        share one `_counter`, so a per-instance counter could never enforce a
+        true run-wide cap — which is how a max_leads=1 run reached 153 calls.
+        `serpapi_budget` (set once per run) + the shared `serpapi` call count
+        give a single budget every instance + every method honours. Falls back
+        to the legacy per-instance budget when the shared one isn't set."""
+        _shared_budget = int((self._counter or {}).get("serpapi_budget", 0) or 0)
+        if _shared_budget > 0:
+            _shared_used = int((self._counter or {}).get("serpapi", 0) or 0)
+            if _shared_used >= _shared_budget:
+                if not (self._counter or {}).get("serpapi_budget_warned"):
+                    try:
+                        self._counter["serpapi_budget_warned"] = True
+                    except Exception:
+                        pass
+                    log_cb = getattr(self, "_log_cb", None)
+                    if callable(log_cb):
+                        try:
+                            log_cb(f"   [SerpAPI] ⛔ run-wide budget {_shared_budget} reached "
+                                   f"({_shared_used} calls used) — pausing SerpAPI to stay "
+                                   f"within the per-lead credit cap.")
+                        except Exception:
+                            pass
+                return False
+            return True
+        # Legacy per-instance budget (no shared budget configured).
         if self._calls_used >= self._call_budget:
             if not getattr(self, "_budget_warned", False):
                 self._budget_warned = True
@@ -3879,7 +3913,16 @@ class SerpApiClient:
         Query: '{first_name} {company_name} site:linkedin.com'
         LinkedIn titles are typically: 'FirstName LastName - Title at Company | LinkedIn'
         """
-        if not self._available or not first_name:
+        if not first_name:
+            return ""
+        # 2026-06-09: shared cache so the same (first name + company) LinkedIn
+        # lookup is never paid for twice across rounds/instances (the run shares
+        # one _counter). Cache hit = 0 SerpAPI credits.
+        _ck = (first_name.strip().lower() + "|" + (company_name or "").strip().lower())
+        _cache = self._counter.setdefault("_serp_li_cache", {}) if isinstance(self._counter, dict) else None
+        if _cache is not None and _ck in _cache:
+            return _cache[_ck]
+        if not self._available:        # budget/keys gate AFTER cache check
             return ""
         self.limiter.wait()
         query = f"{first_name} {company_name} site:linkedin.com/in"
@@ -3903,6 +3946,7 @@ class SerpApiClient:
             name_pattern = re.compile(
                 rf"\b({re.escape(first_name)}\s+[A-Z][a-zA-Z\-']{{1,25}})\b"
             )
+            _found = ""
             for result in data.get("organic_results", []):
                 title = result.get("title", "")
                 snippet = result.get("snippet", "")
@@ -3912,8 +3956,13 @@ class SerpApiClient:
                         candidate = m.group(1).strip()
                         parts = candidate.split()
                         if len(parts) == 2 and _is_valid_person_name(candidate):
-                            return candidate
-            return ""
+                            _found = candidate
+                            break
+                if _found:
+                    break
+            if _cache is not None:        # cache hit AND miss → never re-query
+                _cache[_ck] = _found
+            return _found
         except Exception:
             return ""
 
@@ -5081,10 +5130,15 @@ class LeadGenerationPipeline:
         # SEMrush (even if its key has credits) — discovery resolves to
         # GOOGLE_ONLY/APOLLO_ONLY and every SemrushClient call no-ops.
         disable_semrush: bool = False,
+        # 2026-06-09: credit-saving mode (DEFAULT). Caps run-wide SerpAPI spend
+        # to ~max_leads×14 calls. False = "regular" thorough mode (generous
+        # budget) — the UI toggle, default OFF, flips this to False.
+        credit_saver: bool = True,
     ):
         self.industry = industry
         self.country = country
         self.disable_semrush = bool(disable_semrush)
+        self.credit_saver = bool(credit_saver)
         self.min_volume = min_volume
         self.min_cpc = min_cpc
         self.output_folder = output_folder
@@ -5681,19 +5735,39 @@ class LeadGenerationPipeline:
         except Exception as _spe_i:
             self._log(f"   [SerpAPI/preflight] check failed: {_spe_i}")
 
-        # 2026-06-01: global per-run SerpAPI call budget (industry-mode parity).
+        # 2026-06-09: RUN-WIDE SerpAPI budget (shared across every SerpApiClient
+        # instance via the common _counter). credit-saving (default) caps spend
+        # at ~max_leads×14 calls; regular mode is generous but still bounded so
+        # one run can't drain the whole key. Always bounded by live balance so a
+        # reserve survives for future runs.
         try:
-            _serp_live_i = int(getattr(self.serpapi, "total_remaining_searches", lambda: 0)())
-            if _serp_live_i <= 0:
-                _serp_budget_i = 0
+            # In city mode the wrapper already set a run-wide budget BEFORE
+            # discovery — never overwrite it (each enrich round must keep the
+            # same shared cap, not reset it). Only compute here when unset
+            # (industry mode / standalone).
+            _existing_budget = int(self._api_counter.get("serpapi_budget", 0) or 0)
+            if _existing_budget > 0:
+                self.serpapi._call_budget = _existing_budget
             else:
-                _res_i = min(40, _serp_live_i // 3)
-                _serp_budget_i = max(8, min(_serp_live_i - _res_i,
-                                            max(20, int(self.max_leads or 0) * 6)))
-            self.serpapi._call_budget = int(_serp_budget_i)
-            self.serpapi._calls_used = 0
-            self._log(f"   [SerpAPI] per-run call budget = {_serp_budget_i} "
-                      f"(live balance {_serp_live_i})")
+                _serp_live_i = int(getattr(self.serpapi, "total_remaining_searches", lambda: 0)())
+                _ml_i = max(1, int(self.max_leads or 0))
+                if _serp_live_i <= 0:
+                    _serp_budget_i = 0
+                else:
+                    _res_i = min(40, _serp_live_i // 3)   # keep a reserve for next runs
+                    if self.credit_saver:
+                        _target_i = max(12, _ml_i * 14)     # ≈14 calls/lead, hard cap
+                    else:
+                        _target_i = max(60, _ml_i * 80)     # regular: thorough
+                    _serp_budget_i = max(8, min(_serp_live_i - _res_i, _target_i))
+                self.serpapi._call_budget = int(_serp_budget_i)
+                self.serpapi._calls_used = 0
+                # Shared budget — the canonical one every instance/method honours.
+                self._api_counter["serpapi_budget"] = int(_serp_budget_i)
+                self._api_counter["serpapi_budget_warned"] = False
+                self._log(f"   [SerpAPI] run-wide budget = {_serp_budget_i} calls "
+                          f"({'credit-saver' if self.credit_saver else 'regular'}, "
+                          f"max_leads={_ml_i}, live balance {_serp_live_i})")
         except Exception as _sbe_i:
             self._log(f"   [SerpAPI] budget set failed ({_sbe_i})")
 
@@ -12192,6 +12266,7 @@ def main_web():
         enrichment = bool(data.get("enrichment", True))
         # 2026-06-08: "SerpAPI only" toggle — when True, bypass SEMrush entirely.
         disable_semrush = bool(data.get("disable_semrush", data.get("serp_only", False)))
+        credit_saver = bool(data.get("credit_saver", True))
         if not industry:
             return jsonify({"error": "Industry is required"}), 400
         job_id = str(_uuid.uuid4())[:8]
@@ -12227,6 +12302,7 @@ def main_web():
             min_cpc=min_cpc, output_folder=output_folder,
             progress_callback=progress_cb, log_callback=log_cb, max_leads=max_leads,
             enrichment_enabled=enrichment, disable_semrush=disable_semrush,
+            credit_saver=credit_saver,
         )
         job.pipeline = pipeline
 
@@ -12405,6 +12481,7 @@ def main_web():
         country = data.get("country", "AU")
         # 2026-06-08: "SerpAPI only" toggle — when True, bypass SEMrush entirely.
         disable_semrush = bool(data.get("disable_semrush", data.get("serp_only", False)))
+        credit_saver = bool(data.get("credit_saver", True))
         if max_leads <= 0:
             return jsonify({"error": "Max Leads must be > 0 in City Mode"}), 400
 
@@ -12444,6 +12521,7 @@ def main_web():
             enrichment_enabled=enrichment, country=country,
             progress_callback=progress_cb, log_callback=log_cb,
             disable_semrush=disable_semrush,
+            credit_saver=credit_saver,
         )
         job.pipeline = pipeline
 

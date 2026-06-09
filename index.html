@@ -3015,6 +3015,10 @@ function App(){
   // 2026-06-08: "SerpAPI only" toggle. false = SerpAPI + SEMrush (default,
   // preserves current behaviour); true = bypass SEMrush entirely this run.
   const [serpOnly,setSerpOnly]=useState(false);
+  // 2026-06-09: Regular (thorough) SerpAPI mode. DEFAULT OFF → the app runs in
+  // credit-saving mode (run-wide SerpAPI cap ≈14 calls/lead). Toggle ON to
+  // restore the old thorough behaviour (many more SerpAPI credits per lead).
+  const [regularMode,setRegularMode]=useState(false);
   // Phase 2 (2026-05-06): default the server URL to current origin so the
   // SPA works wherever it's hosted (Railway, local dev, etc.). The user can
   // still override it in the Sidebar field.
@@ -3134,6 +3138,7 @@ function App(){
       max_leads:parseInt(maxLeads)||0,
       enrichment:enrich,country:'AU',n_workers:parseInt(nWorkers)||4,
       disable_semrush:serpOnly,
+      credit_saver:!regularMode,
     }:{
       industry:industry,
       // indCountry is already a backend code (AU/USA/UK/India).
@@ -3143,6 +3148,7 @@ function App(){
       max_leads:parseInt(maxLeads)||0,
       enrichment:enrich,
       disable_semrush:serpOnly,
+      credit_saver:!regularMode,
     };
     let jobId='';
     try{
@@ -3394,6 +3400,18 @@ function App(){
         credit numbers already appear in the Generate view's credit panel. */}
 
     {!drawerOpen&&<LiveActivityFeed/>}
+    {/* 2026-06-09: bottom-of-page SerpAPI mode toggle. Default OFF = credit-
+        saving mode (run-wide SerpAPI cap ≈14 calls/lead). ON = regular thorough
+        mode (uses many more SerpAPI credits, the old behaviour). */}
+    <div style={{position:'fixed',left:0,right:0,bottom:0,zIndex:300,display:'flex',
+                 alignItems:'center',justifyContent:'center',gap:12,padding:'7px 14px',
+                 background:'var(--sf)',borderTop:'1px solid var(--bd)',fontSize:11,
+                 color:'var(--t2)',fontFamily:'var(--mono)'}}>
+      <span style={{letterSpacing:'1px',textTransform:'uppercase',color:'var(--t3)'}}>SerpAPI mode</span>
+      <span style={{color:!regularMode?'var(--green)':'var(--t3)',fontWeight:!regularMode?700:400}}>Credit-saving (~5–15/lead)</span>
+      <div className={'tog '+(regularMode?'on':'off')} style={{transform:'scale(0.8)'}} onClick={()=>setRegularMode(v=>!v)}><div className="tog-k"></div></div>
+      <span style={{color:regularMode?'var(--amber)':'var(--t3)',fontWeight:regularMode?700:400}}>Regular / thorough (more credits)</span>
+    </div>
     {toast&&<div className="toast"><div className="toast-ic">✓</div><div><div className="toast-title">{toast.t}</div><div className="toast-msg">{toast.m}</div></div></div>}
   </>);
 }
