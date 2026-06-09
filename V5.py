@@ -10446,6 +10446,29 @@ class LeadGenerationPipeline:
         except Exception as _se:
             self._log(f"   V5.33 Sector filter failed (keeping all leads): {_se}")
 
+        # ── 2026-06-09: FINAL paid-first OUTPUT ordering (user request) ──────
+        # After every filter, sort the output so CONFIRMED PAID advertisers sit
+        # at the TOP of the CSV + frontend table. When you spot-check the first
+        # rows you get paid-traffic leads first: heavy Search advertisers (the
+        # ones Ahrefs/SEMrush reliably show paid>0) → single Search ads → ATC-
+        # confirmed → unverified last. Stable sort: preserves the sector/DM/score
+        # order within each tier (digital-marketing already excluded above).
+        # Master-dedup below only REMOVES rows, so this order reaches the CSV.
+        try:
+            self.leads.sort(key=lambda ld: self._advertiser_tier(ld), reverse=True)
+            _tt = {}
+            for _ld in self.leads:
+                _k = self._advertiser_tier(_ld)
+                _tt[_k] = _tt.get(_k, 0) + 1
+            self._log(
+                f"   [Paid-first OUTPUT] rows ordered paid-first → "
+                f"heavy-Search={_tt.get(3,0)}, Search={_tt.get(2,0)}, "
+                f"ATC/other-paid={_tt.get(1,0)}, unverified={_tt.get(0,0)} "
+                f"(top rows = strongest paid-traffic evidence)"
+            )
+        except Exception as _pfe:
+            self._log(f"   [Paid-first OUTPUT] sort skipped: {_pfe}")
+
         # ── Phase 2: Master-DB dedup filter ─────────────────────────────────
         # Drop any lead whose (normalized_name, root_domain) is already present
         # in master_leads. Leaves the actual INSERT to the caller (wsgi.py) so
