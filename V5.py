@@ -6827,8 +6827,17 @@ class LeadGenerationPipeline:
 
             co_name = ld.get("company") or company_name or domain
 
-            # Layer A: SerpAPI LinkedIn-targeted name lookup (no export credits used)
-            if self.serpapi._available:
+            # Layer A: SerpAPI LinkedIn-targeted name lookup (SerpAPI search credits).
+            # 2026-06-09: soft per-run cap so a small-max_leads run doesn't burn
+            # SerpAPI resolving names for the many extra candidates it discovers
+            # then discards (was 26 lookups for a 1-lead run). Layer B (FREE
+            # Apollo) still runs for any lead skipped here, so the full-name
+            # policy is preserved — we just stop paying to name leads we drop.
+            _name_budget = (max(15, int(self.max_leads) * 6)
+                            if int(self.max_leads or 0) > 0 else 10**9)
+            _name_used = getattr(self, "_serp_name_calls", 0)
+            if self.serpapi._available and _name_used < _name_budget:
+                self._serp_name_calls = _name_used + 1
                 linkedin_name = self.serpapi.find_person_on_linkedin(name_str, co_name)
                 if linkedin_name and " " in linkedin_name:
                     ld["name"] = linkedin_name

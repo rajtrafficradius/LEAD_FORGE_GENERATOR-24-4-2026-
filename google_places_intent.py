@@ -267,7 +267,9 @@ class GooglePlacesIntentDiscovery:
         downstream loop in `discover()` unchanged and any future revert to
         the legacy endpoint trivial.
         """
-        if self.calls_made >= MAX_PLACES_CALLS:
+        # 2026-06-09: once the daily Places quota is exhausted, EVERY further
+        # call returns 429 — stop hammering it (was 22 wasted 429s + delay).
+        if self.calls_made >= MAX_PLACES_CALLS or getattr(self, "_quota_exhausted", False):
             return []
         body = {
             "textQuery":  query,
@@ -303,6 +305,11 @@ class GooglePlacesIntentDiscovery:
             self._log(
                 f"[GooglePlaces] textsearch HTTP {resp.status_code} for {query!r}: {_err_body}"
             )
+            # Daily quota exhausted (429) → trip the breaker so the remaining
+            # queries in this sweep are skipped instead of all 429-ing.
+            if resp.status_code == 429 or "exhausted" in (_err_body or "").lower() or "quota" in (_err_body or "").lower():
+                self._quota_exhausted = True
+                self._log("[GooglePlaces] quota exhausted — skipping remaining text-search queries this run")
             return []
         try:
             data = resp.json() or {}

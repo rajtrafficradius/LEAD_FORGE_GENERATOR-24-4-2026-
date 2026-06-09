@@ -995,7 +995,28 @@ class CityLeadPipeline:
                 # which is already populated by Phase 1+2 of the host run.
                 _gp_cities = list(self._cities_to_search or [])
                 _gp_kw_n = 15 if mode == DiscoveryMode.GOOGLE_ONLY else 5
-                _gp_kws = list(keywords or [])[:_gp_kw_n]
+                # 2026-06-09: SMART KEYWORD POOL. The Google Places sweep is what
+                # picks which businesses we discover; generic travel/hospitality
+                # keywords (e.g. "booking ...") return big-brand HOTELS/airlines —
+                # which DO advertise (so they pass the paid gate) but are useless
+                # B2B leads and read ~0 paid_traffic on the user's own domain
+                # checks. We drop those terms so Places returns local SERVICE
+                # SMBs (the high-lead-probability pool). Trade keywords never
+                # contain these words, so this is safe. Toggle: SMART_KEYWORDS=0.
+                _smart_kw = str(os.environ.get("SMART_KEYWORDS", "1")).strip() != "0"
+                _low_yield_terms = (
+                    "booking", "hotel", "motel", "hostel", "resort", "accommodation",
+                    "flight", "airline", "airfare", "cruise", "lastminute",
+                    "travel agency", "travel agent", "holiday package", "tour package",
+                )
+                def _kw_high_yield(k: str) -> bool:
+                    kl = (k or "").lower()
+                    return not any(t in kl for t in _low_yield_terms)
+                _kw_pool = ([k for k in (keywords or []) if _kw_high_yield(k)]
+                            if _smart_kw else list(keywords or []))
+                if not _kw_pool:                       # never let the filter zero it out
+                    _kw_pool = list(keywords or [])
+                _gp_kws = _kw_pool[:_gp_kw_n]
                 _gp_client = GooglePlacesIntentDiscovery(
                     api_key=_gp_key,
                     is_platform_domain=V5mod.is_platform_domain,

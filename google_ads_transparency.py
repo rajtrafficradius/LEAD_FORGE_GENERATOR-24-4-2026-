@@ -141,6 +141,12 @@ class AdsTransparencyVerifier:
         self._log = log_fn or (lambda m: log.info(m))
         self.calls_made = 0
         self.available = True
+        # 2026-06-09: circuit breaker. ATC's free endpoint rate-limits hard
+        # (HTTP 429). Before this, a run would hammer 30-120 names all getting
+        # 429 — ~2 min wasted + 0 confirmations. After N consecutive 429s we
+        # disable ATC for the rest of the run (it's not coming back this run).
+        self._consec_429 = 0
+        self._max_consec_429 = 6
         self._min_interval = float(min_interval)
         self._last_call = 0.0
         self._cache: Dict[str, Optional[dict]] = {}
@@ -170,6 +176,9 @@ class AdsTransparencyVerifier:
         q = (query or "").strip()
         if not q:
             return []
+        # Circuit-broken for this run (too many 429s) — skip silently, no HTTP.
+        if not self.available:
+            return []
         self._rate_limit()
         body = {"f.req": json.dumps({"1": q, "2": self.region}, separators=(",", ":"))}
         try:
@@ -181,7 +190,17 @@ class AdsTransparencyVerifier:
         self.calls_made += 1
         if r.status_code != 200:
             self._log(f"[ATC] suggestions HTTP {r.status_code} for {q!r}")
+            if r.status_code == 429:
+                self._consec_429 += 1
+                if self._consec_429 >= self._max_consec_429:
+                    self.available = False
+                    self._log(
+                        f"[ATC] disabled for the rest of this run after "
+                        f"{self._consec_429} consecutive 429s (rate-limited)"
+                    )
             return []
+        # Success → reset the 429 streak.
+        self._consec_429 = 0
         try:
             data = r.json() or {}
         except Exception:
