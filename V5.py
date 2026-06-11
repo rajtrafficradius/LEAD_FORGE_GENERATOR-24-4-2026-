@@ -5134,11 +5134,16 @@ class LeadGenerationPipeline:
         # to ~max_leads×14 calls. False = "regular" thorough mode (generous
         # budget) — the UI toggle, default OFF, flips this to False.
         credit_saver: bool = True,
+        # 2026-06-11: "paid only — keep all confirmed advertisers" mode. When True,
+        # the export keeps EVERY confirmed advertiser (tier>=1) with no max_leads
+        # ceiling and drops unverified leads. Max Leads becomes the floor/target.
+        paid_only_all: bool = False,
     ):
         self.industry = industry
         self.country = country
         self.disable_semrush = bool(disable_semrush)
         self.credit_saver = bool(credit_saver)
+        self.paid_only_all = bool(paid_only_all) or str(os.environ.get("PAID_ONLY_ALL", "0")).strip() == "1"
         self.min_volume = min_volume
         self.min_cpc = min_cpc
         self.output_folder = output_folder
@@ -9188,6 +9193,22 @@ class LeadGenerationPipeline:
             f"— top {self.max_leads or 'all'} kept paid-first"
         )
 
+        # 2026-06-11: PAID-ONLY mode — export EVERY confirmed advertiser (tier>=1)
+        # and nothing else, with NO max_leads ceiling. Max Leads becomes the floor
+        # (it drives how many rediscovery rounds run); within those rounds we keep
+        # all confirmed-paid leads instead of slicing to the target and padding
+        # with unverified ones. So a max_leads=10 run that surfaces 40 confirmed
+        # advertisers exports all 40, and zero non-confirmed leads.
+        if getattr(self, "paid_only_all", False):
+            _conf = [k for k in kept if self._advertiser_tier(k) >= 1]
+            self._log(
+                f"   Phase 5f PAID-ONLY: kept ALL {len(_conf)} confirmed advertisers "
+                f"of {len(kept)} DM leads (dropped {len(kept) - len(_conf)} unverified); "
+                f"no max_leads cap, no unverified padding"
+            )
+            self.leads = _conf
+            return
+
         if not getattr(self, "quota_guarantee", False):
             # Fill quota from overflow (up to 3rd lead per company) if needed.
             if (self.max_leads and self.max_leads > 0
@@ -10354,7 +10375,16 @@ class LeadGenerationPipeline:
         )
 
         quota_export_reserve = []
-        if getattr(self, "quota_guarantee", False) and self.max_leads > 0:
+        if getattr(self, "paid_only_all", False):
+            # PAID-ONLY: keep EVERY confirmed advertiser (tier>=1), drop unverified,
+            # ignore the max_leads ceiling entirely.
+            _before_po = len(merged_sections)
+            self.leads = [ld for ld in merged_sections if self._advertiser_tier(ld) >= 1]
+            self._log(
+                f"   Phase 6 PAID-ONLY: exporting all {len(self.leads)} confirmed "
+                f"advertisers (dropped {_before_po - len(self.leads)} unverified); no cap"
+            )
+        elif getattr(self, "quota_guarantee", False) and self.max_leads > 0:
             self.leads = merged_sections[:self.max_leads]
             quota_export_reserve = merged_sections[self.max_leads:]
         else:
@@ -10881,8 +10911,14 @@ class LeadGenerationPipeline:
             _t4 = [ld for ld in self.leads if _has_full_name(ld) and ld.get("phone") and not ld.get("email") and not ld.get("role")]
             _t5 = [ld for ld in self.leads if not _has_full_name(ld) and ld.get("phone")]
             _t6 = [ld for ld in self.leads if not ld.get("phone")]
-            top_leads = (_t1 + _t2 + _t3 + _t4 + _t5 + _t6)[:self.max_leads]
-            top_filename = f"leads_TOP_{self.max_leads}_{industry_slug}_{self.country}_{timestamp}.csv"
+            _ordered = (_t1 + _t2 + _t3 + _t4 + _t5 + _t6)
+            # PAID-ONLY: export ALL confirmed leads (no max_leads slice).
+            if getattr(self, "paid_only_all", False):
+                top_leads = _ordered
+                top_filename = f"leads_TOP_{len(top_leads)}_{industry_slug}_{self.country}_{timestamp}.csv"
+            else:
+                top_leads = _ordered[:self.max_leads]
+                top_filename = f"leads_TOP_{self.max_leads}_{industry_slug}_{self.country}_{timestamp}.csv"
         else:
             top_leads = self.leads
             top_filename = f"leads_TOP_all_{industry_slug}_{self.country}_{timestamp}.csv"
@@ -12301,6 +12337,7 @@ def main_web():
         # 2026-06-08: "SerpAPI only" toggle — when True, bypass SEMrush entirely.
         disable_semrush = bool(data.get("disable_semrush", data.get("serp_only", False)))
         credit_saver = bool(data.get("credit_saver", True))
+        paid_only_all = bool(data.get("paid_only_all", False))
         if not industry:
             return jsonify({"error": "Industry is required"}), 400
         job_id = str(_uuid.uuid4())[:8]
@@ -12337,6 +12374,7 @@ def main_web():
             progress_callback=progress_cb, log_callback=log_cb, max_leads=max_leads,
             enrichment_enabled=enrichment, disable_semrush=disable_semrush,
             credit_saver=credit_saver,
+            paid_only_all=paid_only_all,
         )
         job.pipeline = pipeline
 
@@ -12516,6 +12554,7 @@ def main_web():
         # 2026-06-08: "SerpAPI only" toggle — when True, bypass SEMrush entirely.
         disable_semrush = bool(data.get("disable_semrush", data.get("serp_only", False)))
         credit_saver = bool(data.get("credit_saver", True))
+        paid_only_all = bool(data.get("paid_only_all", False))
         if max_leads <= 0:
             return jsonify({"error": "Max Leads must be > 0 in City Mode"}), 400
 
@@ -12556,6 +12595,7 @@ def main_web():
             progress_callback=progress_cb, log_callback=log_cb,
             disable_semrush=disable_semrush,
             credit_saver=credit_saver,
+            paid_only_all=paid_only_all,
         )
         job.pipeline = pipeline
 

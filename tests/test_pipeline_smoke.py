@@ -372,6 +372,33 @@ class TestSerpApiBudget(unittest.TestCase):
             self.assertGreater(regular, saver)
 
 
+class TestPaidOnlyMode(unittest.TestCase):
+    """2026-06-11: 'paid only — keep all confirmed advertisers' wiring."""
+
+    def test_frontend_toggle_wired(self):
+        html = (_ROOT / "index.html").read_text(encoding="utf-8")
+        self.assertIn("paid_only_all:paidOnly", html)   # sent in /generate payload
+        self.assertIn("setPaidOnly", html)              # toggle state
+        self.assertIn("Paid only", html)                # label
+
+    def test_pipeline_branches_exist(self):
+        src = (_ROOT / "V5.py").read_text(encoding="utf-8")
+        # the two un-capped export branches
+        self.assertIn("Phase 5f PAID-ONLY", src)
+        self.assertIn("Phase 6 PAID-ONLY", src)
+        # tier>=1 filter = confirmed advertisers only
+        self.assertIn("self._advertiser_tier(ld) >= 1", src)
+        # env fallback
+        self.assertIn('PAID_ONLY_ALL', src)
+
+    def test_threaded_through_deployed_app(self):
+        wsgi = (_ROOT / "wsgi.py").read_text(encoding="utf-8")
+        self.assertIn("paid_only_all = bool(data.get", wsgi)
+        self.assertIn("paid_only_all=paid_only_all", wsgi)
+        city = (_ROOT / "city_pipeline.py").read_text(encoding="utf-8")
+        self.assertIn("paid_only_all=self.paid_only_all", city)
+
+
 if __name__ == "__main__":
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
@@ -382,6 +409,7 @@ if __name__ == "__main__":
         TestNoRegression,
         TestCostAndSemrushToggle,
         TestSerpApiBudget,
+        TestPaidOnlyMode,
     ):
         suite.addTests(loader.loadTestsFromTestCase(cls))
     result = unittest.TextTestRunner(verbosity=2).run(suite)

@@ -858,6 +858,8 @@ def generate():
         # 2026-06-09: credit-saving mode ON by default; UI "Regular mode" toggle
         # sends credit_saver=false to run the thorough (more-credits) path.
         credit_saver = bool(data.get("credit_saver", True))
+        # 2026-06-11: "paid only — keep all confirmed advertisers" (Max Leads = floor).
+        paid_only_all = bool(data.get("paid_only_all", False))
         if not industry:
             return jsonify({"error": "Industry is required"}), 400
 
@@ -903,6 +905,7 @@ def generate():
             max_leads=max_leads, enrichment_enabled=enrichment,
             lead_pool=lead_pool, disable_semrush=disable_semrush,
             credit_saver=credit_saver,
+            paid_only_all=paid_only_all,
         )
         job.pipeline = pipeline
 
@@ -1058,6 +1061,8 @@ def generate_city():
         # 2026-06-09: credit-saving mode ON by default; UI "Regular mode" toggle
         # sends credit_saver=false to run the thorough (more-credits) path.
         credit_saver = bool(data.get("credit_saver", True))
+        # 2026-06-11: "paid only — keep all confirmed advertisers" (Max Leads = floor).
+        paid_only_all = bool(data.get("paid_only_all", False))
 
         if max_leads <= 0:
             return jsonify({"error": "Max Leads must be > 0 in City Mode"}), 400
@@ -1102,6 +1107,7 @@ def generate_city():
             progress_callback=progress_cb, log_callback=log_cb,
             disable_semrush=disable_semrush,
             credit_saver=credit_saver,
+            paid_only_all=paid_only_all,
         )
         job.pipeline = pipeline
 

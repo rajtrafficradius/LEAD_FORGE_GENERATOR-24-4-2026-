@@ -79,6 +79,7 @@ class CityLeadPipeline:
         log_callback=None,
         disable_semrush: bool = False,
         credit_saver: bool = True,
+        paid_only_all: bool = False,
     ):
         self.state_code = (state_code or "AUSTRALIA").upper()
         self.tier = (tier or "all").lower()
@@ -93,6 +94,8 @@ class CityLeadPipeline:
         self.disable_semrush = bool(disable_semrush)
         # 2026-06-09: credit-saving mode (DEFAULT) — run-wide SerpAPI cap.
         self.credit_saver = bool(credit_saver)
+        # 2026-06-11: paid-only mode — export ALL confirmed advertisers, no cap.
+        self.paid_only_all = bool(paid_only_all) or str(os.environ.get("PAID_ONLY_ALL", "0")).strip() == "1"
         self.progress_callback = progress_callback or (lambda *a: None)
         self.log_callback = log_callback or (lambda *a: None)
         self._cancelled = False
@@ -1544,6 +1547,7 @@ class CityLeadPipeline:
             enrichment_enabled=self.enrichment_enabled,
             disable_semrush=self.disable_semrush,
             credit_saver=self.credit_saver,
+            paid_only_all=self.paid_only_all,
             preset_keywords=keywords,
             preset_domains=domains,
             confirmed_paid_domains=self._confirmed_paid,
@@ -1854,6 +1858,7 @@ class CityLeadPipeline:
             quota_guarantee=self.quota_guarantee,
             disable_semrush=self.disable_semrush,
             credit_saver=self.credit_saver,
+            paid_only_all=self.paid_only_all,
             # 2026-06-02 (CRITICAL): the FINAL CSV selection happens here, in
             # this host's Phase 6. Without the advertiser sets, host._advertiser_tier
             # saw EMPTY sets → every lead tier 0 → paid-first ordering was a

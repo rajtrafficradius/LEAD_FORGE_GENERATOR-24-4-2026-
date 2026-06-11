@@ -3019,6 +3019,9 @@ function App(){
   // credit-saving mode (run-wide SerpAPI cap ≈14 calls/lead). Toggle ON to
   // restore the old thorough behaviour (many more SerpAPI credits per lead).
   const [regularMode,setRegularMode]=useState(false);
+  // 2026-06-11: "Paid only" — export EVERY confirmed advertiser (no Max-Leads
+  // cap, Max Leads becomes the floor); drops unverified leads. Default OFF.
+  const [paidOnly,setPaidOnly]=useState(false);
   // Phase 2 (2026-05-06): default the server URL to current origin so the
   // SPA works wherever it's hosted (Railway, local dev, etc.). The user can
   // still override it in the Sidebar field.
@@ -3139,6 +3142,7 @@ function App(){
       enrichment:enrich,country:'AU',n_workers:parseInt(nWorkers)||4,
       disable_semrush:serpOnly,
       credit_saver:!regularMode,
+      paid_only_all:paidOnly,
     }:{
       industry:industry,
       // indCountry is already a backend code (AU/USA/UK/India).
@@ -3149,6 +3153,7 @@ function App(){
       enrichment:enrich,
       disable_semrush:serpOnly,
       credit_saver:!regularMode,
+      paid_only_all:paidOnly,
     };
     let jobId='';
     try{
@@ -3411,6 +3416,10 @@ function App(){
       <span style={{color:!regularMode?'var(--green)':'var(--t3)',fontWeight:!regularMode?700:400}}>Credit-saving (~5–15/lead)</span>
       <div className={'tog '+(regularMode?'on':'off')} style={{transform:'scale(0.8)'}} onClick={()=>setRegularMode(v=>!v)}><div className="tog-k"></div></div>
       <span style={{color:regularMode?'var(--amber)':'var(--t3)',fontWeight:regularMode?700:400}}>Regular / thorough (more credits)</span>
+      <span style={{margin:'0 6px',color:'var(--bd)'}}>|</span>
+      <span style={{letterSpacing:'1px',textTransform:'uppercase',color:'var(--t3)'}}>Paid only</span>
+      <div className={'tog '+(paidOnly?'on':'off')} style={{transform:'scale(0.8)'}} onClick={()=>setPaidOnly(v=>!v)} title="Export ALL confirmed advertisers (no Max-Leads cap); drop unverified"><div className="tog-k"></div></div>
+      <span style={{color:paidOnly?'var(--green)':'var(--t3)',fontWeight:paidOnly?700:400}}>{paidOnly?'all confirmed advertisers (Max Leads = floor)':'off (respect Max Leads)'}</span>
     </div>
     {toast&&<div className="toast"><div className="toast-ic">✓</div><div><div className="toast-title">{toast.t}</div><div className="toast-msg">{toast.m}</div></div></div>}
   </>);
