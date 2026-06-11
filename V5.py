@@ -8014,8 +8014,16 @@ class LeadGenerationPipeline:
                 f"tiny={_topup_tiny}, used={_topup_used}/{_topup_budget})"
             )
 
-        # Supplement with SerpApi if needed (different query per round)
-        if len(new_domains) < max_new and self.serpapi._available:
+        # Supplement with SerpApi ORGANIC search if needed (different query/round).
+        # 2026-06-09 WASTE FIX: every domain found here is admitted ONLY if
+        # `self.semrush.has_paid_traffic()` confirms it — but in GOOGLE_ONLY /
+        # "SerpAPI-only" mode SEMrush is disabled, so that check returns False for
+        # ALL of them → this block spent SerpAPI organic searches and added ZERO
+        # domains. Skip it entirely when SEMrush can't validate (it's dead weight
+        # there); the ads-only sweep (PASS 2a) is the paid source in that mode.
+        _semrush_can_validate = not getattr(self.semrush, "_disabled", False)
+        if (len(new_domains) < max_new and self.serpapi._available
+                and _semrush_can_validate):
             serp_queries = [
                 f"best {self.industry} {self.config['location_suffix']}",
                 f"top {self.industry} companies {self.config['location_suffix']}",
@@ -8915,8 +8923,11 @@ class LeadGenerationPipeline:
             except Exception:
                 role = ""
 
-            # 2) SerpAPI LinkedIn lookup
-            if (not role) and getattr(self, "serpapi", None) and self.serpapi._available:
+            # 2) SerpAPI LinkedIn lookup — only when enrichment is ON. With
+            # enrichment OFF the run is meant to skip credit-spending recovery
+            # passes (the Apollo role above is the free fallback); this stops
+            # SerpAPI being spent on roles during credit-saving/enrichment-OFF runs.
+            if (not role) and self.enrichment_enabled and getattr(self, "serpapi", None) and self.serpapi._available:
                 try:
                     role = self.serpapi.find_person_role(name, company, domain) or ""
                     if role:
