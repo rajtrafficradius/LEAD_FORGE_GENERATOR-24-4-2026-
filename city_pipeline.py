@@ -246,10 +246,10 @@ class CityLeadPipeline:
             self._log(f"[City Mode] Round {round_num}: +{len(new_domains)} competitor domains to enrich")
             self._competitor_rounds += 1
             self._competitor_domains_added += len(new_domains)
-            # Competitor domains come from SEMrush domain_adwords_adwords (paid
-            # competitors first) — treat them as confirmed paid advertisers so
-            # the strict gate doesn't strip them in the inner pipeline.
-            self._confirmed_paid.update((d or "").lower() for d in new_domains if d)
+            # 2026-06-12: confirmed-paid marking now happens INSIDE
+            # _find_competitors and only for domain_adwords_adwords results.
+            # The old blanket update here also branded ORGANIC-fallback
+            # competitors as confirmed advertisers (synthetic paid_traffic=1).
             round_leads = self._enrich_round(V5mod, all_keywords, new_domains, round_num=round_num)
             if round_leads:
                 self.leads.extend(round_leads)
@@ -312,7 +312,15 @@ class CityLeadPipeline:
                 self._log(f"[City Mode] Rediscovery {rediscovery_phase}: 0 new domains found — trying next slice")
                 continue
             self._log(f"[City Mode] Rediscovery {rediscovery_phase}: +{len(extra_new)} fresh domains to enrich")
-            self._confirmed_paid.update((d or "").lower() for d in extra_new if d)
+            # 2026-06-12 CRITICAL FIX: the line that used to live here —
+            #   self._confirmed_paid.update(extra_new)
+            # branded EVERY rediscovered domain (Places/Apollo/organic-SERP
+            # included) as a confirmed paid advertiser, giving each a
+            # synthetic paid_traffic=1 in the inner pipeline. Result: runs
+            # where 119/227 leads were 'paid_ok' while a manual ATC check
+            # showed only ~6 real advertisers. _discover_domains already
+            # accumulates the GENUINELY confirmed pools into _confirmed_paid
+            # (SEMrush phrase_adwords, SerpAPI ads[], ATC) — nothing to add.
             round_num += 1
             extra_leads = self._enrich_round(V5mod, all_keywords, extra_new, round_num=round_num)
             if extra_leads:
@@ -323,6 +331,21 @@ class CityLeadPipeline:
         # export logic. We reuse a temporary inner pipeline purely for the
         # Phase 6 sorter + writer so the user's output has every run's leads.
         out_path = self._export_combined(V5mod)
+        # 2026-06-12: RUN-WIDE API totals. The per-round V5 summaries only
+        # show that round's counters, and the combined-export pseudo-pipeline
+        # prints zeros (it makes no API calls) — which read as "0 calls" in
+        # the archived log. This line is the cumulative truth for the run.
+        try:
+            _c = self._api_counter or {}
+            _tot = {k: v for k, v in sorted(_c.items())
+                    if isinstance(v, (int, float)) and not k.endswith(("_budget", "_warned"))
+                    and not k.startswith("semrush_units")}
+            self._log(
+                "[City Mode] RUN-WIDE API totals (all rounds + rediscovery): "
+                + ", ".join(f"{k}={int(v)}" for k, v in _tot.items() if v)
+            )
+        except Exception:
+            pass
         self._progress(100, f"Done! {len(self.leads)} leads exported")
         return out_path
 
@@ -1253,6 +1276,13 @@ class CityLeadPipeline:
                     f"{len(_atc_in_pool)} CONFIRMED Google advertisers via Ads "
                     f"Transparency Center ({_atc.calls_made if _atc else 0} ATC lookups)"
                 )
+                # 2026-06-12: stash names + the ATC client (cache, 429 state)
+                # for the universal ATC sweep below / later rediscovery rounds.
+                if not isinstance(getattr(self, "_domain_names", None), dict):
+                    self._domain_names = {}
+                self._domain_names.update(_gp_client.domain_to_name or {})
+                if _atc is not None:
+                    self._atc_client = _atc
             elif not _gp_key:
                 # Silent skip — Google Places is optional; absence is fine.
                 pass
@@ -1412,6 +1442,57 @@ class CityLeadPipeline:
             self._serp_ads_domains = set()
         self._serp_ads_domains.update(d for d in pool_serp_ads if d)
         self._confirmed_paid.update(d for d in pool_serp_ads if d)
+
+        # ── PASS 6 (2026-06-12): universal FREE ATC sweep ────────────────────
+        # Until now only Google-Places domains were ATC-verified (the verifier
+        # is keyed by Places displayName). Apollo-org and SerpAPI-organic/CSE
+        # domains were NEVER checked — exactly the gap behind the run where a
+        # manual ATC check found 6 real advertisers among 54 logged domains
+        # that the pipeline had treated as unverified (or worse, synthetic-
+        # paid). ATC is free, so sweep EVERY discovered domain that isn't
+        # already confirmed, using the new domain-first lookup (works without
+        # a business name). Hits join _confirmed_paid + _atc_only_domains so
+        # they (a) pass the paid gate legitimately, (b) rank tier>=1, and
+        # (c) ALL survive to the CSV in paid-only keep-all mode.
+        if str(os.environ.get("ATC_ENABLED", "1")).strip() != "0" and not self._cancelled:
+            try:
+                _sweep_atc = getattr(self, "_atc_client", None)
+                if _sweep_atc is None:
+                    from google_ads_transparency import AdsTransparencyVerifier
+                    _sweep_atc = AdsTransparencyVerifier(country=self.country, log_fn=self._log)
+                    self._atc_client = _sweep_atc
+                _names_map = getattr(self, "_domain_names", {}) or {}
+                _sweep_cap = int(os.environ.get("ATC_SWEEP_MAX", "300") or "300")
+                _to_check = [d for d in sorted(discovered)
+                             if d and d not in self._confirmed_paid]
+                if not isinstance(getattr(self, "_atc_only_domains", None), set):
+                    self._atc_only_domains = set()
+                if not isinstance(getattr(self, "_atc_advertiser_ids", None), dict):
+                    self._atc_advertiser_ids = {}
+                _sweep_hits = 0
+                _calls_before = _sweep_atc.calls_made
+                for _d in _to_check:
+                    if self._cancelled or not _sweep_atc.available:
+                        break
+                    if (_sweep_atc.calls_made - _calls_before) >= _sweep_cap:
+                        break
+                    _nm = _names_map.get(_d)
+                    _hit = _sweep_atc.is_advertiser_domain(_d, names=(_nm,) if _nm else ())
+                    if _hit:
+                        _sweep_hits += 1
+                        self._confirmed_paid.add(_d)
+                        if _d not in self._serp_ads_domains:
+                            self._atc_only_domains.add(_d)
+                        if _hit.get("advertiser_id"):
+                            self._atc_advertiser_ids[_d] = _hit["advertiser_id"]
+                self._log(
+                    f"   [Discovery/ATC-sweep] verified {len(_to_check)} unconfirmed "
+                    f"domain(s) → +{_sweep_hits} CONFIRMED advertisers "
+                    f"({_sweep_atc.calls_made - _calls_before} free ATC lookups; "
+                    f"total confirmed now {len(self._confirmed_paid)})"
+                )
+            except Exception as _sw_e:
+                self._log(f"   [Discovery/ATC-sweep] failed (non-fatal): {_sw_e}")
         return discovered
 
     def _apollo_org_discovery(self, V5mod, limit_per_call: int = 25) -> set:
@@ -1681,14 +1762,23 @@ class CityLeadPipeline:
 
         new_domains: list = []
         seen_new = set()
+        if not isinstance(getattr(self, "_confirmed_paid", None), set):
+            self._confirmed_paid = set()
         for seed in seeds:
             if self._cancelled or len(new_domains) >= MAX_NEW_DOMAINS_PER_ROUND:
                 break
+            # 2026-06-12: provenance-preserving competitor pull. Only the
+            # domain_adwords_adwords competitors are confirmed advertisers;
+            # the organic fallback used to be fused in and the WHOLE round
+            # got branded confirmed-paid by the caller — non-advertisers
+            # then surfaced with a synthetic paid_traffic=1.
             try:
-                comps = semrush.get_domain_competitors(seed, db, limit=_limit_fc)
+                paid_comps, org_comps = semrush.get_domain_competitors_split(
+                    seed, db, limit=_limit_fc)
             except Exception:
-                comps = []
-            for c in comps or []:
+                paid_comps, org_comps = [], []
+            for c, _is_paid in ([(c, True) for c in paid_comps]
+                                + [(c, False) for c in org_comps]):
                 c = (c or "").strip().lower()
                 if not c or c in visited or c in seen_new:
                     continue
@@ -1696,6 +1786,8 @@ class CityLeadPipeline:
                     continue
                 seen_new.add(c)
                 new_domains.append(c)
+                if _is_paid:
+                    self._confirmed_paid.add(c)
                 if len(new_domains) >= MAX_NEW_DOMAINS_PER_ROUND:
                     break
         return new_domains

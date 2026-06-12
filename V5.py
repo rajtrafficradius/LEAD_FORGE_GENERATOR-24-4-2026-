@@ -3265,11 +3265,14 @@ class SemrushClient:
                     continue
         return results
 
-    def get_domain_competitors(self, domain: str, database: str, limit: int = 5) -> list[str]:
-        """V5.13: Get paid traffic competitors for a domain.
-        Returns list of competitor domain strings.
-        """
-        # Paid competitors
+    def get_domain_competitors_split(self, domain: str, database: str,
+                                     limit: int = 5) -> tuple[list[str], list[str]]:
+        """2026-06-12: provenance-preserving competitor lookup.
+        Returns (paid_competitors, organic_competitors). Only the PAID list
+        (domain_adwords_adwords) may be treated as confirmed advertisers —
+        the organic fallback (domain_organic_organic) is candidate material
+        that must pass its own paid verification. Previously both were fused
+        into one list and the whole thing got branded 'confirmed paid'."""
         text = self._request({
             "type": "domain_adwords_adwords",
             "domain": domain,
@@ -3277,16 +3280,16 @@ class SemrushClient:
             "display_limit": limit,
             "export_columns": "Dn,Ad,At,Ac",
         })
-        competitors = []
-        lines = text.strip().split("\n")
-        for line in lines[1:]:
+        paid: list[str] = []
+        for line in text.strip().split("\n")[1:]:
             parts = line.split(";")
             if parts:
                 d = extract_domain(parts[0].strip())
                 if d and not is_platform_domain(d) and d != domain:
-                    competitors.append(d)
+                    paid.append(d)
+        organic: list[str] = []
         # If paid competitors insufficient, try organic competitors
-        if len(competitors) < limit:
+        if len(paid) < limit:
             org_text = self._request({
                 "type": "domain_organic_organic",
                 "domain": domain,
@@ -3298,9 +3301,17 @@ class SemrushClient:
                 parts = line.split(";")
                 if parts:
                     d = extract_domain(parts[0].strip())
-                    if d and not is_platform_domain(d) and d != domain and d not in competitors:
-                        competitors.append(d)
-        return competitors[:limit]
+                    if d and not is_platform_domain(d) and d != domain and d not in paid:
+                        organic.append(d)
+        return paid[:limit], organic[:max(0, limit - len(paid))]
+
+    def get_domain_competitors(self, domain: str, database: str, limit: int = 5) -> list[str]:
+        """V5.13: Get paid traffic competitors for a domain.
+        Returns list of competitor domain strings (paid first, then organic
+        fallback — see get_domain_competitors_split for provenance).
+        """
+        paid, organic = self.get_domain_competitors_split(domain, database, limit)
+        return (paid + organic)[:limit]
 
 
 class SerpApiClient:
@@ -6133,6 +6144,13 @@ class LeadGenerationPipeline:
                         f"domains ({_gp_client_ind.calls_made} API calls, cap="
                         f"{_GP_MAX_CALLS_IND} calls / {_GP_MAX_DOMAINS_IND} domains)"
                     )
+                    # 2026-06-12: stash names + ATC client for the universal
+                    # ATC sweep after the pool merge (mirrors city_pipeline).
+                    if not isinstance(getattr(self, "_domain_names", None), dict):
+                        self._domain_names = {}
+                    self._domain_names.update(_gp_client_ind.domain_to_name or {})
+                    if _atc_ind is not None:
+                        self._atc_client = _atc_ind
         except Exception as _gp_exc_ind:
             self._log(f"   [Discovery/GooglePlaces] industry-mode failed: {_gp_exc_ind}")
         # Stash separately for downstream Phase 4 + CSV labeling.
@@ -6333,6 +6351,53 @@ class LeadGenerationPipeline:
             + list(cse_supp)
             + list(_gp_industry_domains)
         )
+
+        # ── 2026-06-12: universal FREE ATC sweep (industry mode) ────────────
+        # Mirrors the city_pipeline PASS 6: every pooled domain that isn't
+        # already a confirmed advertiser gets a free domain-first ATC lookup,
+        # so organic/CSE/Places-backfill candidates that DO run Google ads are
+        # confirmed (tier>=1, survive paid-only keep-all) instead of riding
+        # along unverified.
+        if str(os.environ.get("ATC_ENABLED", "1")).strip() != "0" and not self._cancelled:
+            try:
+                _sweep_atc_i = getattr(self, "_atc_client", None)
+                if _sweep_atc_i is None:
+                    from google_ads_transparency import AdsTransparencyVerifier
+                    _sweep_atc_i = AdsTransparencyVerifier(
+                        country=self.country, log_fn=self._log)
+                    self._atc_client = _sweep_atc_i
+                _names_map_i = getattr(self, "_domain_names", {}) or {}
+                _sweep_cap_i = int(os.environ.get("ATC_SWEEP_MAX", "300") or "300")
+                _to_check_i = [d for d in self.domains
+                               if d and d.lower() not in self._confirmed_paid_domains]
+                if not isinstance(getattr(self, "_atc_only_domains", None), set):
+                    self._atc_only_domains = set()
+                _hits_i = 0
+                _calls_before_i = _sweep_atc_i.calls_made
+                for _d in _to_check_i:
+                    if self._cancelled or not _sweep_atc_i.available:
+                        break
+                    if (_sweep_atc_i.calls_made - _calls_before_i) >= _sweep_cap_i:
+                        break
+                    _dl = _d.lower()
+                    _nm_i = _names_map_i.get(_dl)
+                    _hit_i = _sweep_atc_i.is_advertiser_domain(
+                        _dl, names=(_nm_i,) if _nm_i else ())
+                    if _hit_i:
+                        _hits_i += 1
+                        self._confirmed_paid_domains.add(_dl)
+                        if _dl not in getattr(self, "_serp_ads_domains", set()):
+                            self._atc_only_domains.add(_dl)
+                        if _hit_i.get("advertiser_id"):
+                            self._atc_advertiser_ids[_dl] = _hit_i["advertiser_id"]
+                self._log(
+                    f"   [Discovery/ATC-sweep] verified {len(_to_check_i)} unconfirmed "
+                    f"domain(s) → +{_hits_i} CONFIRMED advertisers "
+                    f"({_sweep_atc_i.calls_made - _calls_before_i} free ATC lookups; "
+                    f"total confirmed now {len(self._confirmed_paid_domains)})"
+                )
+            except Exception as _sw_e_i:
+                self._log(f"   [Discovery/ATC-sweep] failed (non-fatal): {_sw_e_i}")
 
         self._organic_fallback_domains = set()  # kept for compat
 
@@ -9208,10 +9273,30 @@ class LeadGenerationPipeline:
         # advertisers exports all 40, and zero non-confirmed leads.
         if getattr(self, "paid_only_all", False):
             _conf = [k for k in kept if self._advertiser_tier(k) >= 1]
+            # 2026-06-12: a confirmed advertiser DOMAIN must never vanish from
+            # the export just because its only contact failed the DM filter
+            # (stub leads from Apollo-0-people domains have no role → DM
+            # priority 0 → previously dropped BEFORE this branch even saw
+            # them). Rescue the best remaining lead per confirmed domain.
+            _have = {(ld.get("domain") or "").strip().lower() for ld in _conf}
+            _rescue_pool = list(overflow) + list(non_dm_leads)
+            _rescue_pool.sort(
+                key=lambda x: (x.get("_dm_priority", 0), x.get("lead_score", 0)),
+                reverse=True,
+            )
+            _rescued = 0
+            for ld in _rescue_pool:
+                d = (ld.get("domain") or "").strip().lower()
+                if not d or d in _have:
+                    continue
+                if self._advertiser_tier(ld) >= 1:
+                    _conf.append(ld)
+                    _have.add(d)
+                    _rescued += 1
             self._log(
-                f"   Phase 5f PAID-ONLY: kept ALL {len(_conf)} confirmed advertisers "
-                f"of {len(kept)} DM leads (dropped {len(kept) - len(_conf)} unverified); "
-                f"no max_leads cap, no unverified padding"
+                f"   Phase 5f PAID-ONLY: kept ALL {len(_conf)} confirmed-advertiser "
+                f"leads ({len(_conf) - _rescued} DM + {_rescued} rescued non-DM/overflow "
+                f"domains) of {len(kept)} DM leads; no max_leads cap, no unverified padding"
             )
             self.leads = _conf
             return
@@ -12344,7 +12429,7 @@ def main_web():
         # 2026-06-08: "SerpAPI only" toggle — when True, bypass SEMrush entirely.
         disable_semrush = bool(data.get("disable_semrush", data.get("serp_only", False)))
         credit_saver = bool(data.get("credit_saver", True))
-        paid_only_all = bool(data.get("paid_only_all", False))
+        paid_only_all = bool(data.get("paid_only_all", True))  # 2026-06-12: default ON
         if not industry:
             return jsonify({"error": "Industry is required"}), 400
         job_id = str(_uuid.uuid4())[:8]
@@ -12561,7 +12646,7 @@ def main_web():
         # 2026-06-08: "SerpAPI only" toggle — when True, bypass SEMrush entirely.
         disable_semrush = bool(data.get("disable_semrush", data.get("serp_only", False)))
         credit_saver = bool(data.get("credit_saver", True))
-        paid_only_all = bool(data.get("paid_only_all", False))
+        paid_only_all = bool(data.get("paid_only_all", True))  # 2026-06-12: default ON
         if max_leads <= 0:
             return jsonify({"error": "Max Leads must be > 0 in City Mode"}), 400
 

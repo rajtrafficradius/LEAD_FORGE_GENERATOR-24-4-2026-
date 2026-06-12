@@ -91,6 +91,130 @@ def _norm_name(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
+_VOCAB: Optional[Set[str]] = None
+
+# Compact builtin vocabulary of words common in AU SMB business names —
+# the keyword bank extends this at runtime (see _load_vocab).
+_BUILTIN_VOCAB = set("""
+the and for all pro plus best top new old big one two
+electric electrical electrician electricians plumb plumber plumbers plumbing
+gas solar air conditioning aircon heating cooling hvac roof roofing roofer
+pest control termite clean cleaning cleaner cleaners build builder builders
+building construction constructions carpentry carpenter joinery cabinet
+landscape landscaping landscaper garden gardening lawn turf concrete
+concreting fence fencing paving tiler tiling paint painting painter painters
+lock locksmith security alarm cctv data cabling antenna appliance appliances
+hot water watts power tech technology connect connection connections wire
+wiring wired spark sparky volt amp energy light lighting led emergency
+drain drains drainage pipe piping leak blocked bathroom kitchen renovation
+renovations handyman maintenance repair repairs fix fixit install
+installation services service solutions group company national local metro
+city coast bay north south east west point hill hills park valley beach
+sydney melbourne brisbane perth adelaide canberra hobart darwin gold
+australia aussie oz auto car care home house pros team crew works mister
+guys man men lady plug hub spot place zone line edge next first prime elite
+smart easy quick fast rapid speedy express direct premier pacific southern
+northern eastern western central united allied trade trades master masters
+""".split())
+
+
+def _load_vocab() -> Set[str]:
+    """Vocabulary for domain-stem word segmentation. Builtin trade/business
+    words + every word in the scored master keyword bank (19k AdPotential
+    keywords → a few thousand unique tokens). Loaded lazily once."""
+    global _VOCAB
+    if _VOCAB is not None:
+        return _VOCAB
+    words = set(_BUILTIN_VOCAB)
+    try:
+        import keyword_bank as _kb
+        for kw in _kb.get_scored_keywords(min_score=1.0):
+            for t in re.split(r"[^a-z]+", (kw or "").lower()):
+                if 3 <= len(t) <= 15:
+                    words.add(t)
+    except Exception:
+        pass
+    _VOCAB = words
+    return words
+
+
+def _segment_candidates(stem: str) -> List[str]:
+    """Split a squashed domain stem into spaced words so the ATC name
+    suggester can resolve it: 'wattsnextelectrical' → 'watts next electrical',
+    'thelocalplug' → 'the local plug', 'picaelectrical' → 'pica electrical'.
+
+    DP over the vocabulary minimizing (unknown_chars, segments) — unknown
+    chars FIRST, so 'watts next electrical' (all known) beats
+    'watts nextelectrical' (fewer segments but 14 unknown chars). At most one
+    unknown segment (the brand word: 'pica', 'landmark'). Returns up to two
+    candidates: the best all-known split and the best one-unknown split."""
+    s = _squash(stem)
+    n = len(s)
+    if n < 6 or n > 32:
+        return []
+    vocab = _load_vocab()
+    # state (i, u) -> cost (unknown_chars, segments) for prefix s[:i]
+    best: Dict[Tuple[int, int], Tuple[int, int]] = {(0, 0): (0, 0)}
+    back: Dict[Tuple[int, int], Tuple[int, int, str]] = {}
+    for i in range(1, n + 1):
+        for j in range(max(0, i - 15), i):
+            w = s[j:i]
+            if len(w) < 2:
+                continue
+            known = w in vocab
+            if not known and len(w) < 3:
+                continue
+            for u in (0, 1):
+                prev = best.get((j, u))
+                if prev is None:
+                    continue
+                nu = u if known else u + 1
+                if nu > 1:
+                    continue
+                cand = (prev[0] + (0 if known else len(w)), prev[1] + 1)
+                cur = best.get((i, nu))
+                if cur is None or cand < cur:
+                    best[(i, nu)] = cand
+                    back[(i, nu)] = (j, u, w)
+    outs: List[str] = []
+    for u in (0, 1):   # fully-known split first — it's the real business name
+        cost = best.get((n, u))
+        if not cost or cost[1] < 2:
+            continue   # unsegmentable, or single word (raw-stem query covers it)
+        parts: List[str] = []
+        i, uu = n, u
+        while i > 0:
+            j, pu, w = back[(i, uu)]
+            parts.append(w)
+            i, uu = j, pu
+        seg = " ".join(reversed(parts))
+        if seg not in outs:
+            outs.append(seg)
+    return outs
+
+
+def _squash(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
+
+def _stem_matches_advertiser(squash_stem: str, advertiser_name: str) -> bool:
+    """Squashed-form comparison between a domain stem and an advertiser name
+    (legal suffixes already stripped by _norm_name): exact, or one is a
+    prefix of the other with <=4 trailing chars of slack — covers
+    'landmarkelectric' ⇔ 'Landmark Electrical' (extra 'al')."""
+    a = squash_stem
+    b = _squash(_norm_name(advertiser_name))
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    if len(a) >= 6 and b.startswith(a) and (len(b) - len(a)) <= 4:
+        return True
+    if len(b) >= 6 and a.startswith(b) and (len(a) - len(b)) <= 4:
+        return True
+    return False
+
+
 def _name_matches(a: str, b: str) -> bool:
     """True if two normalized names are the same or one contains the other
     (token-subset). Tolerant enough to match 'The Local Plug' to
@@ -236,6 +360,82 @@ class AdsTransparencyVerifier:
                 result = cand
                 break
         self._cache[key] = result
+        return result
+
+    def is_advertiser_domain(
+        self,
+        domain: str,
+        names: Iterable[str] = (),
+    ) -> Optional[dict]:
+        """Domain-first verification (2026-06-12). Works for domains that
+        have NO known business name (Apollo-org / SerpAPI-organic pools the
+        name-based flow never covered — e.g. landmarkelectric.com.au, whose
+        stem 'landmarkelectric' won't token-match 'Landmark Electric').
+
+        Query order (stops at first hit, typically ≤3 RPCs/domain):
+          1. each provided business name (Places displayName etc.)
+          2. the hyphen-spaced stem (if the domain has hyphens)
+          3. the VOCABULARY-SEGMENTED stem — 'wattsnextelectrical' →
+             'watts next electrical' (the suggester only resolves spaced
+             names; verified live 2026-06-12: all 6 manually-confirmed
+             advertisers resolve once spaced, zero resolve squashed)
+          4. the raw stem (single-word brands: 'radi')
+
+        Acceptance: country must match AND either the token-subset name
+        match, OR the squashed advertiser name equals/extends the squashed
+        domain stem (≤4 chars slack) — 'Landmark Electrical' ⇔
+        'landmarkelectric'. Cached per domain."""
+        d = (domain or "").strip().lower()
+        if not d:
+            return None
+        cache_key = f"__domain__{d}"
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        stem = d.split(".")[0]
+        squash_stem = _squash(stem)
+        vocab = _load_vocab()
+        # (query, is_real_name) — real business names (Places displayName)
+        # may use the tolerant token-subset match; stem-DERIVED queries must
+        # pass the strict squash comparison, otherwise a generic stem like
+        # 'sydney plumbing services' token-matches an unrelated advertiser
+        # ('GREATER SYDNEY PLUMBING SERVICES') — verified false positive.
+        queries: List[Tuple[str, bool]] = [
+            (n, True) for n in (names or ()) if n and n.strip()
+        ]
+        if "-" in stem:
+            queries.append((stem.replace("-", " ").strip(), False))
+        for seg in _segment_candidates(stem):
+            queries.append((seg, False))
+        if len(squash_stem) >= 4:
+            queries.append((squash_stem, False))
+        # Single-word brand stems ('radi') aren't dictionary words; if the
+        # stem appears verbatim as a token of the advertiser name ('Radi
+        # Safi') that's a brand match. Generic words ('sydney') are excluded
+        # because they're in the vocabulary.
+        _brand_token_ok = (len(squash_stem) >= 4 and squash_stem not in vocab)
+        result: Optional[dict] = None
+        seen_q: Set[str] = set()
+        for q, is_real in queries:
+            if not self.available or result is not None:
+                break
+            qk = _norm_name(q) or q.lower()
+            if qk in seen_q:
+                continue
+            seen_q.add(qk)
+            for cand in self._search_suggestions(q):
+                if cand["country"] != self.country:
+                    continue
+                if is_real and _name_matches(q, cand["name"]):
+                    result = cand
+                    break
+                if _stem_matches_advertiser(squash_stem, cand["name"]):
+                    result = cand
+                    break
+                if (_brand_token_ok
+                        and squash_stem in set(_norm_name(cand["name"]).split())):
+                    result = cand
+                    break
+        self._cache[cache_key] = result
         return result
 
     def verify_domains(

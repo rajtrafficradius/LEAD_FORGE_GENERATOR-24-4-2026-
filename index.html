@@ -3020,8 +3020,10 @@ function App(){
   // restore the old thorough behaviour (many more SerpAPI credits per lead).
   const [regularMode,setRegularMode]=useState(false);
   // 2026-06-11: "Paid only" — export EVERY confirmed advertiser (no Max-Leads
-  // cap, Max Leads becomes the floor); drops unverified leads. Default OFF.
-  const [paidOnly,setPaidOnly]=useState(false);
+  // cap, Max Leads becomes the floor); drops unverified leads.
+  // 2026-06-12: DEFAULT ON — standing requirement: all confirmed advertisers
+  // always export, even past Max Leads.
+  const [paidOnly,setPaidOnly]=useState(true);
   // Phase 2 (2026-05-06): default the server URL to current origin so the
   // SPA works wherever it's hosted (Railway, local dev, etc.). The user can
   // still override it in the Sidebar field.

@@ -859,7 +859,9 @@ def generate():
         # sends credit_saver=false to run the thorough (more-credits) path.
         credit_saver = bool(data.get("credit_saver", True))
         # 2026-06-11: "paid only — keep all confirmed advertisers" (Max Leads = floor).
-        paid_only_all = bool(data.get("paid_only_all", False))
+        # 2026-06-12: DEFAULT ON — the user's standing requirement is that EVERY
+        # confirmed advertiser exports even when it exceeds Max Leads.
+        paid_only_all = bool(data.get("paid_only_all", True))
         if not industry:
             return jsonify({"error": "Industry is required"}), 400
 
@@ -1062,7 +1064,8 @@ def generate_city():
         # sends credit_saver=false to run the thorough (more-credits) path.
         credit_saver = bool(data.get("credit_saver", True))
         # 2026-06-11: "paid only — keep all confirmed advertisers" (Max Leads = floor).
-        paid_only_all = bool(data.get("paid_only_all", False))
+        # 2026-06-12: DEFAULT ON (see /generate above).
+        paid_only_all = bool(data.get("paid_only_all", True))
 
         if max_leads <= 0:
             return jsonify({"error": "Max Leads must be > 0 in City Mode"}), 400
