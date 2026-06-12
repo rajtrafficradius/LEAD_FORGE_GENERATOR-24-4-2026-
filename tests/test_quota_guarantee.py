@@ -247,5 +247,88 @@ class QuotaGuaranteeTests(unittest.TestCase):
         self.assertFalse(legacy_pipe._has_enough_leads())
 
 
+class PaidOnlyGuaranteeTests(unittest.TestCase):
+    """2026-06-12: every CONFIRMED advertiser domain must reach the output,
+    even when its only contact was a phone-less stub dropped by the dedup /
+    DM-filter / per-domain-cap / master-dedup passes."""
+
+    def tearDown(self):
+        out_dir = getattr(self, "_out_dir", None)
+        if out_dir and os.path.isdir(out_dir):
+            shutil.rmtree(out_dir, ignore_errors=True)
+
+    def _paid_pipe(self, confirmed_domains, max_leads=2):
+        out_dir = tempfile.mkdtemp(prefix="leadforge_paidonly_")
+        pipe = LeadGenerationPipeline(
+            industry="Paid Only Test",
+            country="AU",
+            min_volume=0,
+            min_cpc=0.0,
+            output_folder=out_dir,
+            max_leads=max_leads,
+            enrichment_enabled=False,
+            quota_guarantee=True,
+            paid_only_all=True,
+            serp_ads_domains=set(confirmed_domains),
+            confirmed_paid_domains=set(confirmed_domains),
+        )
+        return pipe, out_dir
+
+    def test_backfill_recovers_dropped_confirmed_domains(self):
+        # 6 confirmed advertiser domains; only 2 survive into Phase 6 (the rest
+        # lost their only stub to upstream dedup). The snapshot + backfill must
+        # restore all 6 to the exported CSV — mirroring the user's run where 38
+        # confirmed domains collapsed to 8 output rows.
+        confirmed = [f"advertiser{i}.com.au" for i in range(6)]
+        pipe, self._out_dir = self._paid_pipe(confirmed)
+
+        # Simulate the Phase-5 snapshot of every confirmed domain's best row
+        # (here: phone-less stubs, as Apollo-0 domains produce).
+        pipe._confirmed_domain_rows = {
+            d: {
+                "name": "",
+                "company": f"Company {d}",
+                "domain": d,
+                "role": "",
+                "phone": "",
+                "email": "",
+                "_paid_traffic": 1,
+                "_domain_source": "paid",
+            }
+            for d in confirmed
+        }
+        # Only 2 confirmed domains made it through the upstream filters.
+        pipe.leads = [
+            lead(1, "advertiser0.com.au", "Owner"),
+            lead(2, "advertiser1.com.au", "Owner"),
+        ]
+
+        top_path = pipe._phase6_export()
+
+        with open(top_path, newline="", encoding="utf-8") as fh:
+            rows = list(csv.DictReader(fh))
+        exported_domains = {r["Domain"].lower() for r in rows}
+        # All 6 confirmed advertisers present despite max_leads=2.
+        for d in confirmed:
+            self.assertIn(d, exported_domains, f"{d} missing from output")
+        self.assertGreaterEqual(len(rows), 6)
+
+    def test_backfill_noop_when_all_present(self):
+        confirmed = ["a.com.au", "b.com.au"]
+        pipe, self._out_dir = self._paid_pipe(confirmed)
+        pipe._confirmed_domain_rows = {
+            d: {"name": "", "company": d, "domain": d, "phone": "",
+                "email": "", "_paid_traffic": 1, "_domain_source": "paid"}
+            for d in confirmed
+        }
+        pipe.leads = [lead(1, "a.com.au", "Owner"), lead(2, "b.com.au", "Owner")]
+        top_path = pipe._phase6_export()
+        with open(top_path, newline="", encoding="utf-8") as fh:
+            rows = list(csv.DictReader(fh))
+        # No duplicate domains added.
+        domains = [r["Domain"].lower() for r in rows]
+        self.assertEqual(sorted(set(domains)), sorted(confirmed))
+
+
 if __name__ == "__main__":
     unittest.main()

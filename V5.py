@@ -8450,6 +8450,47 @@ class LeadGenerationPipeline:
         self._progress(91, "Cleaning and deduplicating leads...")
         self._log("Phase 5: Data cleanup")
 
+        # ── 2026-06-12: PAID-ONLY confirmed-domain SNAPSHOT ─────────────────
+        # The user's standing requirement: EVERY domain confirmed to run Google
+        # ads must appear as an output row — even when its only contact is a
+        # phone-less Apollo-0 stub that the dedup / DM-filter / per-domain-cap /
+        # master-dedup passes below would otherwise discard. Those filters run
+        # before Phase 6, so by export time a confirmed advertiser can have lost
+        # all of its rows. Snapshot the BEST available row per confirmed domain
+        # right now, while the full raw-lead set is still intact; Phase 6 uses
+        # this to backfill any confirmed domain that ends up with zero rows.
+        if getattr(self, "paid_only_all", False):
+            try:
+                _stash = getattr(self, "_confirmed_domain_rows", None)
+                if _stash is None:
+                    _stash = {}
+
+                def _row_quality(_ld):
+                    _nm = (_ld.get("name") or "").strip()
+                    return (
+                        1 if _ld.get("phone") else 0,
+                        1 if _ld.get("email") else 0,
+                        1 if (_nm and " " in _nm) else 0,
+                        1 if _nm else 0,
+                        float(_ld.get("lead_score", _ld.get("_score", 0)) or 0),
+                    )
+
+                for _ld in self.leads:
+                    # _advertiser_tier>=1 == SerpAPI ads[] / ATC / confirmed-paid
+                    # / paid_traffic>=1 — the canonical "is a paid advertiser"
+                    # test used everywhere else in the pipeline.
+                    if self._advertiser_tier(_ld) < 1:
+                        continue
+                    _d = (_ld.get("domain") or "").strip().lower()
+                    if not _d:
+                        continue
+                    _cur = _stash.get(_d)
+                    if _cur is None or _row_quality(_ld) > _row_quality(_cur):
+                        _stash[_d] = dict(_ld)
+                self._confirmed_domain_rows = _stash
+            except Exception as _snap_e:
+                self._log(f"   [paid-only] confirmed-domain snapshot skipped: {_snap_e}")
+
         cleaned = []
         seen = set()
 
@@ -10653,17 +10694,32 @@ class LeadGenerationPipeline:
                     if existing or existing_by_email:
                         kept = []
                         dropped = 0
+                        _kept_seen_paid = 0
+                        _po = getattr(self, "paid_only_all", False)
                         for ld in self.leads:
                             mk = ld.get("_master_key")
                             ek = ld.get("_email_domain_key")
                             if (mk and mk in existing) or (ek and ek in existing_by_email):
+                                # 2026-06-12: in PAID-ONLY mode the user wants
+                                # EVERY confirmed advertiser in EVERY run's output
+                                # — even if the same contact was exported before.
+                                # Keep confirmed advertisers; only dedup the rest.
+                                if _po and self._advertiser_tier(ld) >= 1:
+                                    ld["_seen_before"] = True
+                                    _kept_seen_paid += 1
+                                    kept.append(ld)
+                                    continue
                                 dropped += 1
                                 continue
                             kept.append(ld)
                         self._master_leads_deduped_out = dropped
                         self.leads = kept
+                        _seen_note = (
+                            f" (kept {_kept_seen_paid} already-seen confirmed advertiser(s) "
+                            f"— paid-only requires them every run)" if _kept_seen_paid else ""
+                        )
                         self._log(f"   Master dedup: dropped {dropped} already-seen leads, "
-                                  f"{len(self.leads)} fresh leads remain")
+                                  f"{len(self.leads)} fresh leads remain{_seen_note}")
                     else:
                         self._master_leads_deduped_out = 0
                     master_existing_keys = existing or set()
@@ -10696,9 +10752,16 @@ class LeadGenerationPipeline:
                                 _kept_sat = []
                                 _kept_per_dom: dict = {}
                                 _sat_dropped = 0
+                                _po_sat = getattr(self, "paid_only_all", False)
                                 for ld in self.leads:
                                     _rd = root_domain(ld.get("domain") or "")
                                     if not _rd:
+                                        _kept_sat.append(ld)
+                                        continue
+                                    # 2026-06-12: confirmed advertisers are exempt
+                                    # from the lifetime 2/domain cap in PAID-ONLY
+                                    # mode — the user wants them surfaced every run.
+                                    if _po_sat and self._advertiser_tier(ld) >= 1:
                                         _kept_sat.append(ld)
                                         continue
                                     _already = int(_existing_counts.get(_rd, 0))
@@ -10826,6 +10889,55 @@ class LeadGenerationPipeline:
                 f"{len(set((l.get('domain') or '').lower() for l in _final_leads if l.get('domain')))} unique domains."
             )
         self.leads = _final_leads
+
+        # ── 2026-06-12: PAID-ONLY confirmed-domain GUARANTEE (final backfill) ──
+        # Every domain confirmed to run Google ads MUST be present as an output
+        # row. By this point dedup / DM-filter / per-domain-cap / master-dedup
+        # may have removed a confirmed domain's only contact (typically an
+        # Apollo-0 phone-less stub). Re-inject the best snapshot captured at the
+        # start of Phase 5 (before those filters ran) for any confirmed domain
+        # now missing. This is the LAST mutation before CSV write, so nothing
+        # downstream can drop them again. Runs only in the round host that built
+        # the snapshot; the combined-export host inherits already-complete rows.
+        if getattr(self, "paid_only_all", False):
+            _stash = getattr(self, "_confirmed_domain_rows", None) or {}
+            if _stash:
+                _present = {
+                    (l.get("domain") or "").strip().lower()
+                    for l in self.leads if l.get("domain")
+                }
+                _added = 0
+                for _dom, _row in _stash.items():
+                    if not _dom or _dom in _present:
+                        continue
+                    _row = dict(_row)
+                    for _k in ("_master_key", "_email_domain_key"):
+                        _row.pop(_k, None)
+                    _row["_paid_guarantee_backfill"] = True
+                    # Stamp paid provenance so the CSV "Traffic Source" /
+                    # paid_traffic columns reflect the confirmed status.
+                    try:
+                        if int(float(_row.get("_paid_traffic", 0) or 0)) < 1:
+                            _row["_paid_traffic"] = 1
+                    except (TypeError, ValueError):
+                        _row["_paid_traffic"] = 1
+                    if not _row.get("source"):
+                        _row["source"] = "Confirmed Google advertiser (paid-only guarantee)"
+                    self.leads.append(_row)
+                    _present.add(_dom)
+                    _added += 1
+                if _added:
+                    self._log(
+                        f"   Phase 6 PAID-ONLY guarantee: backfilled {_added} confirmed-"
+                        f"advertiser domain(s) whose only contact was dropped by "
+                        f"dedup/DM/cap — final {len(self.leads)} rows across "
+                        f"{len(_present)} unique confirmed domains"
+                    )
+                # Re-apply paid-first ordering so backfilled rows slot in by tier.
+                try:
+                    self.leads.sort(key=lambda ld: self._advertiser_tier(ld), reverse=True)
+                except Exception:
+                    pass
 
         os.makedirs(self.output_folder, exist_ok=True)
 
