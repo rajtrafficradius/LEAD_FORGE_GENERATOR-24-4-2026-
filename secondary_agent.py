@@ -32,7 +32,7 @@ log = logging.getLogger("leadforge.secondary")
 ACTIVATION_FLOOR_RATIO = 0.6    # if primary pool < this * max_leads, activate
 MAX_SECONDARY_DOMAINS = 80      # hard cap: never append more than this
 KEYWORDS_PER_RUN = 15           # use up to this many secondary keywords
-ADWORDS_DOMAINS_PER_KEYWORD = 8 # keep the per-keyword limit modest
+ADWORDS_DOMAINS_PER_KEYWORD = 15  # 2026-06-12: capture all advertisers per keyword (phrase_adwords = 1 unit/row)
 
 
 class SecondaryAgent:

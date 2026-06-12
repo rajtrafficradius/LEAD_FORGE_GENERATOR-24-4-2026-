@@ -5841,7 +5841,11 @@ class LeadGenerationPipeline:
             # V5.12: PAID-ONLY MODE — Only fetch domains with active Google Ads (paid_traffic != 0)
             # Removed: get_organic_domains() and organic verification entirely
             _pre = len(paid_domains)
-            ad_results = self.semrush.get_adwords_domains(kw, db, limit=15)  # Increased limit to 15 for paid only
+            # 2026-06-12: capture ALL advertisers per keyword (phrase_adwords =
+            # 1 unit/row; keywords are AdPotentialScore-sorted so early probes
+            # are the densest advertiser keywords).
+            ad_results = self.semrush.get_adwords_domains(
+                kw, db, limit=(15 if self.credit_saver else 30))
             for r in ad_results:
                 d = r["domain"]
                 paid_domains.add(d)
@@ -7965,7 +7969,10 @@ class LeadGenerationPipeline:
         for kw in retry_keywords:
             if len(new_domains) >= max_new:
                 break
-            ad_results = self.semrush.get_adwords_domains(kw, db, limit=10)
+            # 2026-06-12: ALL-advertisers capture (1 unit/row) — same policy as
+            # the Phase 3 sweep.
+            ad_results = self.semrush.get_adwords_domains(
+                kw, db, limit=(15 if self.credit_saver else 30))
             for r in ad_results:
                 d = r["domain"]
                 if d not in already_processed and d not in new_domains:

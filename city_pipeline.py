@@ -547,6 +547,8 @@ class CityLeadPipeline:
         self._semrush_key_present = bool(V5mod.API_KEYS.get("semrush"))
 
         def _emit_paid_source_verdict():
+            
+            
             """Fire AFTER PASS 1/2 when SEMrush 403 state is known. Loud banner
             if no paid source is live so the user never silently gets a CSV of
             unverifiable Places/Apollo domains again."""
@@ -623,7 +625,12 @@ class CityLeadPipeline:
                 break
             pre = len(pool_semrush)
             try:
-                ad = semrush.get_adwords_domains(kw, db, limit=10)
+                # 2026-06-12: capture ALL advertisers bidding on a keyword, not
+                # just the first 10 — phrase_adwords costs 1 unit/row, so a
+                # full pull is ≤ +20 units on a populated keyword and the bank
+                # is now AdPotentialScore-sorted (highest-yield probes first).
+                ad = semrush.get_adwords_domains(
+                    kw, db, limit=(15 if self.credit_saver else 30))
                 self._semrush_calls_this_run = getattr(self, "_semrush_calls_this_run", 0) + 1
                 for r in ad:
                     d = (r.get("domain") or "").strip().lower()
