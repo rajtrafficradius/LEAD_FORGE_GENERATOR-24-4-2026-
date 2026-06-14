@@ -98,6 +98,9 @@ class CityLeadPipeline:
         self.paid_only_all = bool(paid_only_all) or str(os.environ.get("PAID_ONLY_ALL", "0")).strip() == "1"
         self.progress_callback = progress_callback or (lambda *a: None)
         self.log_callback = log_callback or (lambda *a: None)
+        # 2026-06-14: in-memory log buffer. The end-of-run safety net scans
+        # this to guarantee no confirmed advertiser exists only in the logs.
+        self._log_lines: list = []
         self._cancelled = False
         self._inner_pipeline = None  # filled in run() — used by cancel()
         self._lock = threading.Lock()
@@ -327,27 +330,60 @@ class CityLeadPipeline:
                 self.leads.extend(extra_leads)
             visited_domains.update(d.lower() for d in extra_new)
 
+        # 2026-06-14: SAFETY NET — before exporting, scan the logs + confirmed
+        # sets and re-inject any confirmed advertiser left out of the lead set.
+        try:
+            self._recover_left_out_domains(V5mod)
+        except Exception as _sn_e:
+            self._log(f"[City Mode] Log-scan safety net error (non-fatal): {_sn_e}")
+
         # Export a unified CSV from the merged lead set via V5's existing
         # export logic. We reuse a temporary inner pipeline purely for the
         # Phase 6 sorter + writer so the user's output has every run's leads.
         out_path = self._export_combined(V5mod)
-        # 2026-06-12: RUN-WIDE API totals. The per-round V5 summaries only
+        # 2026-06-12/14: RUN-WIDE accounting. The per-round V5 summaries only
         # show that round's counters, and the combined-export pseudo-pipeline
         # prints zeros (it makes no API calls) — which read as "0 calls" in
-        # the archived log. This line is the cumulative truth for the run.
+        # the archived log. This block is the cumulative truth for the run,
+        # including the SerpAPI credits/lead score the user asked for.
         try:
-            _c = self._api_counter or {}
-            _tot = {k: v for k, v in sorted(_c.items())
-                    if isinstance(v, (int, float)) and not k.endswith(("_budget", "_warned"))
-                    and not k.startswith("semrush_units")}
-            self._log(
-                "[City Mode] RUN-WIDE API totals (all rounds + rediscovery): "
-                + ", ".join(f"{k}={int(v)}" for k, v in _tot.items() if v)
-            )
+            self._log_run_wide_accounting()
         except Exception:
             pass
         self._progress(100, f"Done! {len(self.leads)} leads exported")
         return out_path
+
+    def _log_run_wide_accounting(self) -> None:
+        """2026-06-14: clear, single end-of-run accounting block — total API
+        calls per provider, total SerpAPI credits, and credits-per-lead."""
+        _c = self._api_counter or {}
+        _leads = len([l for l in (self.leads or []) if (l.get("domain") or "").strip()])
+        _serp = int(_c.get("serpapi", 0) or 0)
+        _apollo = int(_c.get("apollo", 0) or 0)
+        _lusha = int(_c.get("lusha", 0) or 0)
+        _semrush = int(_c.get("semrush", 0) or 0)
+        _openai = int(_c.get("openai", 0) or 0)
+        _cse = int(_c.get("google_custom_search", 0) or 0)
+        _places = int(_c.get("google_places", 0) or _c.get("places", 0) or 0)
+        _total_calls = _serp + _apollo + _lusha + _semrush + _openai + _cse + _places
+        # SerpAPI is the metered/billed "credit" the user watches most.
+        _serp_per_lead = (_serp / _leads) if _leads else 0.0
+        _total_per_lead = (_total_calls / _leads) if _leads else 0.0
+        self._log("=" * 64)
+        self._log("[City Mode] RUN-WIDE ACCOUNTING (all rounds + rediscovery + safety net)")
+        self._log("=" * 64)
+        self._log(
+            f"   API calls — SerpAPI={_serp}, Apollo={_apollo}, Lusha={_lusha}, "
+            f"SEMrush={_semrush}, OpenAI={_openai}, GoogleCSE={_cse}, "
+            f"GooglePlaces={_places}  |  TOTAL={_total_calls}"
+        )
+        self._log(f"   Leads exported: {_leads}")
+        self._log(
+            f"   ▸ SerpAPI credits/lead: {_serp_per_lead:.2f}  "
+            f"({_serp} SerpAPI credits ÷ {_leads} leads)"
+        )
+        self._log(f"   ▸ Total API calls/lead: {_total_per_lead:.2f}")
+        self._log("=" * 64)
 
     # ── internal helpers ────────────────────────────────────────────────────
 
@@ -815,12 +851,39 @@ class CityLeadPipeline:
                 V5mod.COUNTRY_CONFIG.get(self.country, {}).get("location_suffix")
                 or "Australia"
             )
+            # 2026-06-14: EARLY-STOP to cut SerpAPI waste. The ads sweep used to
+            # burn the ENTIRE query budget (max_leads*14) even after it had
+            # already found plenty of advertisers — the user's max_leads=2 run
+            # fired all 28 queries to surface 30 advertisers it never needed.
+            # Root cause of "why does req=1 still do 28 searches": the SerpAPI
+            # spend lives in DISCOVERY, which runs to completion BEFORE the
+            # enrichment phase's early-stop (_has_enough_leads) can fire — so
+            # enrichment-OFF saved Apollo calls but never SerpAPI calls. Fix:
+            # give discovery its OWN enrichment-aware early-stop. With
+            # enrichment OFF a confirmed advertiser → a lead ~1:1 (no Apollo/
+            # phone/DM funnel), so a small surplus suffices; with enrichment ON
+            # the funnel kills most, so keep a bigger surplus. max_leads<=0
+            # (whole-market / unlimited) disables the early-stop.
+            _es_floor = int(os.environ.get("SERP_ADS_EARLY_STOP_FLOOR", "12") or "12")
+            if int(self.max_leads or 0) <= 0:
+                _early_stop_target = 10 ** 9
+            else:
+                _es_mult = 4 if not self.enrichment_enabled else 12
+                _early_stop_target = max(_es_floor, int(self.max_leads) * _es_mult)
+            _early_stopped = False
             for _kw in _ads_kws:
-                if self._cancelled or not serp._available or _ads_calls >= _ads_q_cap:
+                if (self._cancelled or not serp._available
+                        or _ads_calls >= _ads_q_cap
+                        or len(pool_serp_ads) >= _early_stop_target):
+                    if len(pool_serp_ads) >= _early_stop_target:
+                        _early_stopped = True
                     break
                 for _city in _ads_cities:
                     if (self._cancelled or len(pool_serp) >= domain_cap
-                            or _ads_calls >= _ads_q_cap):
+                            or _ads_calls >= _ads_q_cap
+                            or len(pool_serp_ads) >= _early_stop_target):
+                        if len(pool_serp_ads) >= _early_stop_target:
+                            _early_stopped = True
                         break
                     _q = _kw.strip()
                     _city_location = f"{_city}, {_ads_country_name}"
@@ -844,6 +907,15 @@ class CityLeadPipeline:
                         self._log(f"   [Discovery/SerpAPI-ads] error on '{_q}': {e}")
                 if (_ads_calls % 10 == 0) and _ads_calls:
                     self._progress(20, f"Google Ads sweep: {len(pool_serp_ads)} advertisers ({_ads_calls} queries)")
+            if _early_stopped:
+                self._log(
+                    f"   [Discovery/SerpAPI-ads] ⏹ Early-stop: {len(pool_serp_ads)} "
+                    f"confirmed advertisers ≥ target {_early_stop_target} "
+                    f"(max_leads={self.max_leads}, enrichment="
+                    f"{'ON' if self.enrichment_enabled else 'OFF'}) after only "
+                    f"{_ads_calls} queries → saved ~{max(0, _ads_q_cap - _ads_calls)} "
+                    f"SerpAPI calls vs the {_ads_q_cap}-query budget."
+                )
             # Stash the heavy-advertiser set: domains advertising on >= N
             # distinct queries. Default threshold 2 (configurable). These are
             # ranked paid-FIRST and, in strict mode, are the ONLY ads kept.
@@ -2010,6 +2082,10 @@ class CityLeadPipeline:
     def _log(self, msg: str):
         ts = datetime.now().strftime("%H:%M:%S")
         try:
+            self._log_lines.append(str(msg))
+        except Exception:
+            pass
+        try:
             self.log_callback(f"[{ts}] {msg}")
         except Exception:
             pass
@@ -2019,3 +2095,127 @@ class CityLeadPipeline:
             self.progress_callback(pct, status)
         except Exception:
             pass
+
+    # 2026-06-14: domain token matcher for the log-scan safety net.
+    _DOMAIN_RE = re.compile(
+        r"\b([a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?"
+        r"(?:\.[a-z0-9\-]+)*"
+        r"\.(?:com\.au|net\.au|org\.au|com|net|org|io|co|au))\b",
+        re.IGNORECASE,
+    )
+
+    def _recover_left_out_domains(self, V5mod) -> int:
+        """2026-06-14 SAFETY NET — "no legitimate lead may exist only in the
+        logs." After all rounds, scan BOTH the in-memory confirmed-advertiser
+        sets AND the raw log text for domains, diff against the leads we're
+        about to export, and re-inject any CONFIRMED advertiser that an
+        intermediate filter dropped.
+
+        Rate-limit-aware: a domain already confirmed (SerpAPI ads[]/ATC/SEMrush
+        this run) is re-injected with NO new API call. Only domains that appear
+        in the logs but were never confirmed get a *budgeted* ATC re-check
+        (capped, respects ATC's 429 circuit breaker) — so a market with a long
+        organic tail can't trip the rate limiter. Returns rows re-injected."""
+        try:
+            from utils import root_domain as _rootd
+        except Exception:
+            _rootd = lambda x: (x or "").strip().lower()
+
+        def _norm(d):
+            return (d or "").strip().lower().lstrip(".")
+
+        present = set()
+        for ld in (self.leads or []):
+            d = _norm(ld.get("domain"))
+            if d:
+                present.add(d)
+                present.add(_rootd(d))
+
+        confirmed = set()
+        for _attr in ("_serp_ads_domains", "_confirmed_paid", "_atc_only_domains"):
+            for d in (getattr(self, _attr, None) or set()):
+                confirmed.add(_norm(d))
+
+        # Scan the raw log text for any domain-like token.
+        logged = set()
+        for line in (self._log_lines or []):
+            for m in self._DOMAIN_RE.findall(line or ""):
+                d = _norm(m)
+                if d and not V5mod.is_platform_domain(d):
+                    logged.add(d)
+
+        # Candidates = (every confirmed advertiser) + (every domain seen in the
+        # logs), minus whatever already made it into the output.
+        candidates = (confirmed | logged)
+        missing = [d for d in candidates
+                   if d and d not in present and _rootd(d) not in present]
+        if not missing:
+            self._log("[City Mode] Log-scan safety net: 0 confirmed advertisers "
+                      "left out — every legitimate lead is in the output. ✓")
+            return 0
+
+        # Split into free re-injects (already confirmed) vs needs-ATC.
+        free_inject = [d for d in missing if d in confirmed]
+        needs_atc = [d for d in missing if d not in confirmed]
+
+        names = getattr(self, "_domain_names", {}) or {}
+        recovered = 0
+        atc_confirmed = 0
+
+        def _stub(domain, source):
+            return {
+                "name": "",
+                "company": names.get(domain) or V5mod.domain_to_company_name(domain) or domain,
+                "domain": domain,
+                "role": "",
+                "phone": "",
+                "email": "",
+                "_paid_traffic": 1,
+                "_domain_source": "paid",
+                "_stub_lead": True,
+                "_safety_net_recovered": True,
+                "source": source,
+            }
+
+        for d in free_inject:
+            self.leads.append(_stub(d, "Recovered confirmed advertiser (log-scan safety net)"))
+            present.add(d)
+            recovered += 1
+
+        # Budgeted ATC re-check for logged-but-unconfirmed domains. Tight cap so
+        # we never hammer ATC into a 429 lockout at the very end of a run.
+        _atc_cap = int(os.environ.get("LOGSCAN_ATC_MAX", "12") or "12")
+        needs_atc = needs_atc[:max(0, _atc_cap)]
+        if needs_atc:
+            try:
+                from google_ads_transparency import AdsTransparencyVerifier
+                atc = getattr(self, "_atc_client", None)
+                if atc is None:
+                    atc = AdsTransparencyVerifier(country=self.country, log_fn=self._log)
+                if not isinstance(getattr(self, "_atc_only_domains", None), set):
+                    self._atc_only_domains = set()
+                for d in needs_atc:
+                    if not getattr(atc, "available", True):
+                        break  # 429 circuit tripped — stop, don't waste the run
+                    try:
+                        hit = atc.is_advertiser_domain(d, names=([names[d]] if d in names else ()))
+                    except Exception:
+                        hit = None
+                    if hit:
+                        self._atc_only_domains.add(d)
+                        if d in hit and isinstance(getattr(self, "_atc_advertiser_ids", None), dict):
+                            self._atc_advertiser_ids[d] = hit.get("advertiser_id", "")
+                        self.leads.append(_stub(d, "Recovered advertiser via ATC (log-scan safety net)"))
+                        present.add(d)
+                        recovered += 1
+                        atc_confirmed += 1
+            except Exception as _e:
+                self._log(f"[City Mode] Log-scan safety net: ATC recheck skipped ({_e})")
+
+        self._log(
+            f"[City Mode] Log-scan safety net: recovered {recovered} confirmed "
+            f"advertiser(s) that were left only in the logs "
+            f"({len(free_inject)} already-confirmed re-injects, {atc_confirmed} "
+            f"ATC re-confirmed of {len(needs_atc)} rechecked). These now export."
+        )
+        return recovered

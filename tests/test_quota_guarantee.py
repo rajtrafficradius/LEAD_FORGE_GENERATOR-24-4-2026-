@@ -330,5 +330,58 @@ class PaidOnlyGuaranteeTests(unittest.TestCase):
         self.assertEqual(sorted(set(domains)), sorted(confirmed))
 
 
+class LogScanSafetyNetTests(unittest.TestCase):
+    """2026-06-14: no legitimate (confirmed-advertiser) domain may exist only in
+    the logs. The end-of-run safety net must re-inject any confirmed advertiser
+    dropped from the lead set — using NO API call for already-confirmed domains."""
+
+    def tearDown(self):
+        out_dir = getattr(self, "_out_dir", None)
+        if out_dir and os.path.isdir(out_dir):
+            shutil.rmtree(out_dir, ignore_errors=True)
+
+    def _city(self):
+        self._out_dir = tempfile.mkdtemp(prefix="leadforge_logscan_")
+        return CityLeadPipeline(
+            state_code="AUSTRALIA", tier="all", city="all",
+            min_volume=0, max_leads=2, output_folder=self._out_dir,
+            enrichment_enabled=False, quota_guarantee=True,
+            paid_only_all=True, disable_semrush=True,
+        )
+
+    def test_reinjects_confirmed_domain_left_only_in_logs(self):
+        city = self._city()
+        # Two confirmed advertisers; only ONE made it into the lead set. The
+        # other appears only in the logs → must be re-injected free (no ATC).
+        city._serp_ads_domains = {"hiltonplumbing.com.au", "mrflowplumbing.com.au"}
+        city._confirmed_paid = set(city._serp_ads_domains)
+        city.leads = [{"name": "Joe", "domain": "hiltonplumbing.com.au",
+                       "phone": "+61400000000"}]
+        city._log_lines = [
+            "[1/2] hiltonplumbing.com.au",
+            "[2/2] mrflowplumbing.com.au: Apollo had 0 people — stub lead",
+        ]
+        import V5 as V5mod
+        recovered = city._recover_left_out_domains(V5mod)
+        domains = {(l.get("domain") or "").lower() for l in city.leads}
+        self.assertEqual(1, recovered)
+        self.assertIn("mrflowplumbing.com.au", domains)
+        # The re-injected row is flagged + carries paid provenance.
+        reinjected = [l for l in city.leads if l.get("_safety_net_recovered")]
+        self.assertEqual(1, len(reinjected))
+        self.assertEqual(1, reinjected[0].get("_paid_traffic"))
+
+    def test_noop_when_all_confirmed_present(self):
+        city = self._city()
+        city._serp_ads_domains = {"a.com.au", "b.com.au"}
+        city._confirmed_paid = set(city._serp_ads_domains)
+        city.leads = [{"domain": "a.com.au"}, {"domain": "b.com.au"}]
+        city._log_lines = ["scanned a.com.au", "scanned b.com.au"]
+        import V5 as V5mod
+        recovered = city._recover_left_out_domains(V5mod)
+        self.assertEqual(0, recovered)
+        self.assertEqual(2, len(city.leads))
+
+
 if __name__ == "__main__":
     unittest.main()

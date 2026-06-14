@@ -197,6 +197,24 @@ def _squash(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", (s or "").lower())
 
 
+def _extract_ad_count(field4) -> int:
+    """Pull the lower-bound ad count out of the suggestions field "4".
+    Seen shapes: {"2":{"1":"200","2":"300"}} (region bucket 200-300) or a bare
+    {"1":"5"}. Returns 0 on anything unexpected (never raises)."""
+    try:
+        node = field4
+        if isinstance(node, dict) and "2" in node and isinstance(node["2"], dict):
+            node = node["2"]
+        if isinstance(node, dict):
+            for k in ("1", "2"):
+                v = node.get(k)
+                if v not in (None, ""):
+                    return int(str(v).replace(",", "").strip())
+    except Exception:
+        pass
+    return 0
+
+
 def _stem_matches_advertiser(squash_stem: str, advertiser_name: str) -> bool:
     """Squashed-form comparison between a domain stem and an advertiser name
     (legal suffixes already stripped by _norm_name): exact, or one is a
@@ -292,6 +310,13 @@ class AdsTransparencyVerifier:
         dt = time.time() - self._last_call
         if dt < self._min_interval:
             time.sleep(self._min_interval - dt)
+        # 2026-06-14: small random jitter so back-to-back lookups don't form a
+        # perfectly regular burst pattern that ATC's edge flags for 429.
+        try:
+            import random as _rnd
+            time.sleep(_rnd.uniform(0.0, 0.25))
+        except Exception:
+            pass
         self._last_call = time.time()
 
     def _search_suggestions(self, query: str) -> List[dict]:
@@ -338,6 +363,13 @@ class AdsTransparencyVerifier:
                 "name":          inner.get("1") or "",
                 "advertiser_id": inner.get("2") or "",
                 "country":       (inner.get("3") or "").upper(),
+                # 2026-06-14: field "4" carries a bucketed AD-COUNT range for the
+                # advertiser, e.g. {"2":{"1":"200","2":"300"}} ≈ 200–300 ads on
+                # record in ATC. A non-zero count is Google's OWN evidence the
+                # entity actively advertises — a free strength/recency proxy that
+                # rides along on the suggestions call (no extra RPC). We surface
+                # the LOWER bound as `ad_count` (0 when absent).
+                "ad_count":      _extract_ad_count(inner.get("4")),
             })
         return out
 
