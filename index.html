@@ -724,7 +724,7 @@ window.addEventListener('DOMContentLoaded',function(){
 const {useState,useEffect,useRef,useCallback}=React;
 
 /* ─── Utils ─── */
-function useClock(){const[t,setT]=useState(new Date());useEffect(()=>{const id=setInterval(()=>setT(new Date()),1000);return()=>clearInterval(id)},[]);return t.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+function useClock(){const[t,setT]=useState(new Date());useEffect(()=>{const id=setInterval(()=>setT(new Date()),1000);return()=>clearInterval(id)},[]);return t.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'Australia/Sydney',timeZoneName:'short'})}
 function useGCount(target,dur=1400){const[v,setV]=useState(target);useEffect(()=>{if(!window.anime)return;const o={n:0};window.anime({targets:o,n:target,duration:dur,easing:'easeOutExpo',update:()=>setV(Math.round(o.n))})},[target]);return v}
 
 /* ─── Donut ─── */
@@ -3011,10 +3011,12 @@ function App(){
   const [maxLeads,setMaxLeads]=useState('10');
   const [minSearch,setMinSearch]=useState('100');
   const [minCpc,setMinCpc]=useState('1.0');
-  const [enrich,setEnrich]=useState(true);
-  // 2026-06-08: "SerpAPI only" toggle. false = SerpAPI + SEMrush (default,
-  // preserves current behaviour); true = bypass SEMrush entirely this run.
-  const [serpOnly,setSerpOnly]=useState(false);
+  // 2026-06-14: Contact Enrichment OFF by default (user requirement).
+  const [enrich,setEnrich]=useState(false);
+  // 2026-06-08: "SerpAPI only" toggle. false = SerpAPI + SEMrush; true =
+  // bypass SEMrush entirely this run.
+  // 2026-06-14: DEFAULT ON (user requirement) — SerpAPI only / bypass SEMrush.
+  const [serpOnly,setSerpOnly]=useState(true);
   // 2026-06-09: Regular (thorough) SerpAPI mode. DEFAULT OFF → the app runs in
   // credit-saving mode (run-wide SerpAPI cap ≈14 calls/lead). Toggle ON to
   // restore the old thorough behaviour (many more SerpAPI credits per lead).
@@ -3386,8 +3388,7 @@ function App(){
           <div className="tb-sub">{vt.sub}</div>
         </div>
         <div className="tb-right">
-          <button className="demo-btn" onClick={runGeneration}><span className="demo-dot"></span>Demo Run</button>
-          <div className="tb-clock">{clock} AEST</div>
+          <div className="tb-clock">{clock}</div>
           <button className="theme-btn" onClick={()=>setTheme(t=>t==='dark'?'light':'dark')}><Icon name={theme==='dark'?'sun':'moon'} size={14} style={{marginRight:6,verticalAlign:-2}}/>{theme==='dark'?'Light Mode':'Dark Mode'}</button>
           <div className="tb-conn"><span className="tb-cdot"></span>Connected</div>
         </div>
@@ -3406,7 +3407,9 @@ function App(){
         claims like "SerpAPI unlimited" / "SEMrush 50,000 searches"). Live
         credit numbers already appear in the Generate view's credit panel. */}
 
-    {!drawerOpen&&<LiveActivityFeed/>}
+    {/* 2026-06-14: bottom-right simulated activity pop-up (LiveActivityFeed)
+        removed per user request — it surfaced decorative "API endpoint
+        update / keyword found" messages that aren't real run events. */}
     {/* 2026-06-09: bottom-of-page SerpAPI mode toggle. Default OFF = credit-
         saving mode (run-wide SerpAPI cap ≈14 calls/lead). ON = regular thorough
         mode (uses many more SerpAPI credits, the old behaviour). */}
