@@ -2164,7 +2164,7 @@ function DatabaseView({onOpenLead}){
       // in one call; /api/master-stats only returns total_leads. Using debug
       // here keeps the DB summary tiles tight to the live DB state.
       const ms=await fetch(base+'/api/db/debug',{credentials:'same-origin'});
-      if(ms.status===401){window.location.href='/login';return;}
+      if(ms.status===401){window.dispatchEvent(new Event('lf-auth-lost'));return;}
       if(ms.ok){
         const j=await ms.json();
         setStats({
@@ -2175,7 +2175,7 @@ function DatabaseView({onOpenLead}){
       }
       const url=base+(tab==='runs'?'/api/db/run-history':'/api/db/master-leads')+'?page='+page+'&page_size='+pageSize;
       const r=await fetch(url,{credentials:'same-origin'});
-      if(r.status===401){window.location.href='/login';return;}
+      if(r.status===401){window.dispatchEvent(new Event('lf-auth-lost'));return;}
       if(!r.ok){setErr('HTTP '+r.status);setLoading(false);return;}
       const j=await r.json();
       if(tab==='runs'){
@@ -2905,7 +2905,7 @@ function useLiveStats(){
     const fetchMaster=async()=>{
       try{
         const r=await fetch(base+'/api/master-stats',{credentials:'same-origin'});
-        if(r.status===401){window.location.href='/login';return;}
+        if(r.status===401){window.dispatchEvent(new Event('lf-auth-lost'));return;}
         if(!r.ok)return;
         const j=await r.json();
         if(alive&&typeof j.total_leads==='number'){
@@ -2959,7 +2959,7 @@ function useLiveCredits(){
       const base=(typeof window!=='undefined'&&window.location.origin)||'';
       const url=base+'/api/credits'+(force?'/refresh':'');
       const r=await fetch(url,{method:force?'POST':'GET',credentials:'same-origin'});
-      if(r.status===401){window.location.href='/login';return null;}
+      if(r.status===401){window.dispatchEvent(new Event('lf-auth-lost'));return null;}
       if(!r.ok)return null;
       const data=await r.json();
       const svc=data.services||{};
@@ -3438,12 +3438,10 @@ function LeadDetailView({leadId,onBack,user}){
 }
 
 /* ─── APP ─── */
-function App(){
+function App({user, onLogout}){
   const clock=useClock();
   const [showSplash,setShowSplash]=useState(true);
   const [theme,setTheme]=useState('light');
-  // 2026-06-15: auth. undefined = checking, null = logged out, object = user.
-  const [user,setUser]=useState(undefined);
   const [nav,setNav]=useState('generate');
   // Phase 2: which lead's full page is open (set by the "+" button).
   const [selectedLeadId,setSelectedLeadId]=useState(null);
@@ -3620,7 +3618,7 @@ function App(){
         credentials:'same-origin',
         body:JSON.stringify(payload),
       });
-      if(r.status===401){window.location.href='/login';return;}
+      if(r.status===401){window.dispatchEvent(new Event('lf-auth-lost'));return;}
       const data=await r.json();
       if(!r.ok||data.error){
         setLoading(false);
@@ -3638,7 +3636,7 @@ function App(){
     const pollId=setInterval(async ()=>{
       try{
         const r=await fetch(base+'/status/'+jobId,{credentials:'same-origin'});
-        if(r.status===401){clearInterval(pollId);window.location.href='/login';return;}
+        if(r.status===401){clearInterval(pollId);window.dispatchEvent(new Event('lf-auth-lost'));return;}
         if(!r.ok)return;
         const s=await r.json();
         if(typeof s.progress==='number'){
@@ -3810,7 +3808,7 @@ function App(){
   useEffect(()=>{
     const base=(typeof window!=='undefined'&&window.location.origin)||'';
     fetch(base+'/industries',{credentials:'same-origin'}).then(r=>{
-      if(r.status===401){window.location.href='/login';return null;}
+      if(r.status===401){window.dispatchEvent(new Event('lf-auth-lost'));return null;}
       if(!r.ok)return null;
       return r.json();
     }).then(data=>{if(data&&Array.isArray(data.industries))setIndustries(data.industries)}).catch(()=>{});
@@ -3821,45 +3819,21 @@ function App(){
   useEffect(()=>{
     const base=(typeof window!=='undefined'&&window.location.origin)||'';
     fetch(base+'/api/au-cities',{credentials:'same-origin'}).then(r=>{
-      if(r.status===401){window.location.href='/login';return null;}
+      if(r.status===401){window.dispatchEvent(new Event('lf-auth-lost'));return null;}
       if(!r.ok)return null;
       return r.json();
     }).then(data=>{if(data&&!data.error)setAuCities(data)}).catch(()=>{});
   },[]);
 
-  // 2026-06-15: auth gate — resolve the signed-in user on mount, and listen
-  // for 401s raised by any API call (session expiry) to drop back to login.
-  useEffect(()=>{
-    let alive=true;
-    fetch('/whoami',{credentials:'same-origin'})
-      .then(r=>r.ok?r.json():null)
-      .then(d=>{ if(!alive)return; setUser(d&&d.username?d:null); })
-      .catch(()=>{ if(alive)setUser(null); });
-    const onLost=()=>setUser(null);
-    window.addEventListener('lf-auth-lost',onLost);
-    return ()=>{alive=false; window.removeEventListener('lf-auth-lost',onLost);};
-  },[]);
-  // BDE accounts can only ever sit on their two views.
+  // BDE accounts can only ever sit on their two views. (Auth itself is handled
+  // by the Root wrapper — App only mounts once a user is signed in.)
   useEffect(()=>{
     if(user&&user.role==='bde'){
       setNav(n=>(n==='my-leads'||n==='my-mobile')?n:'my-leads');
     }
   },[user]);
 
-  const doLogout=async()=>{
-    try{ await fetch('/logout',{method:'POST',credentials:'same-origin'}); }catch(e){}
-    setUser(null);
-  };
-
-  // ── Gate: still checking → spinner; not authed → login screen. ──
-  if(user===undefined){
-    return <div style={{position:'fixed',inset:0,display:'flex',alignItems:'center',
-      justifyContent:'center',background:'var(--bg)',color:'var(--t3)',fontSize:14}}>Loading…</div>;
-  }
-  if(user===null){
-    return <LoginView onLogin={u=>{setUser(u); if(u.role==='bde')setNav('my-leads'); else setNav('generate');}}/>;
-  }
-  const role=user.role||'admin';
+  const role=(user&&user.role)||'admin';
   const isBde=role==='bde';
 
   const VIEW_TITLES={generate:{title:<>Lead <em>Generation</em> Engine</>,sub:'Configure your search and generate qualified leads'},database:{title:<>Railway <em>Database</em></>,sub:'Live MySQL — run_history, master_leads, and per-run statistics'},allocation:{title:<>Lead <em>Allocation</em></>,sub:'Assign leads to your BDEs and track who has been contacted'},'my-leads':{title:<>My <em>Leads</em></>,sub:'Leads allocated to you — call them and mark contacted'},'my-mobile':{title:<>My <em>Mobile</em></>,sub:'The number recorded when you contact a lead'},cost:{title:<>Cost <em>/ Pricing</em></>,sub:'Per-run cost and unit pricing'},analytics:{title:<>Analytics <em>& Insights</em></>,sub:'Performance overview across all runs'},heatmap:{title:<>Geographic <em>Heatmap</em></>,sub:'Ballarat suburb-level lead density visualization'},history:{title:<>Run <em>History</em></>,sub:'All previous lead generation runs'},intelligence:{title:<>AI <em>Intelligence</em></>,sub:'Master database · ML keyword learning · self-expanding dictionary'},pipeline:{title:<>Lead <em>Pipeline</em></>,sub:'Manage and track leads through your sales process'},schedule:{title:<>Scheduled <em>Runs</em></>,sub:'Automate your lead generation on a recurring schedule'},users:{title:<>Team <em>Management</em></>,sub:'Manage users, roles, and permissions'},settings:{title:<>Platform <em>Settings</em></>,sub:'API keys, preferences, and billing'}};
@@ -3867,7 +3841,7 @@ function App(){
 
   return(<>
     {showSplash&&<Splash onDone={()=>setShowSplash(false)} theme={theme}/>}
-    <Sidebar nav={nav} setNav={setNav} srvUrl={srvUrl} setSrvUrl={setSrvUrl} onConnect={()=>setToast({t:'Connected',m:'Railway endpoint verified'})} credits={liveCredits} lastDrain={liveCreditsLast} details={liveCreditsDetails} user={user} onLogout={doLogout}/>
+    <Sidebar nav={nav} setNav={setNav} srvUrl={srvUrl} setSrvUrl={setSrvUrl} onConnect={()=>setToast({t:'Connected',m:'Railway endpoint verified'})} credits={liveCredits} lastDrain={liveCreditsLast} details={liveCreditsDetails} user={user} onLogout={onLogout}/>
 
     <main className="main">
       <div className="topbar">
@@ -3922,7 +3896,36 @@ function App(){
     {toast&&<div className="toast"><div className="toast-ic">✓</div><div><div className="toast-title">{toast.t}</div><div className="toast-msg">{toast.m}</div></div></div>}
   </>);
 }
-ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+
+/* ─── ROOT: auth gate. App (and its protected fetches) only mounts once a user
+   is signed in, so the login screen never triggers protected API calls. ─── */
+function Root(){
+  const [user,setUser]=React.useState(undefined); // undefined=checking, null=logged out, obj=user
+  React.useEffect(()=>{
+    let alive=true;
+    const resolve=()=>fetch('/whoami',{credentials:'same-origin'})
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{ if(alive) setUser(d&&d.username?d:null); })
+      .catch(()=>{ if(alive) setUser(null); });
+    resolve();
+    const onLost=()=>{ if(alive) setUser(null); };
+    window.addEventListener('lf-auth-lost',onLost);
+    return ()=>{ alive=false; window.removeEventListener('lf-auth-lost',onLost); };
+  },[]);
+  const onLogout=async()=>{
+    try{ await fetch('/logout',{method:'POST',credentials:'same-origin'}); }catch(e){}
+    setUser(null);
+  };
+  if(user===undefined){
+    return <div style={{position:'fixed',inset:0,display:'flex',alignItems:'center',
+      justifyContent:'center',background:'var(--bg)',color:'var(--t3)',fontSize:14}}>Loading…</div>;
+  }
+  if(user===null){
+    return <LoginView onLogin={setUser}/>;
+  }
+  return <App user={user} onLogout={onLogout}/>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Root/>);
 </script>
 </body>
 </html>
