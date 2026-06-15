@@ -798,6 +798,46 @@ def api_lead_manual_add():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/lead/<int:lead_id>/full", methods=["GET"])
+@login_required_json
+def api_lead_full(lead_id):
+    """Everything for the individual lead page: master row + website-crawl +
+    Apollo free data + AI cheat-sheet (+ call history in Phase 3). BDE accounts
+    can only open their OWN allocated leads."""
+    try:
+        row = db.LeadEnrichmentRepo.get_full(lead_id)
+        if not row:
+            return jsonify({"error": "not_found"}), 404
+        if _current_role() == "bde":
+            if row.get("assigned_bde_id") != _current_uid():
+                return jsonify({"error": "forbidden"}), 403
+        row["lead_code"] = "LF-" + str(lead_id).zfill(6)
+        return jsonify({"lead": row})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/lead/<int:lead_id>/recrawl", methods=["POST"])
+@manager_or_admin_required
+def api_lead_recrawl(lead_id):
+    try:
+        db.LeadEnrichmentRepo.recrawl(lead_id)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/crawler/status", methods=["GET"])
+@manager_or_admin_required
+def api_crawler_status():
+    try:
+        import enrichment_worker
+        return jsonify({"queue": db.LeadEnrichmentRepo.status_counts(),
+                        "worker": enrichment_worker.get_stats()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/me/mobile", methods=["POST"])
 @login_required_json
 def api_me_mobile():
@@ -1815,6 +1855,25 @@ def apollo_phone_callback():
     except Exception as e:
         log.error("phone_reveal store error: %s", e)
     return jsonify({"status": "ok"})
+
+
+# ── Background enrichment worker (CRM Phase 2) ───────────────────────────────
+# Single always-on daemon, fully separate from the lead-gen pipeline. It pauses
+# whenever a /generate* run is active so it never competes with a live run.
+def _a_run_is_active() -> bool:
+    try:
+        return any(getattr(j, "state", "") == "running" for j in _jobs.values())
+    except Exception:
+        return False
+
+
+if _db_ready:
+    try:
+        import enrichment_worker
+        if enrichment_worker.start_background_worker(is_busy=_a_run_is_active):
+            log.info("Enrichment worker thread started.")
+    except Exception as _ew_e:
+        log.error("Enrichment worker failed to start (non-fatal): %s", _ew_e)
 
 
 # ── Main ────────────────────────────────────────────────────────────────────

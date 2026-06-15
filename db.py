@@ -303,6 +303,20 @@ _SCHEMA_SQL: Sequence[str] = (
         KEY idx_alloc_bde (bde_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """,
+    """
+    CREATE TABLE IF NOT EXISTS lead_enrichment (
+        lead_id      BIGINT UNSIGNED NOT NULL,
+        crawl_status ENUM('pending','crawling','done','error') NOT NULL DEFAULT 'pending',
+        crawl_json   JSON,
+        apollo_json  JSON,
+        ai_summary_json JSON,
+        crawled_at   DATETIME NULL,
+        error_text   TEXT,
+        updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (lead_id),
+        KEY idx_enrich_status (crawl_status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
 )
 
 
@@ -1166,6 +1180,143 @@ class LeadAllocationRepo:
                     (int(limit),),
                 )
                 return list(cur.fetchall() or [])
+
+
+# ── Lead-enrichment repo (CRM Phase 2, 2026-06-15) ────────────────────────────
+
+
+class LeadEnrichmentRepo:
+    """Per-lead website-crawl + Apollo-free-data + OpenAI-analysis store. Driven
+    by the standalone background worker (enrichment_worker.py) — completely
+    separate from the lead-generation pipeline."""
+
+    @staticmethod
+    def backfill_pending() -> int:
+        """Create a 'pending' enrichment row for every master_lead that doesn't
+        have one yet. Cheap INSERT...SELECT; returns rows added."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT IGNORE INTO lead_enrichment (lead_id, crawl_status) "
+                    "SELECT ml.id, 'pending' FROM master_leads ml "
+                    "LEFT JOIN lead_enrichment le ON le.lead_id = ml.id "
+                    "WHERE le.lead_id IS NULL"
+                )
+                n = cur.rowcount
+            conn.commit()
+            return int(n or 0)
+
+    @staticmethod
+    def claim_next() -> Optional[Dict[str, Any]]:
+        """Atomically claim the next lead to enrich. Priority: leads assigned to
+        a BDE first, then newest. Marks it 'crawling' and returns its
+        {lead_id, root_domain, company_name, display_name} — or None if idle."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT le.lead_id, ml.root_domain, ml.company_name, ml.display_name "
+                    "FROM lead_enrichment le JOIN master_leads ml ON le.lead_id = ml.id "
+                    "WHERE le.crawl_status='pending' "
+                    "ORDER BY (ml.assigned_bde_id IS NOT NULL) DESC, ml.id DESC LIMIT 1"
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None
+                cur.execute(
+                    "UPDATE lead_enrichment SET crawl_status='crawling' "
+                    "WHERE lead_id=%s AND crawl_status='pending'",
+                    (row["lead_id"],),
+                )
+                claimed = cur.rowcount
+            conn.commit()
+            return row if claimed else None
+
+    @staticmethod
+    def save_result(lead_id: int, crawl_json: Any, apollo_json: Any,
+                    ai_summary_json: Any) -> None:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE lead_enrichment SET crawl_status='done', crawl_json=%s, "
+                    "apollo_json=%s, ai_summary_json=%s, crawled_at=NOW(), error_text=NULL "
+                    "WHERE lead_id=%s",
+                    (json.dumps(crawl_json or {}, default=str),
+                     json.dumps(apollo_json or {}, default=str),
+                     json.dumps(ai_summary_json or {}, default=str),
+                     lead_id),
+                )
+            conn.commit()
+
+    @staticmethod
+    def save_error(lead_id: int, error_text: str) -> None:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE lead_enrichment SET crawl_status='error', "
+                    "error_text=%s, crawled_at=NOW() WHERE lead_id=%s",
+                    ((error_text or "")[:2000], lead_id),
+                )
+            conn.commit()
+
+    @staticmethod
+    def recrawl(lead_id: int) -> None:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO lead_enrichment (lead_id, crawl_status) VALUES (%s,'pending') "
+                    "ON DUPLICATE KEY UPDATE crawl_status='pending', error_text=NULL",
+                    (lead_id,),
+                )
+            conn.commit()
+
+    @staticmethod
+    def status_counts() -> Dict[str, int]:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT crawl_status AS s, COUNT(*) AS c FROM lead_enrichment GROUP BY crawl_status"
+                )
+                out = {r["s"]: int(r["c"]) for r in (cur.fetchall() or [])}
+                cur.execute("SELECT COUNT(*) AS c FROM master_leads")
+                out["total_leads"] = int((cur.fetchone() or {}).get("c", 0))
+                return out
+
+    @staticmethod
+    def get_full(lead_id: int) -> Optional[Dict[str, Any]]:
+        """Everything the lead page needs: the master_leads row + its enrichment
+        (crawl/apollo/ai JSON parsed) + assigned-BDE username."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT ml.*, le.crawl_status, le.crawl_json, le.apollo_json, "
+                    "le.ai_summary_json, le.crawled_at, le.error_text AS enrich_error, "
+                    "u.username AS assigned_bde_username, u.full_name AS assigned_bde_name "
+                    "FROM master_leads ml "
+                    "LEFT JOIN lead_enrichment le ON le.lead_id = ml.id "
+                    "LEFT JOIN users u ON ml.assigned_bde_id = u.id "
+                    "WHERE ml.id=%s",
+                    (lead_id,),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None
+                for k in ("crawl_json", "apollo_json", "ai_summary_json", "payload_json"):
+                    if isinstance(row.get(k), (bytes, bytearray)):
+                        row[k] = row[k].decode("utf-8", "ignore")
+                    if isinstance(row.get(k), str):
+                        try:
+                            row[k] = json.loads(row[k])
+                        except Exception:
+                            pass
+                for k in ("first_seen_at", "assigned_at", "contacted_at", "crawled_at"):
+                    if row.get(k) and hasattr(row[k], "isoformat"):
+                        row[k] = row[k].isoformat()
+                if row.get("cost_per_lead_usd") is not None:
+                    try:
+                        row["cost_per_lead_usd"] = float(row["cost_per_lead_usd"])
+                    except (TypeError, ValueError):
+                        row["cost_per_lead_usd"] = None
+                return row
 
 
 # ── Self-test ────────────────────────────────────────────────────────────────

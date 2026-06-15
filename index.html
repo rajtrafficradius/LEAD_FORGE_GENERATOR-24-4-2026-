@@ -2145,7 +2145,7 @@ function CostView(){
   </>);
 }
 
-function DatabaseView(){
+function DatabaseView({onOpenLead}){
   const [tab,setTab]=useState('runs');           // 'runs' | 'leads'
   const [runs,setRuns]=useState([]);
   const [runsTotal,setRunsTotal]=useState(0);
@@ -2276,17 +2276,19 @@ function DatabaseView(){
         ):(
           <table className="rt">
             <thead><tr>
+              <th style={{width:34}}></th>
               <th>ID</th><th>Name</th><th>Company</th><th>Domain</th><th>Role</th>
               <th>Phone</th><th>Email</th><th>Type</th><th>Industry</th><th>Country</th>
               <th style={{textAlign:'right'}}>Cost/Lead</th>
             </tr></thead>
             <tbody>
               {loading?(
-                <tr><td colSpan="11" style={{textAlign:'center',padding:30,color:'var(--t3)'}}>Loading…</td></tr>
+                <tr><td colSpan="12" style={{textAlign:'center',padding:30,color:'var(--t3)'}}>Loading…</td></tr>
               ):leads.length===0?(
-                <tr><td colSpan="11" style={{textAlign:'center',padding:30,color:'var(--t3)'}}>No master leads stored yet.</td></tr>
+                <tr><td colSpan="12" style={{textAlign:'center',padding:30,color:'var(--t3)'}}>No master leads stored yet.</td></tr>
               ):leads.map(r=>(
                 <tr key={r.id}>
+                  <td><button title="Open full lead page" onClick={()=>onOpenLead&&onOpenLead(r.id)} style={{width:24,height:24,borderRadius:6,border:'1px solid var(--bd)',background:'var(--blue)',color:'#fff',cursor:'pointer',fontWeight:700,lineHeight:'1',fontSize:15}}>+</button></td>
                   <td style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--blue)'}}>{lfId(r.id)}</td>
                   <td style={{fontSize:12,color:'var(--t1)',fontWeight:600}}>{r.display_name||r.normalized_name||'—'}</td>
                   <td style={{fontSize:12}}>{r.company_name||'—'}</td>
@@ -3206,7 +3208,7 @@ function UsersView(){
   </div>);
 }
 
-function BdeLeadsView({user}){
+function BdeLeadsView({user,onOpenLead}){
   const [rows,setRows]=useState([]); const [total,setTotal]=useState(0);
   const [page,setPage]=useState(1); const pageSize=50; const [msg,setMsg]=useState('');
   const load=async()=>{ const d=await apiJSON('/api/db/master-leads?page='+page+'&page_size='+pageSize);
@@ -3224,9 +3226,10 @@ function BdeLeadsView({user}){
     </div>
     <div className="card" style={{padding:14}}>
       <table style={{width:'100%',borderCollapse:'collapse'}}>
-        <thead><tr><th style={th}>Lead</th><th style={th}>Company</th><th style={th}>Domain</th><th style={th}>Phone</th><th style={th}>Email</th><th style={th}>Status</th><th style={th}>Action</th></tr></thead>
+        <thead><tr><th style={th}></th><th style={th}>Lead</th><th style={th}>Company</th><th style={th}>Domain</th><th style={th}>Phone</th><th style={th}>Email</th><th style={th}>Status</th><th style={th}>Action</th></tr></thead>
         <tbody>{rows.map(r=>(
           <tr key={r.id}>
+            <td style={td}><button title="Open full lead page" onClick={()=>onOpenLead&&onOpenLead(r.id)} style={{width:24,height:24,borderRadius:6,border:'1px solid var(--bd)',background:'var(--blue)',color:'#fff',cursor:'pointer',fontWeight:700,lineHeight:'1',fontSize:15}}>+</button></td>
             <td style={td}>{lfId(r.id)}</td>
             <td style={td}>{r.company_name||r.display_name||'—'}</td>
             <td style={td}>{r.root_domain}</td>
@@ -3237,7 +3240,7 @@ function BdeLeadsView({user}){
               ? <span style={{color:'var(--green)'}}>✓ done</span>
               : <button onClick={()=>contacted(r.id)} style={{padding:'5px 12px',background:'var(--green)',color:'#fff',border:0,borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:700}}>Contacted</button>}</td>
           </tr>))}
-          {!rows.length&&<tr><td style={td} colSpan={7}>No leads allocated to you yet.</td></tr>}
+          {!rows.length&&<tr><td style={td} colSpan={8}>No leads allocated to you yet.</td></tr>}
         </tbody>
       </table>
       {total>pageSize&&<div style={{marginTop:12,display:'flex',gap:8,alignItems:'center'}}>
@@ -3268,6 +3271,145 @@ function MyMobileView({user}){
   </div>);
 }
 
+function _apolloRevenue(a){
+  if(!a) return 'N/A';
+  return a.annual_revenue_printed || a.organization_revenue_printed
+    || (a.annual_revenue!=null?('$'+Number(a.annual_revenue).toLocaleString('en-US')):'')
+    || (a.estimated_annual_revenue!=null?('$'+Number(a.estimated_annual_revenue).toLocaleString('en-US')):'')
+    || 'N/A';
+}
+function LDField({label,value,mono}){
+  if(value===undefined||value===null||value===''||(Array.isArray(value)&&!value.length)) return null;
+  return(<div style={{display:'flex',padding:'6px 0',borderBottom:'1px solid var(--bd)'}}>
+    <div style={{width:170,color:'var(--t3)',fontSize:12,flexShrink:0}}>{label}</div>
+    <div style={{color:'var(--t1)',fontSize:13,fontFamily:mono?'var(--mono)':'inherit',wordBreak:'break-word'}}>
+      {Array.isArray(value)?value.join(', '):String(value)}</div>
+  </div>);
+}
+function LDSection({title,children,accent}){
+  return(<div className="card" style={{padding:18,marginBottom:14}}>
+    <div style={{fontWeight:700,color:accent||'var(--t1)',marginBottom:10,fontSize:14,
+      borderBottom:'2px solid '+(accent||'var(--blue)'),paddingBottom:6,display:'inline-block'}}>{title}</div>
+    {children}
+  </div>);
+}
+function LDChips({items,color}){
+  if(!items||!items.length) return null;
+  return(<div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:4}}>
+    {items.map((x,i)=>(<span key={i} style={{background:'var(--bg)',border:'1px solid var(--bd)',
+      color:color||'var(--t2)',borderRadius:20,padding:'3px 11px',fontSize:12}}>{x}</span>))}
+  </div>);
+}
+
+function LeadDetailView({leadId,onBack,user}){
+  const [lead,setLead]=useState(undefined);
+  const [msg,setMsg]=useState('');
+  const role=(user&&user.role)||'admin';
+  const isMgrAdmin=role==='admin'||role==='manager';
+  const load=async()=>{ const d=await apiJSON('/api/lead/'+leadId+'/full');
+    if(d&&d.lead) setLead(d.lead); else setLead(null); };
+  useEffect(()=>{ if(leadId) load(); },[leadId]);
+  const contacted=async()=>{ const d=await apiJSON('/api/leads/'+leadId+'/contacted',{method:'POST',body:'{}'});
+    if(d&&d.ok){ setMsg('Marked contacted.'); load(); } };
+  const recrawl=async()=>{ const d=await apiJSON('/api/lead/'+leadId+'/recrawl',{method:'POST',body:'{}'});
+    if(d&&d.ok) setMsg('Re-queued for enrichment.'); };
+  const backBtn=<button onClick={onBack} style={{padding:'7px 14px',background:'var(--sf)',color:'var(--t1)',
+    border:'1px solid var(--bd)',borderRadius:8,cursor:'pointer',fontSize:13}}>← Back</button>;
+  if(lead===undefined) return(<div style={{padding:20}}>{backBtn}<div style={{marginTop:20,color:'var(--t3)'}}>Loading lead…</div></div>);
+  if(lead===null) return(<div style={{padding:20}}>{backBtn}<div style={{marginTop:20,color:'#EF4444'}}>Lead not found or not accessible.</div></div>);
+  const a=lead.apollo_json||{}; const ai=lead.ai_summary_json||{}; const crawl=lead.crawl_json||{};
+  const status=lead.crawl_status||'pending';
+  const statusColor={done:'var(--green)',crawling:'var(--amber)',pending:'var(--t3)',error:'#EF4444'}[status]||'var(--t3)';
+  return(<div style={{padding:'4px 2px',paddingBottom:30}}>
+    <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14,flexWrap:'wrap'}}>
+      {backBtn}
+      <div style={{fontFamily:'var(--mono)',color:'var(--blue)',fontWeight:700}}>{lead.lead_code||lfId(lead.id)}</div>
+      <div style={{fontSize:20,fontWeight:700,color:'var(--t1)'}}>{lead.company_name||lead.display_name||lead.root_domain}</div>
+      <a href={'https://'+lead.root_domain} target="_blank" rel="noopener noreferrer" style={{color:'var(--violet)',fontSize:13}}>{lead.root_domain} ↗</a>
+      <span style={{marginLeft:'auto',color:statusColor,fontSize:12,fontWeight:600}}>enrichment: {status}</span>
+      {isMgrAdmin&&<button onClick={recrawl} style={{padding:'7px 12px',background:'var(--sf)',color:'var(--t2)',border:'1px solid var(--bd)',borderRadius:8,cursor:'pointer',fontSize:12}}>Re-crawl</button>}
+      {lead.alloc_status==='contacted'
+        ? <span style={{color:'var(--green)',fontWeight:700}}>✓ Contacted</span>
+        : <button onClick={contacted} style={{padding:'7px 14px',background:'var(--green)',color:'#fff',border:0,borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:13}}>Mark Contacted</button>}
+    </div>
+    {msg&&<div className="card" style={{padding:'9px 14px',marginBottom:12,color:'var(--green)',fontSize:13}}>{msg}</div>}
+    {status!=='done'&&<div className="card" style={{padding:'12px 16px',marginBottom:14,color:'var(--t2)',fontSize:13}}>
+      {status==='error'?('Enrichment error: '+(lead.enrich_error||'unknown')) :'Enrichment in progress — website + Apollo data will appear here shortly. '}
+    </div>}
+
+    {/* Caller cheat-sheet (AI) — what a caller needs, up top */}
+    <LDSection title="Caller cheat-sheet" accent="var(--blue)">
+      {ai.summary&&<div style={{color:'var(--t1)',fontSize:14,marginBottom:10,lineHeight:1.5}}>{ai.summary}</div>}
+      <LDField label="Business model" value={ai.business_model}/>
+      <LDField label="Target market" value={ai.target_market}/>
+      <LDField label="Size signals" value={ai.size_signals}/>
+      {ai.products_services&&ai.products_services.length>0&&<div style={{marginTop:8}}><div style={{color:'var(--t3)',fontSize:12}}>Products / services</div><LDChips items={ai.products_services} color="var(--violet)"/></div>}
+      {ai.talking_points&&ai.talking_points.length>0&&<div style={{marginTop:10}}><div style={{color:'var(--t3)',fontSize:12,marginBottom:4}}>Talking points</div><ul style={{margin:'4px 0',paddingLeft:18,color:'var(--t1)',fontSize:13}}>{ai.talking_points.map((t,i)=><li key={i} style={{marginBottom:3}}>{t}</li>)}</ul></div>}
+      {ai.likely_pain_points&&ai.likely_pain_points.length>0&&<div style={{marginTop:6}}><div style={{color:'var(--t3)',fontSize:12,marginBottom:4}}>Likely pain points</div><ul style={{margin:'4px 0',paddingLeft:18,color:'var(--t1)',fontSize:13}}>{ai.likely_pain_points.map((t,i)=><li key={i} style={{marginBottom:3}}>{t}</li>)}</ul></div>}
+      {ai.decision_maker_titles&&ai.decision_maker_titles.length>0&&<div style={{marginTop:6}}><div style={{color:'var(--t3)',fontSize:12}}>Ask for (decision makers)</div><LDChips items={ai.decision_maker_titles} color="var(--amber)"/></div>}
+      {ai.icebreakers&&ai.icebreakers.length>0&&<div style={{marginTop:8}}><div style={{color:'var(--t3)',fontSize:12,marginBottom:4}}>Icebreakers</div><ul style={{margin:'4px 0',paddingLeft:18,color:'var(--t2)',fontSize:13}}>{ai.icebreakers.map((t,i)=><li key={i} style={{marginBottom:3}}>{t}</li>)}</ul></div>}
+      {(ai._note||(!ai.summary&&!ai.business_model))&&<div style={{color:'var(--t3)',fontSize:12}}>{ai._note||'No AI analysis yet.'}</div>}
+    </LDSection>
+
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+      {/* Contact */}
+      <LDSection title="Contact" accent="var(--green)">
+        <LDField label="Name" value={lead.display_name}/>
+        <LDField label="Role" value={lead.role}/>
+        <LDField label="Phone" value={lead.phone_e164} mono/>
+        <LDField label="Email" value={lead.primary_email}/>
+        <LDField label="LinkedIn" value={lead.linkedin_url}/>
+      </LDSection>
+      {/* Company / Apollo free data */}
+      <LDSection title="Company details (Apollo)" accent="var(--violet)">
+        <LDField label="Revenue" value={_apolloRevenue(a)}/>
+        <LDField label="Employees" value={a.estimated_num_employees}/>
+        <LDField label="Industry" value={a.industry}/>
+        <LDField label="Founded" value={a.founded_year}/>
+        <LDField label="Location" value={[a.city,a.state,a.country].filter(Boolean).join(', ')}/>
+        <LDField label="Phone" value={a.phone} mono/>
+        <LDField label="LinkedIn" value={a.linkedin_url}/>
+        <LDField label="SIC" value={a.sic_codes}/>
+        <LDField label="NAICS" value={a.naics_codes}/>
+        {a.keywords&&a.keywords.length>0&&<div style={{marginTop:8}}><div style={{color:'var(--t3)',fontSize:12}}>Keywords</div><LDChips items={a.keywords.slice(0,40)}/></div>}
+        {(a.short_description||a.seo_description)&&<div style={{marginTop:10,color:'var(--t2)',fontSize:13,lineHeight:1.5}}>{a.short_description||a.seo_description}</div>}
+        {(!a||!Object.keys(a).length)&&<div style={{color:'var(--t3)',fontSize:12}}>No Apollo data {status==='done'?'available for this domain.':'yet.'}</div>}
+      </LDSection>
+    </div>
+
+    {/* Website crawl */}
+    <LDSection title="Website crawl" accent="var(--amber)">
+      {crawl.homepage_url&&<LDField label="Homepage" value={crawl.homepage_url}/>}
+      <LDField label="Pages fetched" value={crawl.fetched!=null?String(crawl.fetched):''}/>
+      {crawl.pages&&crawl.pages.length>0&&<div style={{marginTop:8}}>
+        {crawl.pages.map((p,i)=>(<div key={i} style={{padding:'7px 0',borderBottom:'1px solid var(--bd)'}}>
+          <a href={p.url} target="_blank" rel="noopener noreferrer" style={{color:'var(--violet)',fontSize:12}}>{p.url}</a>
+          {p.title&&<div style={{color:'var(--t1)',fontSize:13,fontWeight:600}}>{p.title}</div>}
+          {p.description&&<div style={{color:'var(--t2)',fontSize:12}}>{p.description}</div>}
+        </div>))}
+      </div>}
+      {(!crawl.pages||!crawl.pages.length)&&<div style={{color:'var(--t3)',fontSize:12}}>No pages crawled {status==='done'?'(site unreachable).':'yet.'}</div>}
+    </LDSection>
+
+    {/* Call history — Phase 3 (3CX) */}
+    <LDSection title="Call history" accent="var(--t3)">
+      <div style={{color:'var(--t3)',fontSize:13}}>3CX call data (transcripts, who called, number used, call count) will appear here once the 3CX integration is connected.</div>
+    </LDSection>
+
+    {/* Record details */}
+    <LDSection title="Record details">
+      <LDField label="Lead ID" value={lead.lead_code||lfId(lead.id)} mono/>
+      <LDField label="Industry" value={lead.industry}/>
+      <LDField label="Country" value={lead.country}/>
+      <LDField label="Traffic source" value={lead.traffic_source}/>
+      <LDField label="Allocation" value={lead.alloc_status}/>
+      <LDField label="Assigned BDE" value={lead.assigned_bde_name||lead.assigned_bde_username}/>
+      <LDField label="First seen" value={lead.first_seen_at?String(lead.first_seen_at).replace('T',' ').slice(0,16):''}/>
+      <LDField label="Cost / lead" value={lead.cost_per_lead_usd!=null?('$'+Number(lead.cost_per_lead_usd).toFixed(2)):''}/>
+    </LDSection>
+  </div>);
+}
+
 /* ─── APP ─── */
 function App(){
   const clock=useClock();
@@ -3276,6 +3418,8 @@ function App(){
   // 2026-06-15: auth. undefined = checking, null = logged out, object = user.
   const [user,setUser]=useState(undefined);
   const [nav,setNav]=useState('generate');
+  // Phase 2: which lead's full page is open (set by the "+" button).
+  const [selectedLeadId,setSelectedLeadId]=useState(null);
   const [tab,setTab]=useState('cities');
   // City mode (AU-only). auState is an AU state code (NSW/VIC/QLD/...) or
   // 'AUSTRALIA' for the synthetic whole-country scope. Defaults match the
@@ -3712,12 +3856,13 @@ function App(){
       </div>
 
       {nav==='generate'&&!isBde&&<GenerateView tab={tab} setTab={setTab} stats={stats} hasResults={hasResults} onGenerate={runGeneration} onCancel={cancelGeneration} loading={loading} auState={auState} setAuState={setAuState} cityTier={cityTier} setCityTier={setCityTier} city={city} setCity={setCity} industry={industry} setIndustry={setIndustry} indCountry={indCountry} setIndCountry={setIndCountry} maxLeads={maxLeads} setMaxLeads={setMaxLeads} minSearch={minSearch} setMinSearch={setMinSearch} minCpc={minCpc} setMinCpc={setMinCpc} enrich={enrich} setEnrich={setEnrich} serpOnly={serpOnly} setSerpOnly={setSerpOnly} nWorkers={nWorkers} setNWorkers={setNWorkers} onNav={setNav} phase={phase} logs={logs} progress={progress} counts={counts} theme={theme} industries={industries} auCities={auCities} topCsvText={topCsvText} partialCsvUrl={partialCsvUrl} liveCreditsDetails={liveCreditsDetails} creditsUsedThisRun={creditsUsedThisRun} liveJob={liveJob} realLeads={realLeads} runOutcome={runOutcome}/>}
-      {nav==='database'&&!isBde&&<DatabaseView/>}
+      {nav==='database'&&!isBde&&<DatabaseView onOpenLead={(id)=>{setSelectedLeadId(id);setNav('lead-detail');}}/>}
       {nav==='cost'&&!isBde&&<CostView/>}
       {nav==='allocation'&&!isBde&&<AllocationView/>}
       {nav==='users'&&!isBde&&<UsersView/>}
-      {nav==='my-leads'&&isBde&&<BdeLeadsView user={user}/>}
+      {nav==='my-leads'&&isBde&&<BdeLeadsView user={user} onOpenLead={(id)=>{setSelectedLeadId(id);setNav('lead-detail');}}/>}
       {nav==='my-mobile'&&<MyMobileView user={user}/>}
+      {nav==='lead-detail'&&<LeadDetailView leadId={selectedLeadId} user={user} onBack={()=>setNav(isBde?'my-leads':'database')}/>}
       {/* 2026-06-04: mock placeholder views removed (Analytics/Heatmap/
           History/AI Intelligence/Pipeline/Schedule/Users/Settings). */}
     </main>
