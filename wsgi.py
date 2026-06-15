@@ -838,6 +838,71 @@ def api_crawler_status():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/3cx/webhook", methods=["POST"])
+def threecx_webhook():
+    """Public server-to-server receiver for 3CX call events. Secured by the
+    shared THREECX_WEBHOOK_SECRET (header X-3CX-Secret or ?secret=) when set."""
+    secret_env = os.environ.get("THREECX_WEBHOOK_SECRET", "")
+    if secret_env:
+        provided = request.headers.get("X-3CX-Secret") or request.args.get("secret") or ""
+        if provided != secret_env:
+            return jsonify({"error": "forbidden"}), 403
+    else:
+        log.warning("3CX webhook hit with no THREECX_WEBHOOK_SECRET configured — accepting.")
+    payload = request.get_json(silent=True)
+    if payload is None and request.form:
+        payload = request.form.to_dict()
+    if not payload:
+        return jsonify({"error": "empty payload"}), 400
+    try:
+        import threecx
+        call_id, call = threecx.ingest(payload)
+        return jsonify({"ok": True, "call_id": call_id, "lead_id": call.get("lead_id"),
+                        "bde_user_id": call.get("bde_user_id")})
+    except Exception as e:
+        log.error("3cx webhook error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/lead/<int:lead_id>/calls", methods=["GET"])
+@login_required_json
+def api_lead_calls(lead_id):
+    if _current_role() == "bde" and _lead_assigned_bde(lead_id) != _current_uid():
+        return jsonify({"error": "forbidden"}), 403
+    try:
+        calls = db.LeadCallsRepo.list_for_lead(lead_id)
+        return jsonify({"calls": calls, "count": len(calls)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/3cx/test-call", methods=["POST"])
+@admin_required
+def api_3cx_test_call():
+    """Manually inject a call event (for testing the pipeline + UI without a
+    live PBX). Same normalization/matching path as the webhook."""
+    payload = request.get_json(silent=True) or {}
+    try:
+        import threecx
+        call_id, call = threecx.ingest(payload, transcribe_audio=bool(payload.get("recording_url")))
+        return jsonify({"ok": True, "call_id": call_id,
+                        "matched_lead": call.get("lead_id"),
+                        "matched_bde": call.get("bde_user_id")})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/3cx/sync", methods=["POST"])
+@admin_required
+def api_3cx_sync():
+    try:
+        import threecx
+        limit = int((request.get_json(silent=True) or {}).get("limit", 100))
+        return jsonify(threecx.pull_recent_calls(limit=limit))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/me/mobile", methods=["POST"])
 @login_required_json
 def api_me_mobile():

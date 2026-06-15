@@ -3303,11 +3303,15 @@ function LDChips({items,color}){
 
 function LeadDetailView({leadId,onBack,user}){
   const [lead,setLead]=useState(undefined);
+  const [calls,setCalls]=useState([]);
+  const [openTx,setOpenTx]=useState({});  // {callId:true} expanded transcripts
   const [msg,setMsg]=useState('');
   const role=(user&&user.role)||'admin';
   const isMgrAdmin=role==='admin'||role==='manager';
   const load=async()=>{ const d=await apiJSON('/api/lead/'+leadId+'/full');
-    if(d&&d.lead) setLead(d.lead); else setLead(null); };
+    if(d&&d.lead) setLead(d.lead); else setLead(null);
+    const c=await apiJSON('/api/lead/'+leadId+'/calls');
+    if(c&&c.calls) setCalls(c.calls); };
   useEffect(()=>{ if(leadId) load(); },[leadId]);
   const contacted=async()=>{ const d=await apiJSON('/api/leads/'+leadId+'/contacted',{method:'POST',body:'{}'});
     if(d&&d.ok){ setMsg('Marked contacted.'); load(); } };
@@ -3392,8 +3396,31 @@ function LeadDetailView({leadId,onBack,user}){
     </LDSection>
 
     {/* Call history — Phase 3 (3CX) */}
-    <LDSection title="Call history" accent="var(--t3)">
-      <div style={{color:'var(--t3)',fontSize:13}}>3CX call data (transcripts, who called, number used, call count) will appear here once the 3CX integration is connected.</div>
+    <LDSection title={'Call history'+(calls.length?(' ('+calls.length+' call'+(calls.length===1?'':'s')+')'):'')} accent="var(--green)">
+      {calls.length===0&&<div style={{color:'var(--t3)',fontSize:13}}>No calls logged yet. 3CX call events (who called, which number was used, duration, recording + transcript) appear here automatically once 3CX is posting to the webhook.</div>}
+      {calls.map(c=>{
+        const dirColor=c.direction==='outbound'?'var(--blue)':(c.direction==='inbound'?'var(--green)':'var(--t3)');
+        const who=c.bde_name||c.bde_username||c.agent_name||'—';
+        const usedNumber=c.direction==='inbound'?c.to_number:c.from_number;  // the BDE/company number
+        const mins=Math.floor((c.duration_sec||0)/60), secs=(c.duration_sec||0)%60;
+        return(<div key={c.id} style={{padding:'10px 0',borderBottom:'1px solid var(--bd)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+            <span style={{color:dirColor,fontWeight:700,fontSize:12,textTransform:'uppercase'}}>{c.direction}</span>
+            <span style={{color:'var(--t1)',fontSize:13}}>{c.started_at?String(c.started_at).replace('T',' ').slice(0,16):'—'}</span>
+            <span style={{color:'var(--t3)',fontSize:12}}>·</span>
+            <span style={{color:'var(--t2)',fontSize:13,fontFamily:'var(--mono)'}}>{c.from_number||'?'} → {c.to_number||'?'}</span>
+            <span style={{color:'var(--t3)',fontSize:12}}>·</span>
+            <span style={{color:'var(--t2)',fontSize:13}}>{mins}m {secs}s</span>
+            <span style={{marginLeft:'auto',color:'var(--t3)',fontSize:12}}>by <b style={{color:'var(--t1)'}}>{who}</b>{c.bde_mobile?(' ('+c.bde_mobile+')'):(usedNumber?(' ('+usedNumber+')'):'')}</span>
+          </div>
+          <div style={{marginTop:5,display:'flex',gap:14,alignItems:'center'}}>
+            {c.recording_url&&<a href={c.recording_url} target="_blank" rel="noopener noreferrer" style={{color:'var(--violet)',fontSize:12}}>▶ Recording</a>}
+            {c.transcript&&<button onClick={()=>setOpenTx(o=>({...o,[c.id]:!o[c.id]}))} style={{padding:'3px 10px',background:'var(--sf)',color:'var(--t2)',border:'1px solid var(--bd)',borderRadius:6,cursor:'pointer',fontSize:12}}>{openTx[c.id]?'Hide transcript':'Show transcript'}</button>}
+            {!c.transcript&&c.recording_url&&<span style={{color:'var(--t3)',fontSize:12}}>transcript pending…</span>}
+          </div>
+          {openTx[c.id]&&c.transcript&&<div style={{marginTop:8,padding:'10px 12px',background:'var(--bg)',border:'1px solid var(--bd)',borderRadius:8,maxHeight:240,overflow:'auto',color:'var(--t1)',fontSize:13,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{c.transcript}</div>}
+        </div>);
+      })}
     </LDSection>
 
     {/* Record details */}

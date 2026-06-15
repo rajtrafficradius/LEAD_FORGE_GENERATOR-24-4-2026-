@@ -317,6 +317,28 @@ _SCHEMA_SQL: Sequence[str] = (
         KEY idx_enrich_status (crawl_status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """,
+    """
+    CREATE TABLE IF NOT EXISTS lead_calls (
+        id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        lead_id      BIGINT UNSIGNED NULL,
+        call_uuid    VARCHAR(96) NOT NULL,
+        direction    ENUM('inbound','outbound','unknown') NOT NULL DEFAULT 'unknown',
+        from_number  VARCHAR(40),
+        to_number    VARCHAR(40),
+        bde_user_id  INT UNSIGNED NULL,
+        agent_name   VARCHAR(128),
+        started_at   DATETIME NULL,
+        duration_sec INT NOT NULL DEFAULT 0,
+        recording_url VARCHAR(768),
+        transcript   MEDIUMTEXT,
+        raw_json     JSON,
+        created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uk_call_uuid (call_uuid),
+        KEY idx_call_lead (lead_id),
+        KEY idx_call_bde (bde_user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
 )
 
 
@@ -1317,6 +1339,128 @@ class LeadEnrichmentRepo:
                     except (TypeError, ValueError):
                         row["cost_per_lead_usd"] = None
                 return row
+
+
+# ── Lead-calls repo (CRM Phase 3 — 3CX, 2026-06-15) ───────────────────────────
+
+
+class LeadCallsRepo:
+    """Per-lead 3CX call records (metadata + recording + transcript). Visible to
+    ADMIN/MANAGER for all leads, and to a BDE only for their own leads."""
+
+    @staticmethod
+    def match_lead_by_phone(*numbers: str) -> Optional[int]:
+        """Find a master_lead whose phone matches any of the given numbers by
+        last-9-digit suffix (robust to +61/0 prefixes and formatting)."""
+        sufs = []
+        for n in numbers:
+            d = re.sub(r"\D", "", n or "")
+            if len(d) >= 7:
+                sufs.append(d[-9:])
+        if not sufs:
+            return None
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                for suf in sufs:
+                    cur.execute(
+                        "SELECT id FROM master_leads "
+                        "WHERE phone_e164 IS NOT NULL AND phone_e164<>'' "
+                        "AND RIGHT(REGEXP_REPLACE(phone_e164,'[^0-9]',''),9)=%s LIMIT 1",
+                        (suf,),
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        return int(row["id"])
+        return None
+
+    @staticmethod
+    def match_bde_by_mobile(*numbers: str) -> Optional[int]:
+        """Find the BDE whose saved mobile matches one of the numbers (suffix).
+        This is how 'which mobile called which lead' is attributed."""
+        sufs = []
+        for n in numbers:
+            d = re.sub(r"\D", "", n or "")
+            if len(d) >= 7:
+                sufs.append(d[-9:])
+        if not sufs:
+            return None
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                for suf in sufs:
+                    cur.execute(
+                        "SELECT id FROM users WHERE role='bde' AND mobile_e164 IS NOT NULL "
+                        "AND mobile_e164<>'' "
+                        "AND RIGHT(REGEXP_REPLACE(mobile_e164,'[^0-9]',''),9)=%s LIMIT 1",
+                        (suf,),
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        return int(row["id"])
+        return None
+
+    @staticmethod
+    def record(call: Dict[str, Any]) -> int:
+        """Idempotent upsert keyed on call_uuid (safe for webhook retries)."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO lead_calls "
+                    "(lead_id, call_uuid, direction, from_number, to_number, bde_user_id, "
+                    " agent_name, started_at, duration_sec, recording_url, transcript, raw_json) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+                    "ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id), "
+                    "  lead_id=COALESCE(VALUES(lead_id), lead_id), "
+                    "  direction=VALUES(direction), duration_sec=VALUES(duration_sec), "
+                    "  recording_url=COALESCE(NULLIF(VALUES(recording_url),''), recording_url), "
+                    "  transcript=COALESCE(NULLIF(VALUES(transcript),''), transcript), "
+                    "  bde_user_id=COALESCE(VALUES(bde_user_id), bde_user_id), "
+                    "  raw_json=VALUES(raw_json)",
+                    (call.get("lead_id"), call.get("call_uuid"),
+                     call.get("direction", "unknown"), call.get("from_number"),
+                     call.get("to_number"), call.get("bde_user_id"),
+                     call.get("agent_name"), call.get("started_at"),
+                     int(call.get("duration_sec", 0) or 0), call.get("recording_url"),
+                     call.get("transcript"),
+                     json.dumps(call.get("raw_json") or {}, default=str)),
+                )
+                call_id = int(cur.lastrowid)
+            conn.commit()
+            return call_id
+
+    @staticmethod
+    def set_transcript(call_id: int, transcript: str) -> None:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE lead_calls SET transcript=%s WHERE id=%s",
+                            (transcript, call_id))
+            conn.commit()
+
+    @staticmethod
+    def list_for_lead(lead_id: int) -> List[Dict[str, Any]]:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT lc.*, u.username AS bde_username, u.full_name AS bde_name, "
+                    "u.mobile_e164 AS bde_mobile "
+                    "FROM lead_calls lc LEFT JOIN users u ON lc.bde_user_id = u.id "
+                    "WHERE lc.lead_id=%s ORDER BY lc.started_at DESC, lc.id DESC",
+                    (lead_id,),
+                )
+                rows = list(cur.fetchall() or [])
+        for r in rows:
+            for k in ("started_at", "created_at"):
+                if r.get(k) and hasattr(r[k], "isoformat"):
+                    r[k] = r[k].isoformat()
+            if isinstance(r.get("raw_json"), (bytes, bytearray)):
+                r["raw_json"] = r["raw_json"].decode("utf-8", "ignore")
+        return rows
+
+    @staticmethod
+    def count_for_lead(lead_id: int) -> int:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) AS c FROM lead_calls WHERE lead_id=%s", (lead_id,))
+                return int((cur.fetchone() or {}).get("c", 0))
 
 
 # ── Self-test ────────────────────────────────────────────────────────────────
