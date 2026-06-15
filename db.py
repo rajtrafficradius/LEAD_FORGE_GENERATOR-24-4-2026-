@@ -213,7 +213,9 @@ _SCHEMA_SQL: Sequence[str] = (
         username      VARCHAR(64)  NOT NULL,
         email         VARCHAR(255) NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
-        role          ENUM('admin','user') NOT NULL DEFAULT 'user',
+        role          ENUM('admin','manager','bde','user') NOT NULL DEFAULT 'user',
+        full_name     VARCHAR(128) NULL,
+        mobile_e164   VARCHAR(24)  NULL,
         is_active     TINYINT(1)   NOT NULL DEFAULT 1,
         created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
         last_login_at DATETIME NULL,
@@ -274,12 +276,31 @@ _SCHEMA_SQL: Sequence[str] = (
         first_seen_run_id BIGINT UNSIGNED NOT NULL,
         first_seen_at     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
         payload_json      JSON,
+        assigned_bde_id   INT UNSIGNED NULL,
+        assigned_by_id    INT UNSIGNED NULL,
+        assigned_at       DATETIME NULL,
+        alloc_status      ENUM('unassigned','assigned','contacted') NOT NULL DEFAULT 'unassigned',
+        contacted_at      DATETIME NULL,
         PRIMARY KEY (id),
         UNIQUE KEY uk_name_domain (normalized_name, root_domain),
         KEY idx_root_domain (root_domain),
         KEY idx_industry_country (industry, country),
         KEY idx_first_seen_at (first_seen_at),
+        KEY idx_assigned_bde (assigned_bde_id),
         CONSTRAINT fk_master_run FOREIGN KEY (first_seen_run_id) REFERENCES run_history(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS allocation_events (
+        id        BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        lead_id   BIGINT UNSIGNED NOT NULL,
+        action    ENUM('assign','reassign','contacted','manual_add','unassign') NOT NULL,
+        actor_id  INT UNSIGNED NULL,
+        bde_id    INT UNSIGNED NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_alloc_lead (lead_id),
+        KEY idx_alloc_bde (bde_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """,
 )
@@ -298,6 +319,30 @@ _SCHEMA_MIGRATIONS: Sequence[Tuple[str, str, str]] = (
     # Per-run dollar cost + per-lead split, frozen with the prices active at run time.
     ("run_history",  "cost_usd",          "DECIMAL(12,4) NULL"),
     ("run_history",  "cost_per_lead_usd", "DECIMAL(12,4) NULL"),
+    # 2026-06-15 (CRM layer): user profile + per-lead allocation. All ADD COLUMN,
+    # backward-compatible — existing rows get NULL / 'unassigned' defaults.
+    ("users",        "full_name",         "VARCHAR(128) NULL"),
+    ("users",        "mobile_e164",       "VARCHAR(24) NULL"),
+    ("master_leads", "assigned_bde_id",   "INT UNSIGNED NULL"),
+    ("master_leads", "assigned_by_id",    "INT UNSIGNED NULL"),
+    ("master_leads", "assigned_at",       "DATETIME NULL"),
+    ("master_leads", "alloc_status",      "ENUM('unassigned','assigned','contacted') NOT NULL DEFAULT 'unassigned'"),
+    ("master_leads", "contacted_at",      "DATETIME NULL"),
+)
+
+
+# 2026-06-15: raw idempotent migrations the ADD-COLUMN runner can't express —
+# the role-ENUM widening, the allocation index, and the allocation_events table
+# for DBs created before the CRM layer. Each runs inside its own try/except so a
+# already-applied step (or a benign "duplicate key" error) never blocks boot.
+_SCHEMA_MIGRATIONS_RAW: Sequence[str] = (
+    # Widen the role enum (was ENUM('admin','user')). Idempotent: re-running a
+    # MODIFY to the same definition is a no-op.
+    "ALTER TABLE users MODIFY COLUMN role "
+    "ENUM('admin','manager','bde','user') NOT NULL DEFAULT 'user'",
+    # Index for the BDE 'my leads' scoped query. CREATE INDEX errors if it
+    # already exists → caught and ignored by the runner.
+    "CREATE INDEX idx_assigned_bde ON master_leads (assigned_bde_id)",
 )
 
 
@@ -322,8 +367,16 @@ def init_schema() -> None:
                 if not _column_exists(cur, table, col):
                     cur.execute(f"ALTER TABLE {table} ADD COLUMN {col} {coldef}")
                     log.info("Migrated: ADD COLUMN %s.%s", table, col)
+            # Raw idempotent migrations (ENUM widen, index) — each isolated so a
+            # benign "already exists" never blocks the others or the boot.
+            for raw_sql in _SCHEMA_MIGRATIONS_RAW:
+                try:
+                    cur.execute(raw_sql)
+                    log.info("Migrated (raw): %s", raw_sql[:60])
+                except Exception as _mig_e:
+                    log.debug("Raw migration skipped (likely already applied): %s", _mig_e)
         conn.commit()
-    log.info("Schema verified: users, run_history, master_leads")
+    log.info("Schema verified: users, run_history, master_leads, allocation_events")
 
 
 # ── User repo ────────────────────────────────────────────────────────────────
@@ -332,6 +385,9 @@ def init_schema() -> None:
 class UserRepo:
     """CRUD for users table. All methods are class-level (thin wrappers)."""
 
+    # 2026-06-15: valid roles for the CRM layer.
+    VALID_ROLES = ("admin", "manager", "bde", "user")
+
     @staticmethod
     def get_by_username(username: str) -> Optional[Dict[str, Any]]:
         if not username:
@@ -339,7 +395,8 @@ class UserRepo:
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT id, username, email, password_hash, role, is_active, last_login_at "
+                    "SELECT id, username, email, password_hash, role, full_name, "
+                    "mobile_e164, is_active, last_login_at "
                     "FROM users WHERE username = %s AND is_active = 1",
                     (username,),
                 )
@@ -350,7 +407,8 @@ class UserRepo:
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT id, username, email, role, is_active, last_login_at "
+                    "SELECT id, username, email, role, full_name, mobile_e164, "
+                    "is_active, last_login_at "
                     "FROM users WHERE id = %s",
                     (user_id,),
                 )
@@ -358,7 +416,7 @@ class UserRepo:
 
     @staticmethod
     def create(username: str, email: str, password_hash: str, role: str = "user") -> int:
-        if role not in ("admin", "user"):
+        if role not in UserRepo.VALID_ROLES:
             raise ValueError(f"invalid role: {role}")
         with get_conn() as conn:
             with conn.cursor() as cur:
@@ -390,9 +448,23 @@ class UserRepo:
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT id, username, email, role, is_active, created_at, last_login_at "
+                    "SELECT id, username, email, role, full_name, mobile_e164, "
+                    "is_active, created_at, last_login_at "
                     "FROM users ORDER BY id ASC"
                 )
+                return list(cur.fetchall() or [])
+
+    @staticmethod
+    def list_by_role(role: str, active_only: bool = True) -> List[Dict[str, Any]]:
+        """All users of a role (e.g. every BDE) — drives allocation + user mgmt."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                sql = ("SELECT id, username, email, role, full_name, mobile_e164, "
+                       "is_active, created_at, last_login_at FROM users WHERE role = %s")
+                if active_only:
+                    sql += " AND is_active = 1"
+                sql += " ORDER BY id ASC"
+                cur.execute(sql, (role,))
                 return list(cur.fetchall() or [])
 
     @staticmethod
@@ -402,6 +474,56 @@ class UserRepo:
                 cur.execute("SELECT COUNT(*) AS c FROM users")
                 row = cur.fetchone()
                 return int(row["c"]) if row else 0
+
+    @staticmethod
+    def set_role(user_id: int, role: str) -> None:
+        if role not in UserRepo.VALID_ROLES:
+            raise ValueError(f"invalid role: {role}")
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE users SET role=%s WHERE id=%s", (role, user_id))
+            conn.commit()
+
+    @staticmethod
+    def set_active(user_id: int, is_active: bool) -> None:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE users SET is_active=%s WHERE id=%s",
+                            (1 if is_active else 0, user_id))
+            conn.commit()
+
+    @staticmethod
+    def set_password(user_id: int, password_hash: str) -> None:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE users SET password_hash=%s WHERE id=%s",
+                            (password_hash, user_id))
+            conn.commit()
+
+    @staticmethod
+    def update_profile(user_id: int, full_name: Optional[str] = None,
+                       email: Optional[str] = None) -> None:
+        sets, params = [], []
+        if full_name is not None:
+            sets.append("full_name=%s"); params.append(full_name)
+        if email is not None:
+            sets.append("email=%s"); params.append(email)
+        if not sets:
+            return
+        params.append(user_id)
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"UPDATE users SET {', '.join(sets)} WHERE id=%s", tuple(params))
+            conn.commit()
+
+    @staticmethod
+    def set_mobile(user_id: int, mobile_e164: str) -> None:
+        """BDE self-service mobile number update."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE users SET mobile_e164=%s WHERE id=%s",
+                            (mobile_e164, user_id))
+            conn.commit()
 
 
 # ── Run-history repo ─────────────────────────────────────────────────────────
@@ -862,6 +984,188 @@ class MasterLeadRepo:
                     )
                 row = cur.fetchone()
                 return int(row["c"]) if row else 0
+
+
+# ── Lead-allocation repo (CRM layer, 2026-06-15) ──────────────────────────────
+
+
+class LeadAllocationRepo:
+    """Allocation of master_leads to BDE users. Additive — never touches the
+    lead-generation flow. All methods class-level, mirroring the other repos."""
+
+    @staticmethod
+    def _event(cur, lead_id: int, action: str, actor_id: Optional[int], bde_id: Optional[int]) -> None:
+        cur.execute(
+            "INSERT INTO allocation_events (lead_id, action, actor_id, bde_id) "
+            "VALUES (%s,%s,%s,%s)",
+            (lead_id, action, actor_id, bde_id),
+        )
+
+    @staticmethod
+    def assign(lead_id: int, bde_id: int, actor_id: Optional[int]) -> None:
+        """Assign / reassign one lead to a BDE."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE master_leads SET assigned_bde_id=%s, assigned_by_id=%s, "
+                    "assigned_at=NOW(), alloc_status='assigned', contacted_at=NULL "
+                    "WHERE id=%s",
+                    (bde_id, actor_id, lead_id),
+                )
+                LeadAllocationRepo._event(cur, lead_id, "reassign", actor_id, bde_id)
+            conn.commit()
+
+    @staticmethod
+    def mark_contacted(lead_id: int, actor_id: Optional[int]) -> None:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE master_leads SET alloc_status='contacted', contacted_at=NOW() "
+                    "WHERE id=%s",
+                    (lead_id,),
+                )
+                LeadAllocationRepo._event(cur, lead_id, "contacted", actor_id, None)
+            conn.commit()
+
+    @staticmethod
+    def auto_distribute(bde_ids: Sequence[int], actor_id: Optional[int],
+                        industry: Optional[str] = None, limit: int = 100000) -> Dict[int, int]:
+        """Round-robin every UNASSIGNED lead equally across `bde_ids`.
+        Returns {bde_id: count_assigned}. Equal ±1 by construction."""
+        if not bde_ids:
+            return {}
+        assigned: Dict[int, int] = {b: 0 for b in bde_ids}
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                if industry:
+                    cur.execute(
+                        "SELECT id FROM master_leads WHERE alloc_status='unassigned' "
+                        "AND industry=%s ORDER BY id ASC LIMIT %s",
+                        (industry, int(limit)),
+                    )
+                else:
+                    cur.execute(
+                        "SELECT id FROM master_leads WHERE alloc_status='unassigned' "
+                        "ORDER BY id ASC LIMIT %s",
+                        (int(limit),),
+                    )
+                lead_ids = [int(r["id"]) for r in (cur.fetchall() or [])]
+                for i, lid in enumerate(lead_ids):
+                    bde = bde_ids[i % len(bde_ids)]
+                    cur.execute(
+                        "UPDATE master_leads SET assigned_bde_id=%s, assigned_by_id=%s, "
+                        "assigned_at=NOW(), alloc_status='assigned' WHERE id=%s",
+                        (bde, actor_id, lid),
+                    )
+                    LeadAllocationRepo._event(cur, lid, "assign", actor_id, bde)
+                    assigned[bde] += 1
+            conn.commit()
+        return assigned
+
+    @staticmethod
+    def counts_by_bde() -> Dict[int, int]:
+        """{bde_id: number of leads currently assigned} — drives the Allocation UI."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT assigned_bde_id AS bde, COUNT(*) AS c FROM master_leads "
+                    "WHERE assigned_bde_id IS NOT NULL GROUP BY assigned_bde_id"
+                )
+                return {int(r["bde"]): int(r["c"]) for r in (cur.fetchall() or [])}
+
+    @staticmethod
+    def list_for_bde(bde_id: int, page: int = 1, page_size: int = 50) -> Tuple[List[Dict[str, Any]], int]:
+        """Paginated leads assigned to one BDE (their restricted dashboard)."""
+        page = max(1, int(page))
+        page_size = max(1, min(200, int(page_size)))
+        offset = (page - 1) * page_size
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT COUNT(*) AS c FROM master_leads WHERE assigned_bde_id=%s",
+                    (bde_id,),
+                )
+                total = int((cur.fetchone() or {}).get("c", 0))
+                cur.execute(
+                    "SELECT id, normalized_name, root_domain, display_name, company_name, "
+                    "role, phone_e164, primary_email, email_type, traffic_source, industry, "
+                    "country, revenue, alloc_status, assigned_at, contacted_at, first_seen_at "
+                    "FROM master_leads WHERE assigned_bde_id=%s "
+                    "ORDER BY id DESC LIMIT %s OFFSET %s",
+                    (bde_id, page_size, offset),
+                )
+                return list(cur.fetchall() or []), total
+
+    @staticmethod
+    def _ensure_manual_run(cur, actor_id: Optional[int]) -> int:
+        """Singleton run_history row that owns manually-added leads (FK target)."""
+        cur.execute("SELECT id FROM run_history WHERE job_uuid=%s", ("manual00",))
+        row = cur.fetchone()
+        if row:
+            return int(row["id"])
+        uid = actor_id
+        if not uid:
+            cur.execute("SELECT MIN(id) AS m FROM users")
+            r = cur.fetchone()
+            uid = int(r["m"]) if r and r.get("m") else 1
+        cur.execute(
+            "INSERT INTO run_history (user_id, job_uuid, industry, country, mode, "
+            "enrichment_enabled, state, leads_total) "
+            "VALUES (%s,'manual00','Manual','AU','industry',0,'done',0)",
+            (uid,),
+        )
+        return int(cur.lastrowid)
+
+    @staticmethod
+    def manual_add(normalized_name: str, root_domain: str, display_name: str,
+                   company_name: str, phone: str, email: str, industry: str,
+                   country: str, actor_id: Optional[int], bde_id: Optional[int]) -> int:
+        """Insert (or reuse) a manually-added lead; optionally allocate to a BDE.
+        Returns the master_leads.id. Uses INSERT ... ON DUPLICATE KEY so a repeat
+        (name,domain) returns the existing row rather than erroring."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                run_id = LeadAllocationRepo._ensure_manual_run(cur, actor_id)
+                cur.execute(
+                    "INSERT INTO master_leads "
+                    "(normalized_name, root_domain, display_name, company_name, "
+                    " phone_e164, primary_email, traffic_source, industry, country, "
+                    " first_seen_run_id) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,'secondary',%s,%s,%s) "
+                    "ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id), "
+                    "  display_name=COALESCE(NULLIF(display_name,''), VALUES(display_name)), "
+                    "  company_name=COALESCE(NULLIF(company_name,''), VALUES(company_name)), "
+                    "  phone_e164=COALESCE(NULLIF(phone_e164,''), VALUES(phone_e164)), "
+                    "  primary_email=COALESCE(NULLIF(primary_email,''), VALUES(primary_email))",
+                    (normalized_name, root_domain, display_name, company_name,
+                     phone or None, email or None, industry, country, run_id),
+                )
+                lead_id = int(cur.lastrowid)
+                LeadAllocationRepo._event(cur, lead_id, "manual_add", actor_id, bde_id)
+                if bde_id:
+                    cur.execute(
+                        "UPDATE master_leads SET assigned_bde_id=%s, assigned_by_id=%s, "
+                        "assigned_at=NOW(), alloc_status='assigned' WHERE id=%s",
+                        (bde_id, actor_id, lead_id),
+                    )
+                    LeadAllocationRepo._event(cur, lead_id, "assign", actor_id, bde_id)
+            conn.commit()
+        return lead_id
+
+    @staticmethod
+    def recent_contacted(limit: int = 50) -> List[Dict[str, Any]]:
+        """Latest 'contacted' events with lead + BDE — the ADMIN/MANAGER feed."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT ml.id, ml.company_name, ml.root_domain, ml.assigned_bde_id, "
+                    "u.username AS bde_username, ml.contacted_at "
+                    "FROM master_leads ml LEFT JOIN users u ON ml.assigned_bde_id = u.id "
+                    "WHERE ml.alloc_status='contacted' "
+                    "ORDER BY ml.contacted_at DESC LIMIT %s",
+                    (int(limit),),
+                )
+                return list(cur.fetchall() or [])
 
 
 # ── Self-test ────────────────────────────────────────────────────────────────

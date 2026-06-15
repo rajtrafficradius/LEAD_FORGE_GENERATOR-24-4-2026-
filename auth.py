@@ -52,6 +52,8 @@ class User(UserMixin):
         self.username: str = row["username"]
         self.email: str = row.get("email", "")
         self.role: str = row.get("role", "user")
+        self.full_name: str = row.get("full_name") or ""
+        self.mobile_e164: str = row.get("mobile_e164") or ""
         self._is_active: bool = bool(row.get("is_active", 1))
 
     def get_id(self) -> str:
@@ -65,8 +67,25 @@ class User(UserMixin):
     def is_admin(self) -> bool:
         return self.role == "admin"
 
+    @property
+    def is_manager(self) -> bool:
+        return self.role == "manager"
+
+    @property
+    def is_bde(self) -> bool:
+        return self.role == "bde"
+
+    @property
+    def is_manager_or_admin(self) -> bool:
+        return self.role in ("admin", "manager")
+
     def to_dict(self) -> Dict[str, Any]:
-        return {"id": self.id, "username": self.username, "role": self.role, "email": self.email}
+        return {
+            "id": self.id, "username": self.username, "role": self.role,
+            "email": self.email,
+            "full_name": getattr(self, "full_name", "") or "",
+            "mobile_e164": getattr(self, "mobile_e164", "") or "",
+        }
 
 
 login_manager = LoginManager()
@@ -84,12 +103,10 @@ def _load_user(user_id: str) -> Optional[User]:
     return User(row) if row else None
 
 
-# 2026-05-18: LOGIN FEATURE DISABLED — see neutered decorators below.
-# Anything that previously called @login_required(_json)/@admin_required
-# now passes through unchanged. The unauthorized_handler is kept for
-# Flask-Login compatibility but should never fire because decorators no
-# longer block. Re-enable by reverting this commit.
-LOGIN_DISABLED = True
+# 2026-06-15: LOGIN RE-ENABLED for the CRM layer (ADMIN / MANAGER / BDE roles).
+# Set to True to bypass all auth again (dev only). Can also be forced off via
+# env LOGIN_DISABLED=1 for emergencies without a code change.
+LOGIN_DISABLED = str(os.environ.get("LOGIN_DISABLED", "0")).strip() == "1"
 
 
 @login_manager.unauthorized_handler
@@ -132,8 +149,7 @@ def login_required_json(view: Callable) -> Callable:
 
 
 def admin_required(view: Callable) -> Callable:
-    """2026-05-18: LOGIN DISABLED — pass-through. Originally required
-    role='admin'; now every request is accepted regardless of role."""
+    """Require an authenticated user with role='admin'."""
     if LOGIN_DISABLED:
         return view
     @functools.wraps(view)
@@ -144,6 +160,39 @@ def admin_required(view: Callable) -> Callable:
             return jsonify({"error": "forbidden", "reason": "admin role required"}), 403
         return view(*args, **kwargs)
     return wrapped
+
+
+def manager_or_admin_required(view: Callable) -> Callable:
+    """Require role in {admin, manager}. Blocks BDE accounts. Used for the
+    generation, database, allocation, cost and user-management endpoints."""
+    if LOGIN_DISABLED:
+        return view
+    @functools.wraps(view)
+    def wrapped(*args: Any, **kwargs: Any):
+        if not current_user.is_authenticated:
+            return jsonify({"error": "unauthorized", "login_url": "/login"}), 401
+        if not getattr(current_user, "is_manager_or_admin", False):
+            return jsonify({"error": "forbidden", "reason": "manager or admin role required"}), 403
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def role_required(*roles: str) -> Callable:
+    """Decorator factory: require the user's role to be one of `roles`."""
+    allowed = set(roles)
+    def deco(view: Callable) -> Callable:
+        if LOGIN_DISABLED:
+            return view
+        @functools.wraps(view)
+        def wrapped(*args: Any, **kwargs: Any):
+            if not current_user.is_authenticated:
+                return jsonify({"error": "unauthorized", "login_url": "/login"}), 401
+            if getattr(current_user, "role", None) not in allowed:
+                return jsonify({"error": "forbidden",
+                                "reason": f"requires role in {sorted(allowed)}"}), 403
+            return view(*args, **kwargs)
+        return wrapped
+    return deco
 
 
 # ── Login / logout helpers ──────────────────────────────────────────────────
@@ -287,11 +336,111 @@ def _write_credentials_file(project_dir: Path, users: List[Dict[str, str]]) -> N
         log.warning("Could not set 0600 on %s — protect manually.", path)
 
 
+# ── CRM roster (2026-06-15): 1 admin + 1 manager + 7 BDE ──────────────────────
+
+# Memorable-but-strong defaults (changeable later in User Management). Override
+# the whole roster with env CRM_ROSTER_JSON (list of {username,password,role,
+# full_name}). Passwords are ~18 chars, mixed case + digit + symbol.
+_CRM_ROSTER_FILE = "CRM_ROSTER_CREDENTIALS.txt"
+
+
+def _default_crm_roster() -> List[Dict[str, str]]:
+    roster = [
+        {"username": "admin",   "role": "admin",   "password": "Radius-Admin-2026!",   "full_name": "Administrator"},
+        {"username": "manager", "role": "manager", "password": "Radius-Manager-2026!", "full_name": "Sales Manager"},
+    ]
+    for n in range(1, 8):
+        roster.append({
+            "username": f"bde{n}", "role": "bde",
+            "password": f"Radius-BDE{n}-2026!", "full_name": f"BDE {n}",
+        })
+    return roster
+
+
+def ensure_crm_roster(project_dir: str | Path) -> List[Dict[str, str]]:
+    """Idempotent: guarantee admin/manager/bde1..7 exist with the agreed roles.
+    Creates any missing account (memorable password), then deactivates the
+    legacy first-run accounts (admin_radius, lead_hunter_*) so the login roster
+    is clean. NEVER deletes. Returns the list of accounts created this call."""
+    project_dir = Path(project_dir)
+    raw = os.environ.get("CRM_ROSTER_JSON")
+    roster: List[Dict[str, str]] = _default_crm_roster()
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list) and parsed:
+                roster = parsed
+        except Exception as e:
+            log.error("CRM_ROSTER_JSON invalid, using defaults: %s", e)
+
+    created: List[Dict[str, str]] = []
+    admin_ok = False
+    for r in roster:
+        uname = (r.get("username") or "").strip()
+        role = r.get("role") or "user"
+        if not uname:
+            continue
+        pw = r.get("password") or _random_password()
+        email = r.get("email") or f"{uname}@{_EMAIL_DOMAIN}"
+        pw_hash = generate_password_hash(pw, method="pbkdf2:sha256:260000")
+        try:
+            uid, created_now = UserRepo.create_if_absent(uname, email, pw_hash, role)
+            if created_now:
+                created.append({"username": uname, "password": pw, "role": role,
+                                "email": email, "user_id": str(uid)})
+                if r.get("full_name"):
+                    try:
+                        UserRepo.update_profile(uid, full_name=r.get("full_name"))
+                    except Exception:
+                        pass
+            if role == "admin":
+                admin_ok = True
+        except Exception as e:
+            log.error("ensure_crm_roster: failed to provision %s: %s", uname, e)
+
+    # Only retire legacy accounts once a fresh admin is confirmed present.
+    if admin_ok:
+        try:
+            for u in UserRepo.list_all():
+                un = u.get("username", "")
+                if (un == "admin_radius" or un.startswith("lead_hunter_")) and u.get("is_active"):
+                    UserRepo.set_active(int(u["id"]), False)
+                    log.info("ensure_crm_roster: deactivated legacy account %s", un)
+        except Exception as e:
+            log.warning("ensure_crm_roster: legacy retirement skipped: %s", e)
+
+    if created:
+        try:
+            _write_named_credentials(project_dir, _CRM_ROSTER_FILE, created)
+        except Exception as e:
+            log.warning("ensure_crm_roster: could not write creds file: %s", e)
+        log.info("ensure_crm_roster: created %d account(s); creds at %s",
+                 len(created), _CRM_ROSTER_FILE)
+    return created
+
+
+def _write_named_credentials(project_dir: Path, filename: str, users: List[Dict[str, str]]) -> None:
+    path = project_dir / filename
+    lines = [
+        "# LEAD_FORGE CRM roster credentials",
+        f"# Generated: {datetime.utcnow().isoformat()}Z",
+        "# SECURITY: plaintext — delete after copying; change passwords in User Management.",
+        f"{'ROLE':<8} {'USERNAME':<12} {'PASSWORD':<22} EMAIL",
+    ]
+    for u in users:
+        lines.append(f"{u['role']:<8} {u['username']:<12} {u['password']:<22} {u['email']}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    try:
+        os.chmod(path, 0o600)
+    except Exception:
+        pass
+
+
 # ── Flask wiring ────────────────────────────────────────────────────────────
 
 
 def configure_app(app: Flask, project_dir: str | Path) -> None:
-    """Attach LoginManager + seed users. Call once at app factory time."""
+    """Attach LoginManager + provision the CRM roster. Call once at app factory time."""
     secret = os.environ.get("SECRET_KEY")
     if not secret:
         # Generate a stable per-process fallback so sessions work in dev;
@@ -302,14 +451,9 @@ def configure_app(app: Flask, project_dir: str | Path) -> None:
     app.secret_key = secret
     login_manager.init_app(app)
 
-    # Seed (fails gracefully if DB down — caller handles that)
+    # 2026-06-15: provision the ADMIN/MANAGER/BDE roster (idempotent). Replaces
+    # the old random first-run seed for the CRM layer; fails gracefully if DB down.
     try:
-        seeded, creds = seed_default_users(project_dir)
-        if seeded and creds:
-            log.info(
-                "First-run seed completed. %d users created (1 admin, %d operators). "
-                "Credentials at %s — rotate once read.",
-                len(creds), len(creds) - 1, _CREDENTIALS_FILE,
-            )
+        ensure_crm_roster(project_dir)
     except Exception as e:
-        log.error("seed_default_users skipped: %s", e)
+        log.error("ensure_crm_roster skipped: %s", e)

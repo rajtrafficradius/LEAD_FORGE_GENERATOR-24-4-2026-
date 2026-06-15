@@ -10,6 +10,8 @@
 # Phase 2: first-run credential drops — contain plaintext admin password
 FIRST_RUN_CREDENTIALS.txt
 FIRST_RUN_CREDENTIALS.read
+# 2026-06-15: CRM roster credential drop — plaintext admin/manager/BDE passwords
+CRM_ROSTER_CREDENTIALS.txt
 
 # 2026-06-04: secure API-key backup taken before GitHub push — NEVER upload
 API KEYS GUT UPLD.txt

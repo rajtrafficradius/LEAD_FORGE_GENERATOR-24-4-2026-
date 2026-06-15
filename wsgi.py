@@ -38,9 +38,38 @@ from flask_login import current_user
 
 import auth
 import db
-from auth import admin_required, login_manager, login_required_json, do_login, do_logout, verify_credentials
+from auth import (
+    admin_required,
+    login_manager,
+    login_required_json,
+    manager_or_admin_required,
+    role_required,
+    do_login,
+    do_logout,
+    verify_credentials,
+)
 from lead_pool import LeadPool
 from utils import normalize_master_key, root_domain
+
+
+def _current_uid() -> Optional[int]:
+    """The logged-in user's id, or None when auth is disabled (dev)."""
+    try:
+        if getattr(current_user, "is_authenticated", False):
+            return int(current_user.id)
+    except Exception:
+        pass
+    return None
+
+
+def _current_role() -> str:
+    """Effective role: real role when logged in, 'admin' when auth disabled."""
+    if getattr(auth, "LOGIN_DISABLED", False):
+        return "admin"
+    try:
+        return getattr(current_user, "role", "") or ""
+    except Exception:
+        return ""
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -163,17 +192,49 @@ class JobState:
 
 
 # ── Login / logout ──────────────────────────────────────────────────────────
-# 2026-05-18: LOGIN FEATURE DISABLED. The /login route now just redirects
-# to "/", so old bookmarks and the frontend's "401 → /login" fallbacks
-# don't dead-end. POST is accepted for back-compat (e.g. legacy form
-# submissions) but ignores credentials and redirects unconditionally.
+# 2026-06-15: LOGIN RE-ENABLED for the CRM layer. The SPA posts JSON
+# {username,password} to /login and reads /whoami; direct browser navigation
+# gets the server-rendered form fallback.
 @app.route("/login", methods=["GET", "POST"])
 def login():
     nxt = request.args.get("next") or (request.form.get("next") if request.form else None) or "/"
     if not nxt.startswith("/") or nxt.startswith("//"):
         nxt = "/"
+
+    if request.method == "GET":
+        if getattr(current_user, "is_authenticated", False):
+            if _wants_json():
+                return jsonify({"status": "ok", "user": current_user.to_dict()})
+            return redirect(nxt)
+        if _wants_json():
+            return jsonify({"authenticated": False, "login_url": "/login"}), 401
+        return _render_login()
+
+    # POST — authenticate.
+    if request.is_json:
+        data = request.get_json(silent=True) or {}
+        username = (data.get("username") or "").strip()
+        password = data.get("password") or ""
+        remember = bool(data.get("remember", True))
+    else:
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
+        remember = bool(request.form.get("remember", True))
+
+    user = None
+    try:
+        user = verify_credentials(username, password)
+    except Exception as e:
+        log.warning("login verify error: %s", e)
+
+    if not user:
+        if _wants_json():
+            return jsonify({"error": "invalid_credentials"}), 401
+        return _render_login(error="Invalid username or password", status=401)
+
+    do_login(user, remember=remember)
     if _wants_json():
-        return jsonify({"status": "ok", "auth": "disabled", "next": nxt})
+        return jsonify({"status": "ok", "user": user.to_dict()})
     return redirect(nxt)
 
 
@@ -202,34 +263,29 @@ def _render_login(error: str = "", status: int = 200):
 
 @app.route("/logout", methods=["GET", "POST"])
 def logout():
-    # 2026-05-18: LOGIN DISABLED — clear any stale session cookie, then
-    # send the user to the home page (NOT /login, which now redirects
-    # straight back).
     try:
         do_logout()
     except Exception:
         pass
     if _wants_json():
-        return jsonify({"status": "logged_out", "auth": "disabled"})
-    return redirect("/")
+        return jsonify({"status": "logged_out"})
+    return redirect("/login")
 
 
 @app.route("/whoami")
 def whoami():
-    # 2026-05-18: LOGIN DISABLED — return a synthetic "guest admin" so any
-    # frontend code reading the response (username/role badges, admin
-    # gate checks) keeps working without an actual session.
-    if getattr(current_user, "is_authenticated", False):
+    # When auth is disabled (dev), return a synthetic admin so the SPA opens.
+    if getattr(auth, "LOGIN_DISABLED", False):
         return jsonify({
-            "id": getattr(current_user, "id", 0),
-            "username": getattr(current_user, "username", "guest"),
-            "role": getattr(current_user, "role", "admin"),
-            "is_admin": getattr(current_user, "is_admin", True),
+            "id": 0, "username": "guest", "role": "admin", "is_admin": True,
+            "is_manager_or_admin": True, "auth": "disabled",
         })
-    return jsonify({
-        "id": 0, "username": "guest", "role": "admin", "is_admin": True,
-        "auth": "disabled",
-    })
+    if getattr(current_user, "is_authenticated", False):
+        d = current_user.to_dict()
+        d["is_admin"] = current_user.is_admin
+        d["is_manager_or_admin"] = current_user.is_manager_or_admin
+        return jsonify(d)
+    return jsonify({"authenticated": False, "login_url": "/login"}), 401
 
 
 # ── Public routes ───────────────────────────────────────────────────────────
@@ -265,7 +321,7 @@ def serve_static(filename):
 
 # ── Industries / AU cities ──────────────────────────────────────────────────
 @app.route("/industries")
-@login_required_json
+@manager_or_admin_required
 def get_industries():
     try:
         from V5 import INDUSTRY_KEYWORDS
@@ -275,7 +331,7 @@ def get_industries():
 
 
 @app.route("/api/au-cities")
-@login_required_json
+@manager_or_admin_required
 def get_au_cities():
     try:
         from cities_au import list_states_payload
@@ -469,7 +525,7 @@ def _build_credits_payload(force: bool = False):
 
 
 @app.route("/api/credits")
-@login_required_json
+@manager_or_admin_required
 def get_credits():
     try:
         return jsonify(_build_credits_payload(force=False))
@@ -478,7 +534,7 @@ def get_credits():
 
 
 @app.route("/api/credits/refresh", methods=["POST"])
-@login_required_json
+@manager_or_admin_required
 def refresh_credits():
     try:
         return jsonify(_build_credits_payload(force=True))
@@ -492,7 +548,7 @@ _MASTER_STATS_TTL = 60
 
 
 @app.route("/api/master-stats")
-@login_required_json
+@manager_or_admin_required
 def master_stats():
     now = time.time()
     cached = _master_stats_cache["data"]
@@ -555,9 +611,211 @@ def admin_runs():
         return jsonify({"error": str(e)}), 500
 
 
+# ── CRM layer: users, allocation, contacted, mobile (2026-06-15) ─────────────
+
+def _fmt_user(u: Dict[str, Any]) -> Dict[str, Any]:
+    for k in ("created_at", "last_login_at"):
+        if u.get(k) and hasattr(u[k], "isoformat"):
+            u[k] = u[k].isoformat()
+    u.pop("password_hash", None)
+    return u
+
+
+@app.route("/api/users", methods=["GET"])
+@manager_or_admin_required
+def api_users_list():
+    try:
+        return jsonify({"users": [_fmt_user(u) for u in db.UserRepo.list_all()]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/users", methods=["POST"])
+@admin_required
+def api_users_create():
+    from werkzeug.security import generate_password_hash
+    d = request.get_json(silent=True) or {}
+    username = (d.get("username") or "").strip()
+    role = (d.get("role") or "bde").strip()
+    password = d.get("password") or ""
+    email = (d.get("email") or f"{username}@leadforge.local").strip()
+    full_name = (d.get("full_name") or "").strip()
+    if not username or not password:
+        return jsonify({"error": "username and password required"}), 400
+    if role not in db.UserRepo.VALID_ROLES:
+        return jsonify({"error": f"invalid role: {role}"}), 400
+    try:
+        pw_hash = generate_password_hash(password, method="pbkdf2:sha256:260000")
+        uid, created = db.UserRepo.create_if_absent(username, email, pw_hash, role)
+        if not created:
+            return jsonify({"error": "username already exists"}), 409
+        if full_name:
+            db.UserRepo.update_profile(uid, full_name=full_name)
+        return jsonify({"ok": True, "id": uid})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/users/<int:user_id>", methods=["PATCH"])
+@admin_required
+def api_users_update(user_id):
+    d = request.get_json(silent=True) or {}
+    try:
+        if "role" in d:
+            db.UserRepo.set_role(user_id, d["role"])
+        if "is_active" in d:
+            db.UserRepo.set_active(user_id, bool(d["is_active"]))
+        if "full_name" in d or "email" in d:
+            db.UserRepo.update_profile(user_id, full_name=d.get("full_name"), email=d.get("email"))
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/users/<int:user_id>/password", methods=["POST"])
+@admin_required
+def api_users_password(user_id):
+    from werkzeug.security import generate_password_hash
+    d = request.get_json(silent=True) or {}
+    pw = d.get("password") or ""
+    if len(pw) < 6:
+        return jsonify({"error": "password too short"}), 400
+    try:
+        db.UserRepo.set_password(user_id, generate_password_hash(pw, method="pbkdf2:sha256:260000"))
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/allocation/bdes", methods=["GET"])
+@manager_or_admin_required
+def api_allocation_bdes():
+    try:
+        bdes = db.UserRepo.list_by_role("bde", active_only=False)
+        counts = db.LeadAllocationRepo.counts_by_bde()
+        out = []
+        for b in bdes:
+            out.append({
+                "id": b["id"], "username": b["username"],
+                "full_name": b.get("full_name") or "", "is_active": bool(b.get("is_active")),
+                "mobile_e164": b.get("mobile_e164") or "",
+                "assigned_count": int(counts.get(int(b["id"]), 0)),
+            })
+        return jsonify({"bdes": out})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/allocation/auto", methods=["POST"])
+@manager_or_admin_required
+def api_allocation_auto():
+    d = request.get_json(silent=True) or {}
+    bde_ids = [int(x) for x in (d.get("bde_ids") or [])]
+    industry = (d.get("industry") or "").strip() or None
+    if not bde_ids:
+        return jsonify({"error": "no active BDEs selected"}), 400
+    try:
+        assigned = db.LeadAllocationRepo.auto_distribute(bde_ids, _current_uid(), industry=industry)
+        return jsonify({"ok": True, "assigned": assigned, "total": sum(assigned.values())})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/leads/<int:lead_id>/reassign", methods=["POST"])
+@manager_or_admin_required
+def api_lead_reassign(lead_id):
+    d = request.get_json(silent=True) or {}
+    bde_id = d.get("bde_id")
+    if not bde_id:
+        return jsonify({"error": "bde_id required"}), 400
+    try:
+        db.LeadAllocationRepo.assign(lead_id, int(bde_id), _current_uid())
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+def _lead_assigned_bde(lead_id: int) -> Optional[int]:
+    with db.get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT assigned_bde_id FROM master_leads WHERE id=%s", (lead_id,))
+            row = cur.fetchone()
+            return int(row["assigned_bde_id"]) if row and row.get("assigned_bde_id") else None
+
+
+@app.route("/api/leads/<int:lead_id>/contacted", methods=["POST"])
+@login_required_json
+def api_lead_contacted(lead_id):
+    # The assigned BDE, or any manager/admin, may mark a lead contacted.
+    role = _current_role()
+    if role == "bde":
+        if _lead_assigned_bde(lead_id) != _current_uid():
+            return jsonify({"error": "forbidden"}), 403
+    elif role not in ("admin", "manager"):
+        return jsonify({"error": "forbidden"}), 403
+    try:
+        db.LeadAllocationRepo.mark_contacted(lead_id, _current_uid())
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/allocation/contacted-feed", methods=["GET"])
+@manager_or_admin_required
+def api_contacted_feed():
+    try:
+        rows = db.LeadAllocationRepo.recent_contacted(limit=int(request.args.get("limit", 50) or 50))
+        for r in rows:
+            if r.get("contacted_at") and hasattr(r["contacted_at"], "isoformat"):
+                r["contacted_at"] = r["contacted_at"].isoformat()
+        return jsonify({"contacted": rows})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/leads/manual-add", methods=["POST"])
+@manager_or_admin_required
+def api_lead_manual_add():
+    d = request.get_json(silent=True) or {}
+    company = (d.get("company") or "").strip()
+    domain = root_domain(d.get("domain") or "")
+    name = (d.get("name") or "").strip()
+    if not domain:
+        return jsonify({"error": "domain required"}), 400
+    nn = normalize_master_key(name or company or domain)
+    try:
+        lead_id = db.LeadAllocationRepo.manual_add(
+            normalized_name=nn, root_domain=domain,
+            display_name=name or company, company_name=company or domain,
+            phone=(d.get("phone") or "").strip(), email=(d.get("email") or "").strip(),
+            industry=(d.get("industry") or "Manual").strip(),
+            country=(d.get("country") or "AU").strip(),
+            actor_id=_current_uid(),
+            bde_id=int(d["bde_id"]) if d.get("bde_id") else None,
+        )
+        return jsonify({"ok": True, "id": lead_id})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/me/mobile", methods=["POST"])
+@login_required_json
+def api_me_mobile():
+    d = request.get_json(silent=True) or {}
+    mobile = (d.get("mobile_e164") or d.get("mobile") or "").strip()
+    uid = _current_uid()
+    if uid is None:
+        return jsonify({"error": "not logged in"}), 401
+    try:
+        db.UserRepo.set_mobile(uid, mobile)
+        return jsonify({"ok": True, "mobile_e164": mobile})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── DB viewer endpoints ──────────────────────────────────────────────────────
 @app.route("/api/db/debug")
-@login_required_json
+@manager_or_admin_required
 def db_debug():
     """Diagnostic: DB connection state + row counts. Not cached."""
     info: Dict[str, Any] = {
@@ -581,7 +839,7 @@ def db_debug():
 
 
 @app.route("/api/db/clear-all", methods=["POST"])
-@login_required_json
+@admin_required
 def db_clear_all():
     """Wipes master_leads + run_history (users preserved). Admin-friendly reset."""
     try:
@@ -596,13 +854,26 @@ def db_clear_all():
 @app.route("/api/db/master-leads")
 @login_required_json
 def db_master_leads():
-    """Paginated master_leads viewer. Query params: page (1-based), page_size (max 200)."""
+    """Paginated master_leads viewer. Query params: page (1-based), page_size (max 200).
+    2026-06-15: BDE accounts are scoped server-side to their OWN allocated leads
+    (non-bypassable); ADMIN/MANAGER see everything."""
     page = int(request.args.get("page", 1) or 1)
     page_size = int(request.args.get("page_size", 50) or 50)
     if not _db_ready:
         return jsonify({"error": "db_unavailable",
                         "detail": _db_startup_error or "MySQL not configured on this host"}), 503
     try:
+        if _current_role() == "bde":
+            uid = _current_uid()
+            rows, total = db.LeadAllocationRepo.list_for_bde(uid, page=page, page_size=page_size)
+            for r in rows:
+                for k in ("first_seen_at", "assigned_at", "contacted_at"):
+                    if r.get(k) and hasattr(r[k], "isoformat"):
+                        r[k] = r[k].isoformat()
+            return jsonify({
+                "rows": rows, "total": total, "page": page, "page_size": page_size,
+                "pages": max(1, (total + page_size - 1) // page_size), "scope": "bde",
+            })
         rows, total = db.MasterLeadRepo.list_page(page=page, page_size=page_size)
         for r in rows:
             if r.get("first_seen_at") and hasattr(r["first_seen_at"], "isoformat"):
@@ -627,7 +898,7 @@ def db_master_leads():
 
 
 @app.route("/api/db/run-history")
-@login_required_json
+@manager_or_admin_required
 def db_run_history():
     """Paginated run_history viewer. Query params: page (1-based), page_size (max 200)."""
     page = int(request.args.get("page", 1) or 1)
@@ -671,6 +942,7 @@ def db_run_history():
 # exist in V5.py:main_web for local `python V5.py` runs — keep both in sync.
 # No login decorator: login is disabled app-wide and pricing is non-sensitive.
 @app.route("/api/pricing", methods=["GET"])
+@manager_or_admin_required
 def api_get_pricing():
     try:
         import pricing as _pr
@@ -685,6 +957,7 @@ def api_get_pricing():
 
 
 @app.route("/api/pricing", methods=["POST"])
+@admin_required
 def api_save_pricing():
     try:
         import pricing as _pr
@@ -837,7 +1110,7 @@ def _run_cpl(job) -> float:
 
 # ── /generate ───────────────────────────────────────────────────────────────
 @app.route("/generate", methods=["POST"])
-@login_required_json
+@manager_or_admin_required
 def generate():
     try:
         from V5 import LeadGenerationPipeline
@@ -1042,7 +1315,7 @@ def generate():
 
 # ── /generate-city ──────────────────────────────────────────────────────────
 @app.route("/generate-city", methods=["POST"])
-@login_required_json
+@manager_or_admin_required
 def generate_city():
     try:
         from city_pipeline import CityLeadPipeline
@@ -1222,7 +1495,7 @@ def generate_city():
 
 # ── /generate-multi — parallel multi-industry mode ───────────────────────────
 @app.route("/generate-multi", methods=["POST"])
-@login_required_json
+@manager_or_admin_required
 def generate_multi():
     """Parallel multi-industry lead generation.
 
@@ -1417,7 +1690,7 @@ def _finalize_run_multi(job, orchestrator, country: str, state: str, error_text:
 
 # ── Status / cancel ─────────────────────────────────────────────────────────
 @app.route("/status/<job_id>")
-@login_required_json
+@manager_or_admin_required
 def get_status(job_id):
     try:
         job = _jobs.get(job_id)
@@ -1472,7 +1745,7 @@ def get_status(job_id):
 
 
 @app.route("/cancel", methods=["POST"])
-@login_required_json
+@manager_or_admin_required
 def cancel():
     try:
         for jid in reversed(list(_jobs.keys())):
@@ -1487,7 +1760,7 @@ def cancel():
 
 # ── Partial CSV download (cancel / error recovery) ──────────────────────────
 @app.route("/download-partial/<job_id>")
-@login_required_json
+@manager_or_admin_required
 def download_partial(job_id):
     """Phase 2 (2026-05-05): serves the partial CSV that V5._export_partial_now
     writes when a run is cancelled or crashes mid-pipeline. Partial leads are

@@ -2287,7 +2287,7 @@ function DatabaseView(){
                 <tr><td colSpan="11" style={{textAlign:'center',padding:30,color:'var(--t3)'}}>No master leads stored yet.</td></tr>
               ):leads.map(r=>(
                 <tr key={r.id}>
-                  <td style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--blue)'}}>#{r.id}</td>
+                  <td style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--blue)'}}>{lfId(r.id)}</td>
                   <td style={{fontSize:12,color:'var(--t1)',fontWeight:600}}>{r.display_name||r.normalized_name||'—'}</td>
                   <td style={{fontSize:12}}>{r.company_name||'—'}</td>
                   <td style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--violet)'}}>{r.root_domain||'—'}</td>
@@ -2783,7 +2783,8 @@ function SettingsView(){
 }
 
 /* ─── SIDEBAR ─── */
-function Sidebar({nav,setNav,srvUrl,setSrvUrl,onConnect,credits,lastDrain,details}){
+function Sidebar({nav,setNav,srvUrl,setSrvUrl,onConnect,credits,lastDrain,details,user,onLogout}){
+  const role=(user&&user.role)||'admin';
   // Phase 2 (2026-05-07): legacy parity — Apollo block now shows 4 sub-pools
   // (Total / Export / Phone / Email). When a plan tier doesn't expose a
   // pool, the row falls back to "—" instead of being hidden, matching
@@ -2794,11 +2795,20 @@ function Sidebar({nav,setNav,srvUrl,setSrvUrl,onConnect,credits,lastDrain,detail
   // Generate (live pipeline) + Database (live Railway pull). The mock views
   // (Analytics/Heatmap/History/AI Intelligence/Pipeline/Schedule/Users/
   // Settings) were hardcoded placeholders and have been removed.
-  const NAV=[
-    {id:'generate',icon:'zap',l:'Generate'},
-    {id:'database',icon:'database',l:'Database',badge:'Live'},
-    {id:'cost',icon:'dollar-sign',l:'Cost / Pricing'},
-  ];
+  // 2026-06-15: role-aware navigation. BDE sees ONLY their leads + mobile;
+  // ADMIN/MANAGER see the full toolset incl. Allocation + Users.
+  const NAV = role==='bde'
+    ? [
+        {id:'my-leads', icon:'database', l:'My Leads', badge:'Live'},
+        {id:'my-mobile',icon:'settings', l:'My Mobile'},
+      ]
+    : [
+        {id:'generate',  icon:'zap',         l:'Generate'},
+        {id:'database',  icon:'database',    l:'Database', badge:'Live'},
+        {id:'allocation',icon:'users',       l:'Allocation'},
+        {id:'users',     icon:'settings',    l:'User Management'},
+        {id:'cost',      icon:'dollar-sign', l:'Cost / Pricing'},
+      ];
   const apolloSvc=(details&&details.services&&details.services.apollo)||{};
   const _fmt=(v)=>(v===null||v===undefined||v===0?'—':Number(v).toLocaleString('en-US'));
   // For "Total" we always show the Apollo aggregate remaining (always present).
@@ -2816,6 +2826,21 @@ function Sidebar({nav,setNav,srvUrl,setSrvUrl,onConnect,credits,lastDrain,detail
     </div>
     <div style={{flex:1}}></div>
     <div className="sb-foot">
+      {/* 2026-06-15: signed-in user badge + logout. */}
+      {user&&<div style={{marginBottom:10,paddingBottom:10,borderBottom:'1px solid var(--bd)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <div style={{width:30,height:30,borderRadius:'50%',background:'var(--blue)',color:'#fff',
+            display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:13}}>
+            {(user.username||'?').slice(0,1).toUpperCase()}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{color:'var(--t1)',fontWeight:600,fontSize:13,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{user.full_name||user.username}</div>
+            <div style={{color:'var(--t3)',fontSize:11}}>{_ROLE_LABEL[user.role]||user.role}</div>
+          </div>
+          <button onClick={onLogout} title="Log out" style={{padding:'5px 10px',background:'var(--sf)',
+            color:'var(--t2)',border:'1px solid var(--bd)',borderRadius:6,cursor:'pointer',fontSize:11}}>Logout</button>
+        </div>
+      </div>}
+      {role!=='bde' && (<>
       {/* Apollo 4-pool block (legacy parity) */}
       <div className="credit-mini" style={{marginBottom:6,paddingBottom:6,borderBottom:'1px solid var(--bd)'}}>
         <div className="cm-row" style={{fontWeight:700}}>
@@ -2853,6 +2878,7 @@ function Sidebar({nav,setNav,srvUrl,setSrvUrl,onConnect,credits,lastDrain,detail
         <input className="srv-in" value={srvUrl} onChange={e=>setSrvUrl(e.target.value)}/>
         <button className="srv-btn" onClick={onConnect}>Connect</button>
       </div>
+      </>)}
     </div>
   </aside>);
 }
@@ -2988,11 +3014,267 @@ function LiveActivityFeed(){
 }
 function fmt(n){return typeof n==='number'?n.toLocaleString('en-US'):n}
 
+/* ─── CRM LAYER (2026-06-15): auth gate, allocation, users, BDE views ─── */
+function lfId(id){return 'LF-'+String(id||0).padStart(6,'0');}
+async function apiJSON(url, opts){
+  const r = await fetch(url, Object.assign({credentials:'same-origin'},
+    opts||{}, {headers:Object.assign({'Content-Type':'application/json'},(opts&&opts.headers)||{})}));
+  if(r.status===401){ try{window.dispatchEvent(new Event('lf-auth-lost'));}catch(e){} return {__status:401}; }
+  const j = await r.json().catch(()=>({}));
+  j.__status = r.status;
+  return j;
+}
+const _ROLE_LABEL={admin:'Administrator',manager:'Manager',bde:'BDE'};
+
+function LoginView({onLogin}){
+  const [u,setU]=useState(''); const [p,setP]=useState('');
+  const [err,setErr]=useState(''); const [busy,setBusy]=useState(false);
+  const submit=async(e)=>{ if(e)e.preventDefault(); if(busy)return;
+    setBusy(true); setErr('');
+    try{
+      const r=await fetch('/login',{method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({username:u.trim(),password:p})});
+      const d=await r.json().catch(()=>({}));
+      if(r.ok&&d.user){ onLogin(d.user); }
+      else { setErr('Invalid username or password'); }
+    }catch(ex){ setErr('Network error — is the server reachable?'); }
+    finally{ setBusy(false); }
+  };
+  const inp={width:'100%',padding:'12px 14px',margin:'7px 0',background:'var(--bg)',
+    color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:8,fontSize:14,boxSizing:'border-box'};
+  return(<div style={{position:'fixed',inset:0,display:'flex',alignItems:'center',
+      justifyContent:'center',background:'var(--bg)',zIndex:900}}>
+    <form onSubmit={submit} className="card" style={{width:370,padding:'34px 32px'}}>
+      <div style={{textAlign:'center',marginBottom:6}}>
+        <img src="Traffic-Radius-Logo.png" alt="Traffic Radius" style={{height:38}}/>
+      </div>
+      <h2 style={{textAlign:'center',margin:'8px 0 4px',color:'var(--t1)'}}>Sign in</h2>
+      <div style={{textAlign:'center',color:'var(--t3)',fontSize:12,marginBottom:14}}>LeadForge — Traffic Radius</div>
+      {err&&<div style={{color:'#EF4444',fontSize:13,margin:'4px 0',textAlign:'center'}}>{err}</div>}
+      <input style={inp} placeholder="Username" value={u} autoFocus
+             onChange={e=>setU(e.target.value)}/>
+      <input style={inp} type="password" placeholder="Password" value={p}
+             onChange={e=>setP(e.target.value)}/>
+      <button type="submit" disabled={busy} style={{width:'100%',padding:'12px',
+        marginTop:12,background:'var(--blue)',color:'#fff',border:0,borderRadius:8,
+        fontWeight:700,cursor:'pointer',fontSize:14}}>
+        {busy?'Signing in…':'Sign in'}</button>
+    </form>
+  </div>);
+}
+
+function AllocationView(){
+  const [bdes,setBdes]=useState([]);
+  const [active,setActive]=useState({});         // {bde_id:true}
+  const [feed,setFeed]=useState([]);
+  const [msg,setMsg]=useState('');
+  const [manual,setManual]=useState({company:'',domain:'',name:'',phone:'',email:'',bde_id:''});
+  const load=async()=>{
+    const d=await apiJSON('/api/allocation/bdes');
+    if(d&&d.bdes){ setBdes(d.bdes);
+      setActive(prev=>{const n={...prev}; d.bdes.forEach(b=>{if(n[b.id]===undefined)n[b.id]=!!b.is_active;}); return n;}); }
+    const f=await apiJSON('/api/allocation/contacted-feed');
+    if(f&&f.contacted) setFeed(f.contacted);
+  };
+  useEffect(()=>{load();},[]);
+  const activeIds=()=>bdes.filter(b=>active[b.id]).map(b=>b.id);
+  const distribute=async()=>{
+    const ids=activeIds();
+    if(!ids.length){setMsg('Select at least one active BDE.');return;}
+    setMsg('Distributing…');
+    const d=await apiJSON('/api/allocation/auto',{method:'POST',body:JSON.stringify({bde_ids:ids})});
+    if(d&&d.ok){ setMsg('Distributed '+d.total+' lead(s) equally across '+ids.length+' BDE(s).'); load(); }
+    else setMsg('Error: '+((d&&d.error)||'failed'));
+  };
+  const addManual=async()=>{
+    if(!manual.domain.trim()){setMsg('Manual add needs at least a domain.');return;}
+    const d=await apiJSON('/api/leads/manual-add',{method:'POST',body:JSON.stringify(manual)});
+    if(d&&d.ok){ setMsg('Added lead '+lfId(d.id)+'.'); setManual({company:'',domain:'',name:'',phone:'',email:'',bde_id:''}); load(); }
+    else setMsg('Error: '+((d&&d.error)||'failed'));
+  };
+  const th={textAlign:'left',padding:'8px 10px',color:'var(--t3)',fontSize:11,textTransform:'uppercase',borderBottom:'1px solid var(--bd)'};
+  const td={padding:'8px 10px',borderBottom:'1px solid var(--bd)',color:'var(--t1)',fontSize:13};
+  const inp={padding:'9px 11px',background:'var(--bg)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:7,fontSize:13};
+  return(<div style={{padding:'4px 2px'}}>
+    {msg&&<div className="card" style={{padding:'10px 14px',marginBottom:12,color:'var(--t1)',fontSize:13}}>{msg}</div>}
+    <div className="card" style={{padding:18,marginBottom:14}}>
+      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:4}}>Active BDEs</div>
+      <div style={{color:'var(--t3)',fontSize:12,marginBottom:12}}>Pick who is working today, then auto-distribute all unassigned leads equally.</div>
+      <table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead><tr><th style={th}>Active</th><th style={th}>BDE</th><th style={th}>Name</th><th style={th}>Mobile</th><th style={th}>Assigned</th></tr></thead>
+        <tbody>{bdes.map(b=>(
+          <tr key={b.id}>
+            <td style={td}><div className={'tog '+(active[b.id]?'on':'off')} style={{transform:'scale(0.75)'}}
+                  onClick={()=>setActive(a=>({...a,[b.id]:!a[b.id]}))}><div className="tog-k"></div></div></td>
+            <td style={td}>{b.username}{!b.is_active&&<span style={{color:'#EF4444',fontSize:11}}> (disabled)</span>}</td>
+            <td style={td}>{b.full_name||'—'}</td>
+            <td style={td}>{b.mobile_e164||'—'}</td>
+            <td style={td}><b>{b.assigned_count}</b></td>
+          </tr>))}
+          {!bdes.length&&<tr><td style={td} colSpan={5}>No BDE accounts found.</td></tr>}
+        </tbody>
+      </table>
+      <button onClick={distribute} style={{marginTop:14,padding:'10px 18px',background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Auto-distribute equally</button>
+    </div>
+    <div className="card" style={{padding:18,marginBottom:14}}>
+      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>Manual add lead</div>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+        <input style={inp} placeholder="Company" value={manual.company} onChange={e=>setManual(m=>({...m,company:e.target.value}))}/>
+        <input style={inp} placeholder="Domain *" value={manual.domain} onChange={e=>setManual(m=>({...m,domain:e.target.value}))}/>
+        <input style={inp} placeholder="Contact name" value={manual.name} onChange={e=>setManual(m=>({...m,name:e.target.value}))}/>
+        <input style={inp} placeholder="Phone" value={manual.phone} onChange={e=>setManual(m=>({...m,phone:e.target.value}))}/>
+        <input style={inp} placeholder="Email" value={manual.email} onChange={e=>setManual(m=>({...m,email:e.target.value}))}/>
+        <select style={inp} value={manual.bde_id} onChange={e=>setManual(m=>({...m,bde_id:e.target.value}))}>
+          <option value="">Assign to… (optional)</option>
+          {bdes.map(b=>(<option key={b.id} value={b.id}>{b.username}</option>))}
+        </select>
+        <button onClick={addManual} style={{padding:'9px 16px',background:'var(--green)',color:'#fff',border:0,borderRadius:7,fontWeight:700,cursor:'pointer'}}>Add</button>
+      </div>
+    </div>
+    <div className="card" style={{padding:18}}>
+      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>Recently contacted</div>
+      <table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead><tr><th style={th}>Lead</th><th style={th}>Company</th><th style={th}>Domain</th><th style={th}>BDE</th><th style={th}>When</th></tr></thead>
+        <tbody>{feed.map(r=>(
+          <tr key={r.id}><td style={td}>{lfId(r.id)}</td><td style={td}>{r.company_name||'—'}</td>
+            <td style={td}>{r.root_domain}</td><td style={td}>{r.bde_username||'—'}</td>
+            <td style={td}>{r.contacted_at?String(r.contacted_at).replace('T',' ').slice(0,16):'—'}</td></tr>))}
+          {!feed.length&&<tr><td style={td} colSpan={5}>No leads contacted yet.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  </div>);
+}
+
+function UsersView(){
+  const [users,setUsers]=useState([]);
+  const [msg,setMsg]=useState('');
+  const [nu,setNu]=useState({username:'',full_name:'',role:'bde',password:''});
+  const load=async()=>{ const d=await apiJSON('/api/users'); if(d&&d.users)setUsers(d.users); };
+  useEffect(()=>{load();},[]);
+  const create=async()=>{
+    if(!nu.username.trim()||!nu.password){setMsg('Username and password required.');return;}
+    const d=await apiJSON('/api/users',{method:'POST',body:JSON.stringify(nu)});
+    if(d&&d.ok){ setMsg('Created '+nu.username+'.'); setNu({username:'',full_name:'',role:'bde',password:''}); load(); }
+    else setMsg('Error: '+((d&&d.error)||'failed'));
+  };
+  const setRole=async(id,role)=>{ await apiJSON('/api/users/'+id,{method:'PATCH',body:JSON.stringify({role})}); load(); };
+  const toggle=async(u)=>{ await apiJSON('/api/users/'+u.id,{method:'PATCH',body:JSON.stringify({is_active:!u.is_active})}); load(); };
+  const resetPw=async(id)=>{ const pw=prompt('New password (min 6 chars):'); if(!pw)return;
+    const d=await apiJSON('/api/users/'+id+'/password',{method:'POST',body:JSON.stringify({password:pw})});
+    setMsg(d&&d.ok?'Password updated.':'Error: '+((d&&d.error)||'failed')); };
+  const th={textAlign:'left',padding:'8px 10px',color:'var(--t3)',fontSize:11,textTransform:'uppercase',borderBottom:'1px solid var(--bd)'};
+  const td={padding:'8px 10px',borderBottom:'1px solid var(--bd)',color:'var(--t1)',fontSize:13};
+  const inp={padding:'9px 11px',background:'var(--bg)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:7,fontSize:13};
+  return(<div style={{padding:'4px 2px'}}>
+    {msg&&<div className="card" style={{padding:'10px 14px',marginBottom:12,color:'var(--t1)',fontSize:13}}>{msg}</div>}
+    <div className="card" style={{padding:18,marginBottom:14}}>
+      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>Add user</div>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+        <input style={inp} placeholder="Username" value={nu.username} onChange={e=>setNu(m=>({...m,username:e.target.value}))}/>
+        <input style={inp} placeholder="Full name" value={nu.full_name} onChange={e=>setNu(m=>({...m,full_name:e.target.value}))}/>
+        <select style={inp} value={nu.role} onChange={e=>setNu(m=>({...m,role:e.target.value}))}>
+          <option value="bde">BDE</option><option value="manager">Manager</option><option value="admin">Admin</option>
+        </select>
+        <input style={inp} type="password" placeholder="Password" value={nu.password} onChange={e=>setNu(m=>({...m,password:e.target.value}))}/>
+        <button onClick={create} style={{padding:'9px 16px',background:'var(--green)',color:'#fff',border:0,borderRadius:7,fontWeight:700,cursor:'pointer'}}>Create</button>
+      </div>
+    </div>
+    <div className="card" style={{padding:18}}>
+      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>All users</div>
+      <table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead><tr><th style={th}>ID</th><th style={th}>Username</th><th style={th}>Name</th><th style={th}>Role</th><th style={th}>Mobile</th><th style={th}>Active</th><th style={th}>Actions</th></tr></thead>
+        <tbody>{users.map(u=>(
+          <tr key={u.id}>
+            <td style={td}>{u.id}</td><td style={td}>{u.username}</td><td style={td}>{u.full_name||'—'}</td>
+            <td style={td}>
+              <select value={u.role} onChange={e=>setRole(u.id,e.target.value)} style={{...inp,padding:'5px 8px'}}>
+                <option value="bde">BDE</option><option value="manager">Manager</option><option value="admin">Admin</option><option value="user">user</option>
+              </select>
+            </td>
+            <td style={td}>{u.mobile_e164||'—'}</td>
+            <td style={td}><span style={{color:u.is_active?'var(--green)':'#EF4444'}}>{u.is_active?'Yes':'No'}</span></td>
+            <td style={td}>
+              <button onClick={()=>toggle(u)} style={{marginRight:6,padding:'5px 10px',background:'var(--sf)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:6,cursor:'pointer',fontSize:12}}>{u.is_active?'Disable':'Enable'}</button>
+              <button onClick={()=>resetPw(u.id)} style={{padding:'5px 10px',background:'var(--sf)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:6,cursor:'pointer',fontSize:12}}>Reset PW</button>
+            </td>
+          </tr>))}
+        </tbody>
+      </table>
+    </div>
+  </div>);
+}
+
+function BdeLeadsView({user}){
+  const [rows,setRows]=useState([]); const [total,setTotal]=useState(0);
+  const [page,setPage]=useState(1); const pageSize=50; const [msg,setMsg]=useState('');
+  const load=async()=>{ const d=await apiJSON('/api/db/master-leads?page='+page+'&page_size='+pageSize);
+    if(d&&d.rows){ setRows(d.rows); setTotal(d.total||0); } };
+  useEffect(()=>{load();},[page]);
+  const contacted=async(id)=>{ const d=await apiJSON('/api/leads/'+id+'/contacted',{method:'POST',body:'{}'});
+    if(d&&d.ok){ setMsg('Marked '+lfId(id)+' contacted.'); load(); } else setMsg('Error'); };
+  const th={textAlign:'left',padding:'8px 10px',color:'var(--t3)',fontSize:11,textTransform:'uppercase',borderBottom:'1px solid var(--bd)'};
+  const td={padding:'8px 10px',borderBottom:'1px solid var(--bd)',color:'var(--t1)',fontSize:13};
+  return(<div style={{padding:'4px 2px'}}>
+    <div className="card" style={{padding:'12px 16px',marginBottom:12}}>
+      <span style={{color:'var(--t1)',fontWeight:700}}>My leads</span>
+      <span style={{color:'var(--t3)',marginLeft:10}}>{total} allocated to you</span>
+      {msg&&<span style={{color:'var(--green)',marginLeft:12,fontSize:13}}>{msg}</span>}
+    </div>
+    <div className="card" style={{padding:14}}>
+      <table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead><tr><th style={th}>Lead</th><th style={th}>Company</th><th style={th}>Domain</th><th style={th}>Phone</th><th style={th}>Email</th><th style={th}>Status</th><th style={th}>Action</th></tr></thead>
+        <tbody>{rows.map(r=>(
+          <tr key={r.id}>
+            <td style={td}>{lfId(r.id)}</td>
+            <td style={td}>{r.company_name||r.display_name||'—'}</td>
+            <td style={td}>{r.root_domain}</td>
+            <td style={td}>{r.phone_e164||'—'}</td>
+            <td style={td}>{r.primary_email||'—'}</td>
+            <td style={td}><span style={{color:r.alloc_status==='contacted'?'var(--green)':'var(--amber)'}}>{r.alloc_status||'assigned'}</span></td>
+            <td style={td}>{r.alloc_status==='contacted'
+              ? <span style={{color:'var(--green)'}}>✓ done</span>
+              : <button onClick={()=>contacted(r.id)} style={{padding:'5px 12px',background:'var(--green)',color:'#fff',border:0,borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:700}}>Contacted</button>}</td>
+          </tr>))}
+          {!rows.length&&<tr><td style={td} colSpan={7}>No leads allocated to you yet.</td></tr>}
+        </tbody>
+      </table>
+      {total>pageSize&&<div style={{marginTop:12,display:'flex',gap:8,alignItems:'center'}}>
+        <button disabled={page<=1} onClick={()=>setPage(p=>p-1)} style={{padding:'6px 12px'}}>Prev</button>
+        <span style={{color:'var(--t3)'}}>Page {page} / {Math.max(1,Math.ceil(total/pageSize))}</span>
+        <button disabled={page>=Math.ceil(total/pageSize)} onClick={()=>setPage(p=>p+1)} style={{padding:'6px 12px'}}>Next</button>
+      </div>}
+    </div>
+  </div>);
+}
+
+function MyMobileView({user}){
+  const [mobile,setMobile]=useState(user&&user.mobile_e164||'');
+  const [msg,setMsg]=useState('');
+  const save=async()=>{ const d=await apiJSON('/api/me/mobile',{method:'POST',body:JSON.stringify({mobile_e164:mobile.trim()})});
+    setMsg(d&&d.ok?'Saved.':'Error: '+((d&&d.error)||'failed')); };
+  const inp={width:'100%',maxWidth:320,padding:'11px 13px',background:'var(--bg)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:8,fontSize:14,boxSizing:'border-box'};
+  return(<div style={{padding:'4px 2px'}}>
+    <div className="card" style={{padding:22,maxWidth:480}}>
+      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:4}}>My mobile number</div>
+      <div style={{color:'var(--t3)',fontSize:12,marginBottom:14}}>This is the number recorded as the caller when you contact a lead. Use full international format, e.g. +61 4XX XXX XXX.</div>
+      <input style={inp} placeholder="+61400000000" value={mobile} onChange={e=>setMobile(e.target.value)}/>
+      <div style={{marginTop:14,display:'flex',gap:10,alignItems:'center'}}>
+        <button onClick={save} style={{padding:'10px 18px',background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Save</button>
+        {msg&&<span style={{color:'var(--green)',fontSize:13}}>{msg}</span>}
+      </div>
+    </div>
+  </div>);
+}
+
 /* ─── APP ─── */
 function App(){
   const clock=useClock();
   const [showSplash,setShowSplash]=useState(true);
   const [theme,setTheme]=useState('light');
+  // 2026-06-15: auth. undefined = checking, null = logged out, object = user.
+  const [user,setUser]=useState(undefined);
   const [nav,setNav]=useState('generate');
   const [tab,setTab]=useState('cities');
   // City mode (AU-only). auState is an AU state code (NSW/VIC/QLD/...) or
@@ -3374,12 +3656,47 @@ function App(){
     }).then(data=>{if(data&&!data.error)setAuCities(data)}).catch(()=>{});
   },[]);
 
-  const VIEW_TITLES={generate:{title:<>Lead <em>Generation</em> Engine</>,sub:'Configure your search and generate qualified leads'},database:{title:<>Railway <em>Database</em></>,sub:'Live MySQL — run_history, master_leads, and per-run statistics'},analytics:{title:<>Analytics <em>& Insights</em></>,sub:'Performance overview across all runs'},heatmap:{title:<>Geographic <em>Heatmap</em></>,sub:'Ballarat suburb-level lead density visualization'},history:{title:<>Run <em>History</em></>,sub:'All previous lead generation runs'},intelligence:{title:<>AI <em>Intelligence</em></>,sub:'Master database · ML keyword learning · self-expanding dictionary'},pipeline:{title:<>Lead <em>Pipeline</em></>,sub:'Manage and track leads through your sales process'},schedule:{title:<>Scheduled <em>Runs</em></>,sub:'Automate your lead generation on a recurring schedule'},users:{title:<>Team <em>Management</em></>,sub:'Manage users, roles, and permissions'},settings:{title:<>Platform <em>Settings</em></>,sub:'API keys, preferences, and billing'}};
+  // 2026-06-15: auth gate — resolve the signed-in user on mount, and listen
+  // for 401s raised by any API call (session expiry) to drop back to login.
+  useEffect(()=>{
+    let alive=true;
+    fetch('/whoami',{credentials:'same-origin'})
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{ if(!alive)return; setUser(d&&d.username?d:null); })
+      .catch(()=>{ if(alive)setUser(null); });
+    const onLost=()=>setUser(null);
+    window.addEventListener('lf-auth-lost',onLost);
+    return ()=>{alive=false; window.removeEventListener('lf-auth-lost',onLost);};
+  },[]);
+  // BDE accounts can only ever sit on their two views.
+  useEffect(()=>{
+    if(user&&user.role==='bde'){
+      setNav(n=>(n==='my-leads'||n==='my-mobile')?n:'my-leads');
+    }
+  },[user]);
+
+  const doLogout=async()=>{
+    try{ await fetch('/logout',{method:'POST',credentials:'same-origin'}); }catch(e){}
+    setUser(null);
+  };
+
+  // ── Gate: still checking → spinner; not authed → login screen. ──
+  if(user===undefined){
+    return <div style={{position:'fixed',inset:0,display:'flex',alignItems:'center',
+      justifyContent:'center',background:'var(--bg)',color:'var(--t3)',fontSize:14}}>Loading…</div>;
+  }
+  if(user===null){
+    return <LoginView onLogin={u=>{setUser(u); if(u.role==='bde')setNav('my-leads'); else setNav('generate');}}/>;
+  }
+  const role=user.role||'admin';
+  const isBde=role==='bde';
+
+  const VIEW_TITLES={generate:{title:<>Lead <em>Generation</em> Engine</>,sub:'Configure your search and generate qualified leads'},database:{title:<>Railway <em>Database</em></>,sub:'Live MySQL — run_history, master_leads, and per-run statistics'},allocation:{title:<>Lead <em>Allocation</em></>,sub:'Assign leads to your BDEs and track who has been contacted'},'my-leads':{title:<>My <em>Leads</em></>,sub:'Leads allocated to you — call them and mark contacted'},'my-mobile':{title:<>My <em>Mobile</em></>,sub:'The number recorded when you contact a lead'},cost:{title:<>Cost <em>/ Pricing</em></>,sub:'Per-run cost and unit pricing'},analytics:{title:<>Analytics <em>& Insights</em></>,sub:'Performance overview across all runs'},heatmap:{title:<>Geographic <em>Heatmap</em></>,sub:'Ballarat suburb-level lead density visualization'},history:{title:<>Run <em>History</em></>,sub:'All previous lead generation runs'},intelligence:{title:<>AI <em>Intelligence</em></>,sub:'Master database · ML keyword learning · self-expanding dictionary'},pipeline:{title:<>Lead <em>Pipeline</em></>,sub:'Manage and track leads through your sales process'},schedule:{title:<>Scheduled <em>Runs</em></>,sub:'Automate your lead generation on a recurring schedule'},users:{title:<>Team <em>Management</em></>,sub:'Manage users, roles, and permissions'},settings:{title:<>Platform <em>Settings</em></>,sub:'API keys, preferences, and billing'}};
   const vt=VIEW_TITLES[nav]||{title:nav,sub:''};
 
   return(<>
     {showSplash&&<Splash onDone={()=>setShowSplash(false)} theme={theme}/>}
-    <Sidebar nav={nav} setNav={setNav} srvUrl={srvUrl} setSrvUrl={setSrvUrl} onConnect={()=>setToast({t:'Connected',m:'Railway endpoint verified'})} credits={liveCredits} lastDrain={liveCreditsLast} details={liveCreditsDetails}/>
+    <Sidebar nav={nav} setNav={setNav} srvUrl={srvUrl} setSrvUrl={setSrvUrl} onConnect={()=>setToast({t:'Connected',m:'Railway endpoint verified'})} credits={liveCredits} lastDrain={liveCreditsLast} details={liveCreditsDetails} user={user} onLogout={doLogout}/>
 
     <main className="main">
       <div className="topbar">
@@ -3394,9 +3711,13 @@ function App(){
         </div>
       </div>
 
-      {nav==='generate'&&<GenerateView tab={tab} setTab={setTab} stats={stats} hasResults={hasResults} onGenerate={runGeneration} onCancel={cancelGeneration} loading={loading} auState={auState} setAuState={setAuState} cityTier={cityTier} setCityTier={setCityTier} city={city} setCity={setCity} industry={industry} setIndustry={setIndustry} indCountry={indCountry} setIndCountry={setIndCountry} maxLeads={maxLeads} setMaxLeads={setMaxLeads} minSearch={minSearch} setMinSearch={setMinSearch} minCpc={minCpc} setMinCpc={setMinCpc} enrich={enrich} setEnrich={setEnrich} serpOnly={serpOnly} setSerpOnly={setSerpOnly} nWorkers={nWorkers} setNWorkers={setNWorkers} onNav={setNav} phase={phase} logs={logs} progress={progress} counts={counts} theme={theme} industries={industries} auCities={auCities} topCsvText={topCsvText} partialCsvUrl={partialCsvUrl} liveCreditsDetails={liveCreditsDetails} creditsUsedThisRun={creditsUsedThisRun} liveJob={liveJob} realLeads={realLeads} runOutcome={runOutcome}/>}
-      {nav==='database'&&<DatabaseView/>}
-      {nav==='cost'&&<CostView/>}
+      {nav==='generate'&&!isBde&&<GenerateView tab={tab} setTab={setTab} stats={stats} hasResults={hasResults} onGenerate={runGeneration} onCancel={cancelGeneration} loading={loading} auState={auState} setAuState={setAuState} cityTier={cityTier} setCityTier={setCityTier} city={city} setCity={setCity} industry={industry} setIndustry={setIndustry} indCountry={indCountry} setIndCountry={setIndCountry} maxLeads={maxLeads} setMaxLeads={setMaxLeads} minSearch={minSearch} setMinSearch={setMinSearch} minCpc={minCpc} setMinCpc={setMinCpc} enrich={enrich} setEnrich={setEnrich} serpOnly={serpOnly} setSerpOnly={setSerpOnly} nWorkers={nWorkers} setNWorkers={setNWorkers} onNav={setNav} phase={phase} logs={logs} progress={progress} counts={counts} theme={theme} industries={industries} auCities={auCities} topCsvText={topCsvText} partialCsvUrl={partialCsvUrl} liveCreditsDetails={liveCreditsDetails} creditsUsedThisRun={creditsUsedThisRun} liveJob={liveJob} realLeads={realLeads} runOutcome={runOutcome}/>}
+      {nav==='database'&&!isBde&&<DatabaseView/>}
+      {nav==='cost'&&!isBde&&<CostView/>}
+      {nav==='allocation'&&!isBde&&<AllocationView/>}
+      {nav==='users'&&!isBde&&<UsersView/>}
+      {nav==='my-leads'&&isBde&&<BdeLeadsView user={user}/>}
+      {nav==='my-mobile'&&<MyMobileView user={user}/>}
       {/* 2026-06-04: mock placeholder views removed (Analytics/Heatmap/
           History/AI Intelligence/Pipeline/Schedule/Users/Settings). */}
     </main>
@@ -3413,7 +3734,7 @@ function App(){
     {/* 2026-06-09: bottom-of-page SerpAPI mode toggle. Default OFF = credit-
         saving mode (run-wide SerpAPI cap ≈14 calls/lead). ON = regular thorough
         mode (uses many more SerpAPI credits, the old behaviour). */}
-    <div style={{position:'fixed',left:0,right:0,bottom:0,zIndex:300,display:'flex',
+    {!isBde&&<div style={{position:'fixed',left:0,right:0,bottom:0,zIndex:300,display:'flex',
                  alignItems:'center',justifyContent:'center',gap:12,padding:'7px 14px',
                  background:'var(--sf)',borderTop:'1px solid var(--bd)',fontSize:11,
                  color:'var(--t2)',fontFamily:'var(--mono)'}}>
@@ -3425,7 +3746,7 @@ function App(){
       <span style={{letterSpacing:'1px',textTransform:'uppercase',color:'var(--t3)'}}>Paid only</span>
       <div className={'tog '+(paidOnly?'on':'off')} style={{transform:'scale(0.8)'}} onClick={()=>setPaidOnly(v=>!v)} title="Export ALL confirmed advertisers (no Max-Leads cap); drop unverified"><div className="tog-k"></div></div>
       <span style={{color:paidOnly?'var(--green)':'var(--t3)',fontWeight:paidOnly?700:400}}>{paidOnly?'all confirmed advertisers (Max Leads = floor)':'off (respect Max Leads)'}</span>
-    </div>
+    </div>}
     {toast&&<div className="toast"><div className="toast-ic">✓</div><div><div className="toast-title">{toast.t}</div><div className="toast-msg">{toast.m}</div></div></div>}
   </>);
 }
