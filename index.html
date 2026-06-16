@@ -4270,15 +4270,19 @@ function CrawlerView(){
         <Stat label="Total leads" value={q.total_leads||0} color="var(--blue)"/>
       </div>
       <div style={{marginTop:14,color:'var(--t3)',fontSize:12}}>This session: {w.done||0} enriched · {w.errors||0} errors · {w.openai_calls||0} OpenAI calls · {w.apollo_calls||0} Apollo calls{w.last?(' · last: '+w.last):''}</div>
+      <div style={{marginTop:6,fontSize:12}}>OpenAI key: <b style={{color:(w.openai_status==='ok')?'var(--green)':(w.openai_status&&w.openai_status!=='unknown')?'#EF4444':'var(--t3)'}}>{w.openai_status||'unknown'}</b></div>
     </div>
+    {w.openai_status&&w.openai_status.indexOf('401')>=0&&<div className="card" style={{padding:'12px 16px',marginBottom:14,borderLeft:'4px solid #EF4444',color:'var(--t1)',fontSize:13}}>
+      ⚠ The OpenAI API key is invalid (401), so AI call-summaries can't be generated — leads currently show Apollo data only. Set a valid <b>OPENAI_API_KEY</b> in Railway, then click <b>Re-analyse failed leads</b> below to backfill the AI cheat-sheets (no re-crawl needed).
+    </div>}
     <div className="card" style={{padding:18}}>
       <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>Controls</div>
       <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
         {w.paused
           ? <button onClick={()=>act('resume','Resumed.')} style={{padding:'9px 16px',background:'var(--green)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>▶ Resume</button>
           : <button onClick={()=>act('pause','Paused.')} style={{padding:'9px 16px',background:'var(--amber)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>⏸ Pause</button>}
-        <button onClick={()=>act('retry-errored','Re-queued errored leads.')} style={{padding:'9px 16px',background:'var(--sf)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:8,fontWeight:600,cursor:'pointer'}}>↻ Retry errored</button>
-        <button onClick={()=>act('showcase','Showcase started.')} title="Fully enrich the top 3 leads right now (demo)" style={{padding:'9px 16px',background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>✨ Fill top 3 now (showcase)</button>
+        <button onClick={()=>act('retry-errored','Re-queued errored leads.')} style={{padding:'9px 16px',background:'var(--sf)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:8,fontWeight:600,cursor:'pointer'}}>↻ Retry errored / stuck</button>
+        <button onClick={()=>act('reanalyze','Re-analysis started.')} title="Re-run the AI summary for leads whose AI failed (reuses crawled data; no re-crawl). Use after fixing the OpenAI key." style={{padding:'9px 16px',background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>↺ Re-analyse failed leads</button>
       </div>
     </div>
   </div>);

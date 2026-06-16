@@ -54,7 +54,8 @@ OPENAI_MODEL = os.environ.get("ENRICH_OPENAI_MODEL", "gpt-4o-mini")
 
 _started = False
 _paused = False
-_stats = {"done": 0, "errors": 0, "openai_calls": 0, "apollo_calls": 0, "last": ""}
+_stats = {"done": 0, "errors": 0, "openai_calls": 0, "apollo_calls": 0, "last": "",
+          "openai_status": "unknown"}
 
 
 def pause() -> None:
@@ -188,15 +189,67 @@ _CS_ARR = ("products", "services", "pain_points", "talking_points", "objections"
 _CHEATSHEET_KEYS = _CS_STR + _CS_ARR
 
 
+def _empty_sheet() -> Dict[str, Any]:
+    out = {k: "" for k in _CS_STR}
+    for k in _CS_ARR:
+        out[k] = []
+    return out
+
+
+def _basic_summary(company: str, domain: str, apollo: Dict[str, Any],
+                   crawl_text: str) -> Dict[str, Any]:
+    """A useful cheat-sheet built from Apollo + website data WITHOUT OpenAI, so a
+    lead is never blank even when the OpenAI key is missing/invalid. Upgraded to
+    the full AI version once a valid key analyses it."""
+    ap = apollo or {}
+    out = _empty_sheet()
+    nm = ap.get("name") or company or domain
+    ind = ap.get("industry") or ""
+    loc = ", ".join([str(ap.get(k, "")) for k in ("city", "state", "country") if ap.get(k)])
+    emp = ap.get("estimated_num_employees")
+    rev = ap.get("annual_revenue_printed") or ap.get("organization_revenue_printed") or ""
+    desc = ap.get("short_description") or ap.get("seo_description") or ""
+    s = nm
+    if ind:
+        s += f" is a {ind} business"
+    if loc:
+        s += f" based in {loc}"
+    if emp:
+        s += f" with about {emp} employees"
+    s += "."
+    if desc:
+        s += " " + desc
+    if not s.strip() and crawl_text:
+        s = (crawl_text[:300])
+    out["summary"] = s[:700]
+    out["target_audience"] = ind
+    mp = []
+    if rev:
+        mp.append("Revenue " + str(rev))
+    if emp:
+        mp.append("~" + str(emp) + " employees")
+    if ap.get("founded_year"):
+        mp.append("founded " + str(ap.get("founded_year")))
+    out["market_position"] = " · ".join(mp)
+    kw = [k for k in (ap.get("keywords") or []) if k][:12]
+    out["products"] = kw
+    out["_source"] = "apollo-fallback"
+    return out
+
+
 def analyze_with_openai(company: str, domain: str, crawl_text: str,
                         apollo: Dict[str, Any], api_key: str) -> Dict[str, Any]:
     """Turn the crawled website text + Apollo data into a DETAILED but scannable
-    sales cheat-sheet. Analysis only — the text was already fetched by the
-    crawler. Produces a compact summary plus deep call-prep sections."""
+    sales cheat-sheet. On ANY OpenAI failure it falls back to an Apollo-derived
+    summary (+ a _note) so the lead is never blank."""
+    def _fallback(note):
+        fb = _basic_summary(company, domain, apollo, crawl_text)
+        fb["_note"] = note
+        return fb
     if not api_key:
-        return {"_note": "OPENAI_API_KEY not set — analysis skipped"}
+        return _fallback("OPENAI_API_KEY not set — showing Apollo data only")
     if not crawl_text and not apollo:
-        return {"_note": "no website text or Apollo data to analyse"}
+        return {**_empty_sheet(), "_note": "no website text or Apollo data to analyse"}
     ap = apollo or {}
     ctx = {
         "company": company or domain,
@@ -254,19 +307,23 @@ def analyze_with_openai(company: str, domain: str, crawl_text: str,
         )
         if resp.status_code == 200:
             _stats["openai_calls"] += 1
+            _stats["openai_status"] = "ok"
             content = resp.json()["choices"][0]["message"]["content"]
             try:
                 data = json.loads(content)
             except Exception:
-                return {"summary": content[:2000]}
+                return {**_basic_summary(company, domain, apollo, crawl_text), "summary": content[:2000]}
             out = {k: data.get(k, "") for k in _CS_STR}
             for k in _CS_ARR:
                 v = data.get(k, [])
                 out[k] = v if isinstance(v, list) else ([v] if v else [])
             return out
-        return {"_note": f"OpenAI HTTP {resp.status_code}"}
+        _stats["openai_status"] = ("401 — invalid OPENAI_API_KEY"
+                                   if resp.status_code == 401 else f"HTTP {resp.status_code}")
+        return _fallback(f"OpenAI HTTP {resp.status_code} — showing Apollo data only")
     except Exception as e:
-        return {"_note": f"OpenAI error: {e}"}
+        _stats["openai_status"] = f"error: {e}"
+        return _fallback(f"OpenAI error: {e}")
 
 
 # ── worker loop ──────────────────────────────────────────────────────────────
@@ -346,22 +403,35 @@ def get_stats() -> Dict[str, Any]:
     return s
 
 
-def showcase_now(lead_ids) -> None:
-    """Force immediate full enrichment of specific leads (admin 'showcase'
-    button). Runs in a detached thread so the HTTP request returns instantly."""
+def reanalyze(lead_ids) -> None:
+    """Recompute the AI cheat-sheet for already-crawled leads, reusing the stored
+    website text + Apollo data (NO re-crawl, NO extra Apollo call). Used to
+    backfill leads whose AI failed earlier (e.g. a bad OpenAI key) once a valid
+    key is set. Runs detached so the HTTP request returns instantly."""
     import db
     def _run():
+        openai_key = os.environ.get("OPENAI_API_KEY", "")
+        n = 0
         for lid in (lead_ids or []):
             try:
-                row = db.LeadEnrichmentRepo.get_full(int(lid))
+                row = db.LeadEnrichmentRepo.get_crawl_apollo(int(lid))
                 if not row:
                     continue
-                _enrich_one({"lead_id": int(lid), "root_domain": row.get("root_domain"),
-                             "company_name": row.get("company_name"),
-                             "display_name": row.get("display_name")})
+                crawl = row.get("crawl_json") or {}
+                apollo = row.get("apollo_json") or {}
+                company = row.get("company_name") or row.get("display_name") or row.get("root_domain") or ""
+                ai = analyze_with_openai(company, row.get("root_domain") or "",
+                                         (crawl or {}).get("combined_text", ""), apollo, openai_key)
+                db.LeadEnrichmentRepo.save_ai(int(lid), ai)
+                try:
+                    db.MasterLeadRepo.enrich_core_from_apollo(int(lid), apollo)
+                except Exception:
+                    pass
+                n += 1
             except Exception as e:
-                log.warning("showcase enrich %s failed: %s", lid, e)
-    threading.Thread(target=_run, name="enrich-showcase", daemon=True).start()
+                log.warning("reanalyze %s failed: %s", lid, e)
+        log.info("reanalyze complete: %d lead(s) refreshed", n)
+    threading.Thread(target=_run, name="enrich-reanalyze", daemon=True).start()
 
 
 def start_background_worker(is_busy: Optional[Callable[[], bool]] = None) -> bool:

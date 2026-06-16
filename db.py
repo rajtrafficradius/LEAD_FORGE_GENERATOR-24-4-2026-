@@ -1719,11 +1719,58 @@ class LeadEnrichmentRepo:
 
     @staticmethod
     def top_pending_ids(limit: int = 3) -> List[int]:
-        """Lead ids to force-enrich for the showcase (lowest id = oldest leads)."""
+        """Lead ids (lowest id = oldest leads)."""
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT id FROM master_leads ORDER BY id ASC LIMIT %s", (int(limit),))
                 return [int(r["id"]) for r in (cur.fetchall() or [])]
+
+    @staticmethod
+    def failed_ai_ids(limit: int = 5000) -> List[int]:
+        """Crawled leads whose AI cheat-sheet failed/empty (e.g. bad OpenAI key) —
+        candidates for cheap re-analysis (no re-crawl)."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT lead_id FROM lead_enrichment WHERE crawl_status='done' AND "
+                    "(ai_summary_json IS NULL OR JSON_EXTRACT(ai_summary_json,'$._note') IS NOT NULL) "
+                    "ORDER BY lead_id ASC LIMIT %s",
+                    (int(limit),),
+                )
+                return [int(r["lead_id"]) for r in (cur.fetchall() or [])]
+
+    @staticmethod
+    def save_ai(lead_id: int, ai_json: Any) -> None:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE lead_enrichment SET ai_summary_json=%s WHERE lead_id=%s",
+                            (json.dumps(ai_json or {}, default=str), lead_id))
+            conn.commit()
+
+    @staticmethod
+    def get_crawl_apollo(lead_id: int) -> Optional[Dict[str, Any]]:
+        """Stored crawl + Apollo JSON + lead identity, for re-analysis."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT le.crawl_json, le.apollo_json, ml.company_name, ml.display_name, "
+                    "ml.root_domain FROM lead_enrichment le "
+                    "JOIN master_leads ml ON ml.id=le.lead_id WHERE le.lead_id=%s",
+                    (lead_id,),
+                )
+                row = cur.fetchone()
+        if not row:
+            return None
+        for k in ("crawl_json", "apollo_json"):
+            v = row.get(k)
+            if isinstance(v, (bytes, bytearray)):
+                v = v.decode("utf-8", "ignore")
+            if isinstance(v, str):
+                try:
+                    row[k] = json.loads(v)
+                except Exception:
+                    row[k] = {}
+        return row
 
     @staticmethod
     def status_counts() -> Dict[str, int]:

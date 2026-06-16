@@ -950,16 +950,18 @@ def api_crawler_retry():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/crawler/showcase", methods=["POST"])
+@app.route("/api/crawler/reanalyze", methods=["POST"])
 @manager_or_admin_required
-def api_crawler_showcase():
-    """One-shot: fully enrich the top N leads RIGHT NOW (for demo/showcase)."""
+def api_crawler_reanalyze():
+    """Re-run the AI cheat-sheet for leads whose AI failed earlier (e.g. a bad
+    OpenAI key), reusing already-crawled data (no re-crawl). Use after fixing
+    OPENAI_API_KEY to backfill the whole database cheaply."""
     try:
         import enrichment_worker
-        n = int((request.get_json(silent=True) or {}).get("n", 3))
-        ids = db.LeadEnrichmentRepo.top_pending_ids(limit=max(1, min(10, n)))
-        enrichment_worker.showcase_now(ids)
-        return jsonify({"ok": True, "lead_ids": ids, "message": "Enriching now — refresh in ~1 min."})
+        ids = db.LeadEnrichmentRepo.failed_ai_ids(limit=5000)
+        enrichment_worker.reanalyze(ids)
+        return jsonify({"ok": True, "count": len(ids),
+                        "message": f"Re-analysing {len(ids)} lead(s) in the background — refresh shortly."})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
