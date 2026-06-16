@@ -1790,6 +1790,79 @@ class LeadEnrichmentRepo:
                 return out
 
     @staticmethod
+    def list_by_status(status: str, limit: int = 250, offset: int = 0) -> List[Dict[str, Any]]:
+        """Leads in a given crawl bucket (pending/crawling/done/error) with the
+        details the Enrichment panel's drill-down needs. status='total'/'' lists
+        every lead regardless of crawl state.
+
+        Done in two steps — a cheap ORDER BY over just (lead_id, crawled_at) to
+        pick the page of ids, then a PK fetch of the heavy/JSON columns with NO
+        sort — because filesorting rows that carry JSON/TEXT columns blows
+        Railway's tiny sort_buffer ('Out of sort memory')."""
+        st = (status or "").strip().lower()
+        if st in ("pending", "crawling", "done", "error"):
+            id_sql = ("SELECT lead_id FROM lead_enrichment WHERE crawl_status=%s "
+                      "ORDER BY crawled_at DESC, lead_id DESC LIMIT %s OFFSET %s")
+            id_params: tuple = (st, int(limit), int(offset))
+        else:
+            id_sql = ("SELECT lead_id FROM lead_enrichment "
+                      "ORDER BY lead_id DESC LIMIT %s OFFSET %s")
+            id_params = (int(limit), int(offset))
+        cols = ("le.lead_id, ml.root_domain AS domain, "
+                "COALESCE(NULLIF(ml.company_name,''), NULLIF(ml.display_name,''), ml.root_domain) AS company, "
+                "le.crawl_status, le.crawled_at, LEFT(le.error_text,300) AS error_text, "
+                "CAST(JSON_EXTRACT(le.crawl_json,'$.fetched') AS UNSIGNED) AS pages, "
+                "(le.apollo_json IS NOT NULL AND JSON_LENGTH(le.apollo_json) > 0) AS has_apollo, "
+                "(le.ai_summary_json IS NOT NULL "
+                " AND JSON_EXTRACT(le.ai_summary_json,'$._note') IS NULL "
+                " AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(le.ai_summary_json,'$.summary')),'') <> '') AS ai_ok")
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(id_sql, id_params)
+                ids = [int(r["lead_id"]) for r in (cur.fetchall() or [])]
+                if not ids:
+                    return []
+                order = {lid: i for i, lid in enumerate(ids)}
+                ph = ",".join(["%s"] * len(ids))
+                cur.execute(
+                    f"SELECT {cols} FROM lead_enrichment le "
+                    f"JOIN master_leads ml ON ml.id = le.lead_id WHERE le.lead_id IN ({ph})",
+                    tuple(ids),
+                )
+                rows = cur.fetchall() or []
+        rows.sort(key=lambda r: order.get(int(r["lead_id"]), 1 << 30))
+        for r in rows:
+            if r.get("crawled_at") and hasattr(r["crawled_at"], "isoformat"):
+                r["crawled_at"] = r["crawled_at"].isoformat()
+            r["has_apollo"] = bool(r.get("has_apollo"))
+            r["ai_ok"] = bool(r.get("ai_ok"))
+            if r.get("pages") is not None:
+                r["pages"] = int(r["pages"])
+            if r.get("error_text"):
+                r["error_text"] = str(r["error_text"])[:300]
+        return rows
+
+    @staticmethod
+    def requeue_oldest_stale(days: int) -> int:
+        """Re-queue the single oldest 'done' lead whose crawl is older than `days`
+        back to 'pending' so the crawler keeps running continuously and data stays
+        fresh. Returns 1 if one was re-queued, else 0."""
+        if not days or int(days) <= 0:
+            return 0
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE lead_enrichment SET crawl_status='pending' "
+                    "WHERE crawl_status='done' AND crawled_at IS NOT NULL "
+                    "AND crawled_at < (NOW() - INTERVAL %s DAY) "
+                    "ORDER BY crawled_at ASC LIMIT 1",
+                    (int(days),),
+                )
+                n = cur.rowcount
+            conn.commit()
+            return int(n or 0)
+
+    @staticmethod
     def get_full(lead_id: int) -> Optional[Dict[str, Any]]:
         """Everything the lead page needs: the master_leads row + its enrichment
         (crawl/apollo/ai JSON parsed) + assigned-BDE username."""

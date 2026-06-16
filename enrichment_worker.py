@@ -51,11 +51,27 @@ MAX_CHARS = int(os.environ.get("ENRICH_MAX_CHARS", "12000") or "12000")
 POLL_SECONDS = float(os.environ.get("ENRICH_POLL_SECONDS", "20") or "20")
 PER_LEAD_DELAY = float(os.environ.get("ENRICH_PER_LEAD_DELAY", "2") or "2")
 OPENAI_MODEL = os.environ.get("ENRICH_OPENAI_MODEL", "gpt-4o-mini")
+# Continuous crawling: when fully caught up, re-crawl the oldest lead whose data
+# is older than this many days, so the crawler never sits fully idle and data
+# stays fresh. 0 disables the refresh cycle.
+REFRESH_DAYS = int(os.environ.get("ENRICH_REFRESH_DAYS", "21") or "21")
 
 _started = False
 _paused = False
 _stats = {"done": 0, "errors": 0, "openai_calls": 0, "apollo_calls": 0, "last": "",
           "openai_status": "unknown"}
+# Live "what is the worker doing right now", surfaced to the Enrichment panel as
+# a progress bar. phase ∈ idle|crawling|apollo|analyzing.
+_current: Dict[str, Any] = {"phase": "idle"}
+
+
+def _set_current(**kw) -> None:
+    _current.update(kw)
+
+
+def _idle_current() -> None:
+    _current.clear()
+    _current["phase"] = "idle"
 
 
 def pause() -> None:
@@ -111,9 +127,11 @@ def _candidate_links(soup, base_url: str) -> List[str]:
     return [u for _, u in out]
 
 
-def crawl_site(domain: str) -> Dict[str, Any]:
+def crawl_site(domain: str, progress: Optional[Callable[[int, int, str], None]] = None) -> Dict[str, Any]:
     """Fetch homepage + a few high-signal internal pages. Returns
-    {homepage_url, pages:[{url,title,description,text}], combined_text}."""
+    {homepage_url, pages:[{url,title,description,text}], combined_text}. `progress`
+    (if given) is called as progress(pages_fetched, pages_total, current_url) so
+    the worker can surface a live progress bar."""
     sess = requests.Session()
     sess.headers.update({"User-Agent": _UA, "Accept-Language": "en-AU,en;q=0.9"})
     result: Dict[str, Any] = {"homepage_url": "", "pages": [], "combined_text": "",
@@ -135,7 +153,12 @@ def crawl_site(domain: str) -> Dict[str, Any]:
     home["url"] = home_url
     result["pages"].append({k: home[k] for k in ("url", "title", "description", "text")})
     result["fetched"] = 1
-    for link in _candidate_links(soup, home_url)[: MAX_PAGES - 1]:
+    links = _candidate_links(soup, home_url)[: MAX_PAGES - 1]
+    total = 1 + len(links)
+    if progress:
+        try: progress(1, total, home_url)
+        except Exception: pass
+    for link in links:
         try:
             r = sess.get(link, timeout=10, allow_redirects=True)
             if r.status_code < 400 and r.text:
@@ -144,6 +167,9 @@ def crawl_site(domain: str) -> Dict[str, Any]:
                 pg["url"] = str(r.url)
                 result["pages"].append({k: pg[k] for k in ("url", "title", "description", "text")})
                 result["fetched"] += 1
+            if progress:
+                try: progress(result["fetched"], total, link)
+                except Exception: pass
             time.sleep(0.6)  # polite
         except Exception as e:
             result["errors"].append(f"{link}: {e}")
@@ -337,10 +363,16 @@ def _enrich_one(lead: Dict[str, Any]) -> None:
         if not domain:
             db.LeadEnrichmentRepo.save_error(lead_id, "no domain on lead")
             return
-        crawl = crawl_site(domain)
+        _set_current(phase="crawling", lead_id=lead_id, domain=domain, company=company,
+                     pages=0, pages_total=MAX_PAGES, page_url="", started=time.time())
+        def _prog(n, total, url):
+            _set_current(pages=n, pages_total=total, page_url=url)
+        crawl = crawl_site(domain, progress=_prog)
         apollo_key = os.environ.get("APOLLO_API_KEY", "")
         openai_key = os.environ.get("OPENAI_API_KEY", "")
+        _set_current(phase="apollo")
         apollo = apollo_org_full(domain, apollo_key)
+        _set_current(phase="analyzing")
         ai = analyze_with_openai(company, domain, crawl.get("combined_text", ""), apollo, openai_key)
         db.LeadEnrichmentRepo.save_result(lead_id, crawl, apollo, ai)
         # Fill blank core columns (company/industry/revenue) so the Database
@@ -375,6 +407,9 @@ def _backfill_failed_ai(db) -> bool:
         ids = db.LeadEnrichmentRepo.failed_ai_ids(limit=1, include_fallback=healthy)
         if not ids:
             return False
+        _set_current(phase="analyzing", lead_id=int(ids[0]), domain="", company="",
+                     pages=0, pages_total=0, page_url="(re-analysing stored data)",
+                     started=time.time())
         _reanalyze_one(int(ids[0]), os.environ.get("OPENAI_API_KEY", ""))
         _stats["last"] = f"AI backfill: lead {ids[0]}"
         return True
@@ -417,6 +452,18 @@ def _loop(is_busy: Callable[[], bool]) -> None:
                     idle_ticks = 0
                     time.sleep(PER_LEAD_DELAY)
                     continue
+                # Fully caught up → keep crawling CONTINUOUSLY by re-crawling the
+                # oldest stale lead (data older than REFRESH_DAYS). Next loop claims
+                # and re-crawls it, so the worker never sits idle for long.
+                try:
+                    if db.LeadEnrichmentRepo.requeue_oldest_stale(REFRESH_DAYS):
+                        idle_ticks = 0
+                        _idle_current()
+                        time.sleep(1)
+                        continue
+                except Exception:
+                    pass
+                _idle_current()
                 time.sleep(POLL_SECONDS)
                 continue
             idle_ticks = 0
@@ -429,6 +476,10 @@ def _loop(is_busy: Callable[[], bool]) -> None:
 
 def get_stats() -> Dict[str, Any]:
     s = dict(_stats); s["paused"] = _paused; s["started"] = _started
+    cur = dict(_current)
+    if cur.get("started"):
+        cur["elapsed"] = round(time.time() - cur["started"], 1)
+    s["current"] = cur
     return s
 
 

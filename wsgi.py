@@ -966,6 +966,23 @@ def api_crawler_reanalyze():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/crawler/leads", methods=["GET"])
+@manager_or_admin_required
+def api_crawler_leads():
+    """Drill-down for the Enrichment panel: the domains in a given crawl bucket
+    (pending/crawling/done/error/total) with their details."""
+    status = (request.args.get("status") or "total").strip().lower()
+    try:
+        limit = min(max(int(request.args.get("limit", 250)), 1), 1000)
+    except (TypeError, ValueError):
+        limit = 250
+    try:
+        rows = db.LeadEnrichmentRepo.list_by_status(status, limit=limit)
+        return jsonify({"status": status, "count": len(rows), "leads": rows})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/allocation/auto", methods=["POST"])
 @manager_or_admin_required
 def api_allocation_auto():
