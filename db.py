@@ -1112,6 +1112,31 @@ class LeadAllocationRepo:
             conn.commit()
 
     @staticmethod
+    def set_alloc_status(lead_id: int, status: str, actor_id: Optional[int]) -> None:
+        """Set the allocation funnel stage to an explicit value — powers the
+        TOGGLE/revert in the UI (e.g. un-contact a lead clicked by mistake).
+        status: 'assigned' (back to just allocated) | 'contacted' | 'secured'."""
+        if status == "contacted":
+            sql = ("UPDATE master_leads SET alloc_status='contacted', "
+                   "contacted_at=NOW(), secured_at=NULL WHERE id=%s")
+            ev = "contacted"
+        elif status == "secured":
+            sql = ("UPDATE master_leads SET alloc_status='secured', secured_at=NOW(), "
+                   "contacted_at=COALESCE(contacted_at, NOW()) WHERE id=%s")
+            ev = "secured"
+        elif status == "assigned":
+            sql = ("UPDATE master_leads SET alloc_status='assigned', "
+                   "contacted_at=NULL, secured_at=NULL WHERE id=%s")
+            ev = "assign"
+        else:
+            raise ValueError(f"invalid alloc status: {status}")
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (lead_id,))
+                LeadAllocationRepo._event(cur, lead_id, ev, actor_id, None)
+            conn.commit()
+
+    @staticmethod
     def unassign(lead_id: int, actor_id: Optional[int]) -> None:
         """Send a lead back to the database pool (deallocate from its BDE).
         Resets the allocation funnel to 'unassigned' (clean slate)."""

@@ -3084,8 +3084,8 @@ function AllocLeadChip({r,fromBde,onDragStart,onContacted,onSecured,onOpen,compa
     </div>
     <span style={{fontSize:9,fontWeight:700,color:sc,border:'1px solid '+sc,borderRadius:10,padding:'1px 6px',textTransform:'capitalize',flexShrink:0}}>{r.alloc_status||(fromBde?'assigned':'free')}</span>
     {!compact&&onOpen&&<button onClick={()=>onOpen(r.id)} title="Open full lead page" style={{flexShrink:0,width:20,height:20,borderRadius:5,border:'1px solid var(--bd)',background:'var(--sf)',color:'var(--blue)',cursor:'pointer',fontWeight:700,fontSize:12,lineHeight:1}}>+</button>}
-    {!compact&&onContacted&&r.alloc_status!=='contacted'&&r.alloc_status!=='secured'&&<button onClick={()=>onContacted(r.id)} title="Mark contacted" style={{flexShrink:0,padding:'2px 7px',borderRadius:5,border:0,background:'var(--amber)',color:'#fff',cursor:'pointer',fontSize:10,fontWeight:700}}>✓</button>}
-    {!compact&&onSecured&&r.alloc_status!=='secured'&&<button onClick={()=>onSecured(r.id)} title="Mark secured (deal won)" style={{flexShrink:0,padding:'2px 7px',borderRadius:5,border:0,background:'var(--green)',color:'#fff',cursor:'pointer',fontSize:10,fontWeight:700}}>$</button>}
+    {!compact&&onContacted&&<button onClick={()=>onContacted(r.id,r.alloc_status)} title={r.alloc_status==='contacted'?'Contacted — click to undo':'Mark contacted'} style={{flexShrink:0,padding:'2px 7px',borderRadius:5,border:'1px solid var(--amber)',background:r.alloc_status==='contacted'?'var(--amber)':'transparent',color:r.alloc_status==='contacted'?'#fff':'var(--amber)',cursor:'pointer',fontSize:10,fontWeight:700}}>✓</button>}
+    {!compact&&onSecured&&<button onClick={()=>onSecured(r.id,r.alloc_status)} title={r.alloc_status==='secured'?'Secured — click to undo':'Mark secured (deal won)'} style={{flexShrink:0,padding:'2px 7px',borderRadius:5,border:'1px solid var(--green)',background:r.alloc_status==='secured'?'var(--green)':'transparent',color:r.alloc_status==='secured'?'#fff':'var(--green)',cursor:'pointer',fontSize:10,fontWeight:700}}>$</button>}
   </div>);
 }
 
@@ -3128,8 +3128,13 @@ function AllocationView({onOpenLead}){
     if(d&&d.ok){ const nm=(bdes.find(b=>b.id===toBde)||{}).username||('BDE '+toBde);
       setMsg('Moved '+lfId(leadId)+' → '+nm); refresh([toBde,fromBde]); }
     else setMsg('Could not move lead: '+((d&&d.error)||'failed')); };
-  const setStatus=async(leadId,kind,bdeId)=>{ const d=await apiJSON('/api/leads/'+leadId+'/'+kind,{method:'POST',body:'{}'});
-    if(d&&d.ok){ setMsg(lfId(leadId)+' marked '+kind); refresh([bdeId]); } else setMsg('Action failed'); };
+  const setStatus=async(leadId,currentStatus,kind,bdeId)=>{
+    // Toggle: clicking again reverts (so a mis-click is recoverable).
+    const target = kind==='contacted'
+      ? (currentStatus==='contacted' ? 'assigned' : 'contacted')
+      : (currentStatus==='secured' ? 'contacted' : 'secured');
+    const d=await apiJSON('/api/leads/'+leadId+'/alloc-status',{method:'POST',body:JSON.stringify({status:target})});
+    if(d&&d.ok){ setMsg(lfId(leadId)+' → '+target); refresh([bdeId]); } else setMsg('Action failed'); };
   const distribute=async(perBde)=>{ const ids=bdes.filter(b=>active[b.id]).map(b=>b.id);
     if(!ids.length){setMsg('Turn on at least one BDE (the green switch) first.');return;}
     if(perBde>0 && (!Number.isFinite(perBde))){setMsg('Enter a valid number per BDE.');return;}
@@ -3264,7 +3269,7 @@ function AllocationView({onOpenLead}){
             <div style={{fontSize:11,color:'var(--t3)',marginBottom:8}}>Currently allocated — drag onto another BDE to move</div>
             <div style={{maxHeight:340,overflow:'auto',paddingRight:4}}>
               {leads.map(r=><AllocLeadChip key={r.id} r={r} fromBde={b.id} onDragStart={onDragStart}
-                  onOpen={onOpenLead} onContacted={id=>setStatus(id,'contacted',b.id)} onSecured={id=>setStatus(id,'secured',b.id)}/>)}
+                  onOpen={onOpenLead} onContacted={(id,st)=>setStatus(id,st,'contacted',b.id)} onSecured={(id,st)=>setStatus(id,st,'secured',b.id)}/>)}
               {!leads.length&&<div style={{color:'var(--t3)',fontSize:12,padding:'14px 0',textAlign:'center',border:'1.5px dashed var(--bd)',borderRadius:8}}>No leads yet — drag some here.</div>}
             </div>
           </div>}
@@ -3365,10 +3370,10 @@ function BdeLeadsView({user,onOpenLead}){
   const load=async()=>{ const d=await apiJSON('/api/db/master-leads?page='+page+'&page_size='+pageSize);
     if(d&&d.rows){ setRows(d.rows); setTotal(d.total||0); } };
   useEffect(()=>{load();},[page]);
-  const contacted=async(id)=>{ const d=await apiJSON('/api/leads/'+id+'/contacted',{method:'POST',body:'{}'});
-    if(d&&d.ok){ setMsg('Marked '+lfId(id)+' contacted.'); load(); } else setMsg('Error'); };
-  const secured=async(id)=>{ const d=await apiJSON('/api/leads/'+id+'/secured',{method:'POST',body:'{}'});
-    if(d&&d.ok){ setMsg('Marked '+lfId(id)+' secured 🎉'); load(); } else setMsg('Error'); };
+  const setAlloc=async(id,target)=>{ const d=await apiJSON('/api/leads/'+id+'/alloc-status',{method:'POST',body:JSON.stringify({status:target})});
+    if(d&&d.ok){ setMsg(lfId(id)+' → '+target); load(); } else setMsg('Error'); };
+  const toggleContacted=(r)=>setAlloc(r.id, r.alloc_status==='contacted'?'assigned':'contacted');
+  const toggleSecured=(r)=>setAlloc(r.id, r.alloc_status==='secured'?'contacted':'secured');
   const stColor={secured:'var(--green)',contacted:'var(--amber)',assigned:'var(--blue)'};
   const th={textAlign:'left',padding:'8px 10px',color:'var(--t3)',fontSize:11,textTransform:'uppercase',borderBottom:'1px solid var(--bd)'};
   const td={padding:'8px 10px',borderBottom:'1px solid var(--bd)',color:'var(--t1)',fontSize:13};
@@ -3390,12 +3395,10 @@ function BdeLeadsView({user,onOpenLead}){
             <td style={td}>{r.phone_e164||'—'}</td>
             <td style={td}>{r.primary_email||'—'}</td>
             <td style={td}><span style={{color:stColor[r.alloc_status]||'var(--t3)',fontWeight:600,textTransform:'capitalize'}}>{r.alloc_status||'assigned'}</span></td>
-            <td style={td}>{r.alloc_status==='secured'
-              ? <span style={{color:'var(--green)',fontWeight:700}}>✓ Secured</span>
-              : <div style={{display:'flex',gap:6}}>
-                  {r.alloc_status!=='contacted'&&<button onClick={()=>contacted(r.id)} style={{padding:'5px 11px',background:'var(--amber)',color:'#fff',border:0,borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:700}}>Contacted</button>}
-                  <button onClick={()=>secured(r.id)} title="Deal won" style={{padding:'5px 11px',background:'var(--green)',color:'#fff',border:0,borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:700}}>Secured</button>
-                </div>}</td>
+            <td style={td}><div style={{display:'flex',gap:6}}>
+              <button onClick={()=>toggleContacted(r)} title={r.alloc_status==='contacted'?'Click to undo':'Mark contacted'} style={{padding:'5px 11px',border:'1px solid var(--amber)',background:r.alloc_status==='contacted'?'var(--amber)':'transparent',color:r.alloc_status==='contacted'?'#fff':'var(--amber)',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:700}}>{r.alloc_status==='contacted'?'✓ Contacted':'Contacted'}</button>
+              <button onClick={()=>toggleSecured(r)} title={r.alloc_status==='secured'?'Click to undo':'Deal won'} style={{padding:'5px 11px',border:'1px solid var(--green)',background:r.alloc_status==='secured'?'var(--green)':'transparent',color:r.alloc_status==='secured'?'#fff':'var(--green)',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:700}}>{r.alloc_status==='secured'?'✓ Secured':'Secured'}</button>
+            </div></td>
           </tr>))}
           {!rows.length&&<tr><td style={td} colSpan={8}>No leads allocated to you yet.</td></tr>}
         </tbody>
@@ -3470,19 +3473,22 @@ function LeadDetailView({leadId,onBack,user}){
     const c=await apiJSON('/api/lead/'+leadId+'/calls');
     if(c&&c.calls) setCalls(c.calls); };
   useEffect(()=>{ if(leadId) load(); },[leadId]);
-  const contacted=async()=>{ const d=await apiJSON('/api/leads/'+leadId+'/contacted',{method:'POST',body:'{}'});
-    if(d&&d.ok){ setMsg('Marked contacted.'); load(); } };
-  const secured=async()=>{ const d=await apiJSON('/api/leads/'+leadId+'/secured',{method:'POST',body:'{}'});
-    if(d&&d.ok){ setMsg('Marked secured 🎉'); load(); } };
+  const setAllocStatus=async(target)=>{ const d=await apiJSON('/api/leads/'+leadId+'/alloc-status',{method:'POST',body:JSON.stringify({status:target})});
+    if(d&&d.ok){ setMsg('Status → '+target); load(); } };
+  const contacted=()=>setAllocStatus(lead&&lead.alloc_status==='contacted'?'assigned':'contacted');
+  const secured=()=>setAllocStatus(lead&&lead.alloc_status==='secured'?'contacted':'secured');
   const recrawl=async()=>{ const d=await apiJSON('/api/lead/'+leadId+'/recrawl',{method:'POST',body:'{}'});
     if(d&&d.ok) setMsg('Re-queued for enrichment.'); };
   const backBtn=<button onClick={onBack} style={{padding:'7px 14px',background:'var(--sf)',color:'var(--t1)',
     border:'1px solid var(--bd)',borderRadius:8,cursor:'pointer',fontSize:13}}>← Back</button>;
   if(lead===undefined) return(<div style={{padding:20}}>{backBtn}<div style={{marginTop:20,color:'var(--t3)'}}>Loading lead…</div></div>);
   if(lead===null) return(<div style={{padding:20}}>{backBtn}<div style={{marginTop:20,color:'#EF4444'}}>Lead not found or not accessible.</div></div>);
-  const a=lead.apollo_json||{}; const ai=lead.ai_summary_json||{}; const crawl=lead.crawl_json||{};
+  const a=lead.apollo_json||{}; const ai=lead.ai_summary_json||{};
   const status=lead.crawl_status||'pending';
   const statusColor={done:'var(--green)',crawling:'var(--amber)',pending:'var(--t3)',error:'#EF4444'}[status]||'var(--t3)';
+  const ulSt={margin:'4px 0',paddingLeft:18,color:'var(--t1)',fontSize:13};
+  const lblSt={color:'var(--t3)',fontSize:12,marginBottom:4};
+  const techNames=(a.technologies||a.current_technologies||[]).map(t=>typeof t==='string'?t:(t&&t.name)||'').filter(Boolean);
   return(<div style={{padding:'4px 2px',paddingBottom:30}}>
     <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14,flexWrap:'wrap'}}>
       {backBtn}
@@ -3491,35 +3497,60 @@ function LeadDetailView({leadId,onBack,user}){
       <a href={'https://'+lead.root_domain} target="_blank" rel="noopener noreferrer" style={{color:'var(--violet)',fontSize:13}}>{lead.root_domain} ↗</a>
       <span style={{marginLeft:'auto',color:statusColor,fontSize:12,fontWeight:600}}>enrichment: {status}</span>
       {isMgrAdmin&&<button onClick={recrawl} style={{padding:'7px 12px',background:'var(--sf)',color:'var(--t2)',border:'1px solid var(--bd)',borderRadius:8,cursor:'pointer',fontSize:12}}>Re-crawl</button>}
-      {lead.alloc_status==='secured'
-        ? <span style={{color:'var(--green)',fontWeight:700}}>🎉 Secured</span>
-        : <>
-            {lead.alloc_status!=='contacted'&&<button onClick={contacted} style={{padding:'7px 14px',background:'var(--amber)',color:'#fff',border:0,borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:13}}>Mark Contacted</button>}
-            {lead.alloc_status==='contacted'&&<span style={{color:'var(--amber)',fontWeight:700}}>✓ Contacted</span>}
-            <button onClick={secured} title="Deal won" style={{padding:'7px 14px',background:'var(--green)',color:'#fff',border:0,borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:13}}>Mark Secured</button>
-          </>}
+      <button onClick={contacted} title={lead.alloc_status==='contacted'?'Contacted — click to undo':'Mark contacted'} style={{padding:'7px 14px',border:'1px solid var(--amber)',background:lead.alloc_status==='contacted'?'var(--amber)':'transparent',color:lead.alloc_status==='contacted'?'#fff':'var(--amber)',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:13}}>{lead.alloc_status==='contacted'?'✓ Contacted':'Mark Contacted'}</button>
+      <button onClick={secured} title={lead.alloc_status==='secured'?'Secured — click to undo':'Deal won'} style={{padding:'7px 14px',border:'1px solid var(--green)',background:lead.alloc_status==='secured'?'var(--green)':'transparent',color:lead.alloc_status==='secured'?'#fff':'var(--green)',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:13}}>{lead.alloc_status==='secured'?'✓ Secured':'Mark Secured'}</button>
     </div>
     {msg&&<div className="card" style={{padding:'9px 14px',marginBottom:12,color:'var(--green)',fontSize:13}}>{msg}</div>}
     {status!=='done'&&<div className="card" style={{padding:'12px 16px',marginBottom:14,color:'var(--t2)',fontSize:13}}>
       {status==='error'?('Enrichment error: '+(lead.enrich_error||'unknown')) :'Enrichment in progress — website + Apollo data will appear here shortly. '}
     </div>}
 
-    {/* Caller cheat-sheet (AI) — what a caller needs, up top */}
-    <LDSection title="Caller cheat-sheet" accent="var(--blue)">
-      {ai.summary&&<div style={{color:'var(--t1)',fontSize:14,marginBottom:10,lineHeight:1.5}}>{ai.summary}</div>}
-      <LDField label="Business model" value={ai.business_model}/>
-      <LDField label="Target market" value={ai.target_market}/>
-      <LDField label="Size signals" value={ai.size_signals}/>
-      {ai.products_services&&ai.products_services.length>0&&<div style={{marginTop:8}}><div style={{color:'var(--t3)',fontSize:12}}>Products / services</div><LDChips items={ai.products_services} color="var(--violet)"/></div>}
-      {ai.talking_points&&ai.talking_points.length>0&&<div style={{marginTop:10}}><div style={{color:'var(--t3)',fontSize:12,marginBottom:4}}>Talking points</div><ul style={{margin:'4px 0',paddingLeft:18,color:'var(--t1)',fontSize:13}}>{ai.talking_points.map((t,i)=><li key={i} style={{marginBottom:3}}>{t}</li>)}</ul></div>}
-      {ai.likely_pain_points&&ai.likely_pain_points.length>0&&<div style={{marginTop:6}}><div style={{color:'var(--t3)',fontSize:12,marginBottom:4}}>Likely pain points</div><ul style={{margin:'4px 0',paddingLeft:18,color:'var(--t1)',fontSize:13}}>{ai.likely_pain_points.map((t,i)=><li key={i} style={{marginBottom:3}}>{t}</li>)}</ul></div>}
-      {ai.decision_maker_titles&&ai.decision_maker_titles.length>0&&<div style={{marginTop:6}}><div style={{color:'var(--t3)',fontSize:12}}>Ask for (decision makers)</div><LDChips items={ai.decision_maker_titles} color="var(--amber)"/></div>}
-      {ai.icebreakers&&ai.icebreakers.length>0&&<div style={{marginTop:8}}><div style={{color:'var(--t3)',fontSize:12,marginBottom:4}}>Icebreakers</div><ul style={{margin:'4px 0',paddingLeft:18,color:'var(--t2)',fontSize:13}}>{ai.icebreakers.map((t,i)=><li key={i} style={{marginBottom:3}}>{t}</li>)}</ul></div>}
-      {(ai._note||(!ai.summary&&!ai.business_model))&&<div style={{color:'var(--t3)',fontSize:12}}>{ai._note||'No AI analysis yet.'}</div>}
-    </LDSection>
+    {/* COMPACT AI SUMMARY — what a caller needs at a glance, first */}
+    {(ai.summary||ai.call_strategy)&&<div className="card" style={{padding:'16px 18px',marginBottom:14,borderLeft:'4px solid var(--blue)'}}>
+      <div style={{fontSize:11,fontWeight:700,color:'var(--blue)',textTransform:'uppercase',letterSpacing:'0.5px',marginBottom:6}}>Quick summary</div>
+      {ai.summary&&<div style={{color:'var(--t1)',fontSize:15,lineHeight:1.55}}>{ai.summary}</div>}
+      {ai.call_strategy&&<div style={{marginTop:10}}><span style={{color:'var(--t3)',fontSize:12}}>Best angle: </span><span style={{color:'var(--t1)',fontSize:13,fontWeight:600}}>{ai.call_strategy}</span></div>}
+      {ai.best_time_to_call&&<div style={{marginTop:4}}><span style={{color:'var(--t3)',fontSize:12}}>Best time: </span><span style={{color:'var(--t1)',fontSize:13}}>{ai.best_time_to_call}</span></div>}
+    </div>}
+    {ai._note&&<div className="card" style={{padding:'12px 16px',marginBottom:14,color:'var(--t3)',fontSize:13}}>{ai._note}</div>}
 
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
-      {/* Contact */}
+    {/* DETAILED call-prep sections */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(320px,1fr))',gap:14}}>
+      <LDSection title="What they sell" accent="var(--violet)">
+        {ai.business_model&&<LDField label="Business model" value={ai.business_model}/>}
+        {ai.products&&ai.products.length>0&&<div style={{marginTop:6}}><div style={lblSt}>Products</div><LDChips items={ai.products} color="var(--violet)"/></div>}
+        {ai.services&&ai.services.length>0&&<div style={{marginTop:8}}><div style={lblSt}>Services</div><LDChips items={ai.services} color="var(--blue)"/></div>}
+        {!ai.business_model&&!(ai.products||[]).length&&!(ai.services||[]).length&&<div style={{color:'var(--t3)',fontSize:13}}>—</div>}
+      </LDSection>
+      <LDSection title="Audience & market" accent="var(--blue)">
+        <LDField label="Target audience" value={ai.target_audience}/>
+        <LDField label="Market position" value={ai.market_position}/>
+        {ai.competitors&&ai.competitors.length>0&&<div style={{marginTop:6}}><div style={lblSt}>Competitors</div><LDChips items={ai.competitors} color="var(--amber)"/></div>}
+      </LDSection>
+      <LDSection title="Advertising & marketing" accent="var(--amber)">
+        <div style={{color:'var(--t1)',fontSize:13,lineHeight:1.5}}>{ai.advertising||<span style={{color:'var(--t3)'}}>No advertising activity inferred.</span>}</div>
+      </LDSection>
+      <LDSection title="History & recent activity" accent="var(--green)">
+        {ai.past_activity&&<div style={{color:'var(--t1)',fontSize:13,lineHeight:1.5,marginBottom:8}}>{ai.past_activity}</div>}
+        {ai.recent_initiatives&&<LDField label="Recent" value={ai.recent_initiatives}/>}
+        {!ai.past_activity&&!ai.recent_initiatives&&<div style={{color:'var(--t3)',fontSize:13}}>—</div>}
+      </LDSection>
+      <LDSection title="Tendencies & buying signals" accent="var(--violet)">
+        {ai.tendencies&&<div style={{color:'var(--t1)',fontSize:13,lineHeight:1.5,marginBottom:8}}>{ai.tendencies}</div>}
+        {ai.buying_signals&&ai.buying_signals.length>0&&<ul style={ulSt}>{ai.buying_signals.map((t,i)=><li key={i}>{t}</li>)}</ul>}
+        {!ai.tendencies&&!(ai.buying_signals||[]).length&&<div style={{color:'var(--t3)',fontSize:13}}>—</div>}
+      </LDSection>
+      <LDSection title="On the call" accent="var(--blue)">
+        {ai.talking_points&&ai.talking_points.length>0&&<div><div style={lblSt}>Talking points</div><ul style={ulSt}>{ai.talking_points.map((t,i)=><li key={i}>{t}</li>)}</ul></div>}
+        {ai.pain_points&&ai.pain_points.length>0&&<div style={{marginTop:6}}><div style={lblSt}>Pain points</div><ul style={ulSt}>{ai.pain_points.map((t,i)=><li key={i}>{t}</li>)}</ul></div>}
+        {ai.objections&&ai.objections.length>0&&<div style={{marginTop:6}}><div style={lblSt}>Likely objections</div><ul style={ulSt}>{ai.objections.map((t,i)=><li key={i}>{t}</li>)}</ul></div>}
+        {ai.decision_maker_titles&&ai.decision_maker_titles.length>0&&<div style={{marginTop:6}}><div style={lblSt}>Ask for</div><LDChips items={ai.decision_maker_titles} color="var(--green)"/></div>}
+        {ai.icebreakers&&ai.icebreakers.length>0&&<div style={{marginTop:6}}><div style={lblSt}>Icebreakers</div><ul style={ulSt}>{ai.icebreakers.map((t,i)=><li key={i}>{t}</li>)}</ul></div>}
+      </LDSection>
+    </div>
+
+    {/* Contact + full Apollo free data */}
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginTop:14}}>
       <LDSection title="Contact" accent="var(--green)">
         <LDField label="Name" value={lead.display_name}/>
         <LDField label="Role" value={lead.role}/>
@@ -3527,36 +3558,29 @@ function LeadDetailView({leadId,onBack,user}){
         <LDField label="Email" value={lead.primary_email}/>
         <LDField label="LinkedIn" value={lead.linkedin_url}/>
       </LDSection>
-      {/* Company / Apollo free data */}
-      <LDSection title="Company details (Apollo)" accent="var(--violet)">
+      <LDSection title="Company details (Apollo free data)" accent="var(--violet)">
         <LDField label="Revenue" value={_apolloRevenue(a)}/>
         <LDField label="Employees" value={a.estimated_num_employees}/>
         <LDField label="Industry" value={a.industry}/>
         <LDField label="Founded" value={a.founded_year}/>
         <LDField label="Location" value={[a.city,a.state,a.country].filter(Boolean).join(', ')}/>
-        <LDField label="Phone" value={a.phone} mono/>
+        <LDField label="HQ phone" value={a.phone} mono/>
+        <LDField label="Website" value={a.website_url}/>
         <LDField label="LinkedIn" value={a.linkedin_url}/>
+        <LDField label="Twitter" value={a.twitter_url}/>
+        <LDField label="Facebook" value={a.facebook_url}/>
+        <LDField label="Total funding" value={a.total_funding_printed||a.total_funding}/>
+        <LDField label="Latest funding" value={a.latest_funding_stage}/>
+        <LDField label="Alexa rank" value={a.alexa_ranking}/>
+        <LDField label="Public ticker" value={a.publicly_traded_symbol}/>
         <LDField label="SIC" value={a.sic_codes}/>
         <LDField label="NAICS" value={a.naics_codes}/>
-        {a.keywords&&a.keywords.length>0&&<div style={{marginTop:8}}><div style={{color:'var(--t3)',fontSize:12}}>Keywords</div><LDChips items={a.keywords.slice(0,40)}/></div>}
+        {techNames.length>0&&<div style={{marginTop:8}}><div style={lblSt}>Technologies ({techNames.length})</div><LDChips items={techNames.slice(0,40)} color="var(--blue)"/></div>}
+        {a.keywords&&a.keywords.length>0&&<div style={{marginTop:8}}><div style={lblSt}>Keywords</div><LDChips items={a.keywords.slice(0,50)}/></div>}
         {(a.short_description||a.seo_description)&&<div style={{marginTop:10,color:'var(--t2)',fontSize:13,lineHeight:1.5}}>{a.short_description||a.seo_description}</div>}
         {(!a||!Object.keys(a).length)&&<div style={{color:'var(--t3)',fontSize:12}}>No Apollo data {status==='done'?'available for this domain.':'yet.'}</div>}
       </LDSection>
     </div>
-
-    {/* Website crawl */}
-    <LDSection title="Website crawl" accent="var(--amber)">
-      {crawl.homepage_url&&<LDField label="Homepage" value={crawl.homepage_url}/>}
-      <LDField label="Pages fetched" value={crawl.fetched!=null?String(crawl.fetched):''}/>
-      {crawl.pages&&crawl.pages.length>0&&<div style={{marginTop:8}}>
-        {crawl.pages.map((p,i)=>(<div key={i} style={{padding:'7px 0',borderBottom:'1px solid var(--bd)'}}>
-          <a href={p.url} target="_blank" rel="noopener noreferrer" style={{color:'var(--violet)',fontSize:12}}>{p.url}</a>
-          {p.title&&<div style={{color:'var(--t1)',fontSize:13,fontWeight:600}}>{p.title}</div>}
-          {p.description&&<div style={{color:'var(--t2)',fontSize:12}}>{p.description}</div>}
-        </div>))}
-      </div>}
-      {(!crawl.pages||!crawl.pages.length)&&<div style={{color:'var(--t3)',fontSize:12}}>No pages crawled {status==='done'?'(site unreachable).':'yet.'}</div>}
-    </LDSection>
 
     {/* Call history — Phase 3 (3CX) */}
     <LDSection title={'Call history'+(calls.length?(' ('+calls.length+' call'+(calls.length===1?'':'s')+')'):'')} accent="var(--green)">

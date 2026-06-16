@@ -164,39 +164,65 @@ def apollo_org_full(domain: str, api_key: str) -> Dict[str, Any]:
 
 # ── OpenAI analysis of the fetched text ──────────────────────────────────────
 
-_CHEATSHEET_KEYS = ("summary", "business_model", "products_services", "target_market",
-                    "size_signals", "likely_pain_points", "talking_points",
-                    "decision_maker_titles", "icebreakers")
+# String fields vs array fields in the cheat-sheet (drives defensive defaults).
+_CS_STR = ("summary", "business_model", "target_audience", "market_position",
+           "advertising", "past_activity", "tendencies", "recent_initiatives",
+           "call_strategy", "best_time_to_call")
+_CS_ARR = ("products", "services", "pain_points", "talking_points", "objections",
+           "decision_maker_titles", "icebreakers", "competitors", "buying_signals")
+_CHEATSHEET_KEYS = _CS_STR + _CS_ARR
 
 
 def analyze_with_openai(company: str, domain: str, crawl_text: str,
                         apollo: Dict[str, Any], api_key: str) -> Dict[str, Any]:
-    """Turn the crawled text (+ a little Apollo context) into a compact caller
-    cheat-sheet. Analysis only — the text was already fetched by the crawler."""
+    """Turn the crawled website text + Apollo data into a DETAILED but scannable
+    sales cheat-sheet. Analysis only — the text was already fetched by the
+    crawler. Produces a compact summary plus deep call-prep sections."""
     if not api_key:
         return {"_note": "OPENAI_API_KEY not set — analysis skipped"}
     if not crawl_text and not apollo:
         return {"_note": "no website text or Apollo data to analyse"}
+    ap = apollo or {}
     ctx = {
         "company": company or domain,
         "domain": domain,
-        "apollo_industry": apollo.get("industry", ""),
-        "apollo_employees": apollo.get("estimated_num_employees", ""),
-        "apollo_keywords": (apollo.get("keywords") or [])[:25],
-        "website_text": (crawl_text or "")[:9000],
+        "apollo_industry": ap.get("industry", ""),
+        "apollo_keywords": (ap.get("keywords") or [])[:40],
+        "apollo_employees": ap.get("estimated_num_employees", ""),
+        "apollo_revenue": ap.get("annual_revenue_printed") or ap.get("annual_revenue", ""),
+        "apollo_founded": ap.get("founded_year", ""),
+        "apollo_location": " ".join([str(ap.get(k, "")) for k in ("city", "state", "country") if ap.get(k)]),
+        "apollo_technologies": (ap.get("technologies") or ap.get("current_technologies") or [])[:30],
+        "apollo_description": ap.get("short_description") or ap.get("seo_description") or "",
+        "website_text": (crawl_text or "")[:9500],
     }
     prompt = (
-        "You are a sales-call prep assistant. Using ONLY the data provided about a "
-        "company, produce a COMPACT cheat-sheet a cold-caller needs before phoning "
-        "them. Be concrete and specific to THIS business; do not invent facts. "
-        "Return a strict JSON object with these keys: "
-        "summary (1-2 sentences), business_model (string), products_services "
-        "(array of short strings), target_market (string), size_signals (string), "
-        "likely_pain_points (array), talking_points (array of 3-5), "
-        "decision_maker_titles (array of likely buyer titles to ask for), "
-        "icebreakers (array of 2-3 short openers). "
-        "If something is unknown, use an empty string/array — never guess.\n\n"
-        f"DATA:\n{json.dumps(ctx, default=str)[:11000]}"
+        "You are an expert B2B sales-call strategist. Using ONLY the data provided "
+        "about a company (its website text + Apollo firmographics), produce a "
+        "DETAILED but skimmable call-prep cheat-sheet for a salesperson about to "
+        "phone them. Be concrete and specific to THIS business; never invent facts "
+        "— if something isn't supported by the data, use an empty string/array.\n\n"
+        "Return a STRICT JSON object with EXACTLY these keys:\n"
+        "  summary            : 2-3 sentence plain-English overview of who they are\n"
+        "  business_model     : how they make money\n"
+        "  products           : array of concrete products they sell\n"
+        "  services           : array of concrete services they offer\n"
+        "  target_audience    : who their customers are (segments, geography)\n"
+        "  market_position    : size / standing / differentiators vs competitors\n"
+        "  advertising        : their marketing & advertising activity/channels you can infer\n"
+        "  past_activity      : notable history, milestones, or past doings\n"
+        "  recent_initiatives : recent launches/news/initiatives if any\n"
+        "  tendencies         : how they operate + likely buying tendencies\n"
+        "  buying_signals     : array of signals they may be in-market for a service\n"
+        "  competitors        : array of likely competitors\n"
+        "  pain_points        : array of likely business pain points\n"
+        "  talking_points     : array of 4-6 specific things to mention on the call\n"
+        "  objections         : array of likely objections + a short rebuttal each\n"
+        "  decision_maker_titles : array of job titles to ask for\n"
+        "  icebreakers        : array of 2-3 short, specific openers\n"
+        "  call_strategy      : the single best angle/approach for this call\n"
+        "  best_time_to_call  : a sensible suggestion if inferable, else empty\n\n"
+        f"DATA:\n{json.dumps(ctx, default=str)[:12000]}"
     )
     try:
         resp = requests.post(
@@ -205,11 +231,11 @@ def analyze_with_openai(company: str, domain: str, crawl_text: str,
             json={
                 "model": OPENAI_MODEL,
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 900,
+                "max_tokens": 1700,
                 "temperature": 0.2,
                 "response_format": {"type": "json_object"},
             },
-            timeout=45,
+            timeout=60,
         )
         if resp.status_code == 200:
             _stats["openai_calls"] += 1
@@ -217,10 +243,11 @@ def analyze_with_openai(company: str, domain: str, crawl_text: str,
             try:
                 data = json.loads(content)
             except Exception:
-                return {"summary": content[:1500]}
-            # Keep only known keys (defensive) + ensure they exist.
-            out = {k: data.get(k, "" if k in ("summary", "business_model",
-                   "target_market", "size_signals") else []) for k in _CHEATSHEET_KEYS}
+                return {"summary": content[:2000]}
+            out = {k: data.get(k, "") for k in _CS_STR}
+            for k in _CS_ARR:
+                v = data.get(k, [])
+                out[k] = v if isinstance(v, list) else ([v] if v else [])
             return out
         return {"_note": f"OpenAI HTTP {resp.status_code}"}
     except Exception as e:

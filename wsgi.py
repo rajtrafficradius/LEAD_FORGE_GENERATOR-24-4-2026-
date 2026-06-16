@@ -739,6 +739,27 @@ def api_lead_secured(lead_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/leads/<int:lead_id>/alloc-status", methods=["POST"])
+@login_required_json
+def api_lead_alloc_status(lead_id):
+    """Set the funnel stage explicitly — drives the toggle/revert UI so a BDE
+    can un-contact / un-secure a lead clicked by mistake. Body: {status}."""
+    role = _current_role()
+    if role == "bde":
+        if _lead_assigned_bde(lead_id) != _current_uid():
+            return jsonify({"error": "forbidden"}), 403
+    elif role not in ("admin", "manager"):
+        return jsonify({"error": "forbidden"}), 403
+    status = (request.get_json(silent=True) or {}).get("status", "")
+    if status not in ("assigned", "contacted", "secured"):
+        return jsonify({"error": "invalid status"}), 400
+    try:
+        db.LeadAllocationRepo.set_alloc_status(lead_id, status, _current_uid())
+        return jsonify({"ok": True, "status": status})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/allocation/auto", methods=["POST"])
 @manager_or_admin_required
 def api_allocation_auto():
