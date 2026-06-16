@@ -692,16 +692,49 @@ def api_users_password(user_id):
 def api_allocation_bdes():
     try:
         bdes = db.UserRepo.list_by_role("bde", active_only=False)
-        counts = db.LeadAllocationRepo.counts_by_bde()
+        stats = db.LeadAllocationRepo.bde_stats()
         out = []
         for b in bdes:
+            st = stats.get(int(b["id"]), {})
             out.append({
                 "id": b["id"], "username": b["username"],
                 "full_name": b.get("full_name") or "", "is_active": bool(b.get("is_active")),
                 "mobile_e164": b.get("mobile_e164") or "",
-                "assigned_count": int(counts.get(int(b["id"]), 0)),
+                "assigned_count": int(st.get("total", 0)),
+                "contacted_count": int(st.get("contacted", 0)),
+                "secured_count": int(st.get("secured", 0)),
+                "call_count": int(st.get("calls", 0)),
             })
         return jsonify({"bdes": out})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/allocation/bde/<int:bde_id>/leads", methods=["GET"])
+@manager_or_admin_required
+def api_allocation_bde_leads(bde_id):
+    """All leads currently allocated to one BDE — drives the expandable card +
+    its drag-and-drop block. Capped at 500 (scrollable in the UI)."""
+    try:
+        rows, total = db.LeadAllocationRepo.list_for_bde(bde_id, page=1, page_size=500)
+        return jsonify({"leads": rows, "total": total})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/leads/<int:lead_id>/secured", methods=["POST"])
+@login_required_json
+def api_lead_secured(lead_id):
+    """Mark a lead 'secured' (deal won). Assigned BDE or any manager/admin."""
+    role = _current_role()
+    if role == "bde":
+        if _lead_assigned_bde(lead_id) != _current_uid():
+            return jsonify({"error": "forbidden"}), 403
+    elif role not in ("admin", "manager"):
+        return jsonify({"error": "forbidden"}), 403
+    try:
+        db.LeadAllocationRepo.mark_secured(lead_id, _current_uid())
+        return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

@@ -279,8 +279,9 @@ _SCHEMA_SQL: Sequence[str] = (
         assigned_bde_id   INT UNSIGNED NULL,
         assigned_by_id    INT UNSIGNED NULL,
         assigned_at       DATETIME NULL,
-        alloc_status      ENUM('unassigned','assigned','contacted') NOT NULL DEFAULT 'unassigned',
+        alloc_status      ENUM('unassigned','assigned','contacted','secured') NOT NULL DEFAULT 'unassigned',
         contacted_at      DATETIME NULL,
+        secured_at        DATETIME NULL,
         PRIMARY KEY (id),
         UNIQUE KEY uk_name_domain (normalized_name, root_domain),
         KEY idx_root_domain (root_domain),
@@ -294,7 +295,7 @@ _SCHEMA_SQL: Sequence[str] = (
     CREATE TABLE IF NOT EXISTS allocation_events (
         id        BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
         lead_id   BIGINT UNSIGNED NOT NULL,
-        action    ENUM('assign','reassign','contacted','manual_add','unassign') NOT NULL,
+        action    ENUM('assign','reassign','contacted','manual_add','unassign','secured') NOT NULL,
         actor_id  INT UNSIGNED NULL,
         bde_id    INT UNSIGNED NULL,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -364,6 +365,8 @@ _SCHEMA_MIGRATIONS: Sequence[Tuple[str, str, str]] = (
     ("master_leads", "assigned_at",       "DATETIME NULL"),
     ("master_leads", "alloc_status",      "ENUM('unassigned','assigned','contacted') NOT NULL DEFAULT 'unassigned'"),
     ("master_leads", "contacted_at",      "DATETIME NULL"),
+    # 2026-06-16: 'secured' funnel stage for the allocation board.
+    ("master_leads", "secured_at",        "DATETIME NULL"),
 )
 
 
@@ -379,6 +382,12 @@ _SCHEMA_MIGRATIONS_RAW: Sequence[str] = (
     # Index for the BDE 'my leads' scoped query. CREATE INDEX errors if it
     # already exists → caught and ignored by the runner.
     "CREATE INDEX idx_assigned_bde ON master_leads (assigned_bde_id)",
+    # 2026-06-16: widen alloc_status to add 'secured', and the allocation_events
+    # action enum likewise. Idempotent MODIFYs (no-op if already widened).
+    "ALTER TABLE master_leads MODIFY COLUMN alloc_status "
+    "ENUM('unassigned','assigned','contacted','secured') NOT NULL DEFAULT 'unassigned'",
+    "ALTER TABLE allocation_events MODIFY COLUMN action "
+    "ENUM('assign','reassign','contacted','manual_add','unassign','secured') NOT NULL",
 )
 
 
@@ -1064,6 +1073,19 @@ class LeadAllocationRepo:
             conn.commit()
 
     @staticmethod
+    def mark_secured(lead_id: int, actor_id: Optional[int]) -> None:
+        """Final funnel stage — deal won. Stamps secured_at (keeps contacted_at)."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE master_leads SET alloc_status='secured', secured_at=NOW(), "
+                    "contacted_at=COALESCE(contacted_at, NOW()) WHERE id=%s",
+                    (lead_id,),
+                )
+                LeadAllocationRepo._event(cur, lead_id, "secured", actor_id, None)
+            conn.commit()
+
+    @staticmethod
     def auto_distribute(bde_ids: Sequence[int], actor_id: Optional[int],
                         industry: Optional[str] = None, limit: int = 100000) -> Dict[int, int]:
         """Round-robin every UNASSIGNED lead equally across `bde_ids`.
@@ -1110,6 +1132,38 @@ class LeadAllocationRepo:
                 return {int(r["bde"]): int(r["c"]) for r in (cur.fetchall() or [])}
 
     @staticmethod
+    def bde_stats() -> Dict[int, Dict[str, int]]:
+        """Per-BDE funnel: {bde_id: {total, contacted, secured, calls}}.
+        total = all leads assigned; contacted = contacted-or-secured (been
+        worked); secured = deals won; calls = 3CX calls placed/taken by them."""
+        stats: Dict[int, Dict[str, int]] = {}
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT assigned_bde_id AS bde, COUNT(*) AS total, "
+                    "SUM(alloc_status IN ('contacted','secured')) AS contacted, "
+                    "SUM(alloc_status='secured') AS secured "
+                    "FROM master_leads WHERE assigned_bde_id IS NOT NULL "
+                    "GROUP BY assigned_bde_id"
+                )
+                for r in (cur.fetchall() or []):
+                    stats[int(r["bde"])] = {
+                        "total": int(r["total"] or 0),
+                        "contacted": int(r["contacted"] or 0),
+                        "secured": int(r["secured"] or 0),
+                        "calls": 0,
+                    }
+                cur.execute(
+                    "SELECT bde_user_id AS bde, COUNT(*) AS c FROM lead_calls "
+                    "WHERE bde_user_id IS NOT NULL GROUP BY bde_user_id"
+                )
+                for r in (cur.fetchall() or []):
+                    b = int(r["bde"])
+                    stats.setdefault(b, {"total": 0, "contacted": 0, "secured": 0, "calls": 0})
+                    stats[b]["calls"] = int(r["c"] or 0)
+        return stats
+
+    @staticmethod
     def list_for_bde(bde_id: int, page: int = 1, page_size: int = 50) -> Tuple[List[Dict[str, Any]], int]:
         """Paginated leads assigned to one BDE (their restricted dashboard)."""
         page = max(1, int(page))
@@ -1123,14 +1177,21 @@ class LeadAllocationRepo:
                 )
                 total = int((cur.fetchone() or {}).get("c", 0))
                 cur.execute(
-                    "SELECT id, normalized_name, root_domain, display_name, company_name, "
-                    "role, phone_e164, primary_email, email_type, traffic_source, industry, "
-                    "country, revenue, alloc_status, assigned_at, contacted_at, first_seen_at "
-                    "FROM master_leads WHERE assigned_bde_id=%s "
-                    "ORDER BY id DESC LIMIT %s OFFSET %s",
+                    "SELECT ml.id, ml.normalized_name, ml.root_domain, ml.display_name, "
+                    "ml.company_name, ml.role, ml.phone_e164, ml.primary_email, ml.email_type, "
+                    "ml.traffic_source, ml.industry, ml.country, ml.revenue, ml.alloc_status, "
+                    "ml.assigned_at, ml.contacted_at, ml.secured_at, ml.first_seen_at, "
+                    "(SELECT COUNT(*) FROM lead_calls lc WHERE lc.lead_id=ml.id) AS call_count "
+                    "FROM master_leads ml WHERE ml.assigned_bde_id=%s "
+                    "ORDER BY ml.id DESC LIMIT %s OFFSET %s",
                     (bde_id, page_size, offset),
                 )
-                return list(cur.fetchall() or []), total
+                rows = list(cur.fetchall() or [])
+        for r in rows:
+            for k in ("assigned_at", "contacted_at", "secured_at", "first_seen_at"):
+                if r.get(k) and hasattr(r[k], "isoformat"):
+                    r[k] = r[k].isoformat()
+        return rows, total
 
     @staticmethod
     def _ensure_manual_run(cur, actor_id: Optional[int]) -> int:

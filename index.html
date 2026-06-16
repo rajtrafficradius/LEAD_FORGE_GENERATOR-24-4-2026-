@@ -3069,62 +3069,118 @@ function LoginView({onLogin}){
   </div>);
 }
 
-function AllocationView(){
+// Small drag-and-drop lead chip used in the allocation board (BDE cards + DB panel).
+function AllocLeadChip({r,fromBde,onDragStart,onContacted,onSecured,onOpen,compact}){
+  const sc={secured:'var(--green)',contacted:'var(--amber)',assigned:'var(--blue)',unassigned:'var(--t3)'}[r.alloc_status||(fromBde?'assigned':'unassigned')]||'var(--t3)';
+  return(<div draggable onDragStart={e=>onDragStart(e,r.id,fromBde)}
+    title="Drag onto a BDE to allocate"
+    style={{display:'flex',alignItems:'center',gap:8,padding:'7px 9px',marginBottom:6,
+      background:'var(--bg)',border:'1px solid var(--bd)',borderRadius:8,cursor:'grab'}}>
+    <span style={{color:'var(--t3)',fontSize:13,lineHeight:1}}>⠿</span>
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{fontSize:12,fontWeight:600,color:'var(--t1)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.company_name||r.display_name||r.root_domain}</div>
+      <div style={{fontSize:10,color:'var(--t3)',fontFamily:'var(--mono)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lfId(r.id)} · {r.root_domain}{r.call_count>0?(' · '+r.call_count+'📞'):''}</div>
+    </div>
+    <span style={{fontSize:9,fontWeight:700,color:sc,border:'1px solid '+sc,borderRadius:10,padding:'1px 6px',textTransform:'capitalize',flexShrink:0}}>{r.alloc_status||(fromBde?'assigned':'free')}</span>
+    {!compact&&onOpen&&<button onClick={()=>onOpen(r.id)} title="Open full lead page" style={{flexShrink:0,width:20,height:20,borderRadius:5,border:'1px solid var(--bd)',background:'var(--sf)',color:'var(--blue)',cursor:'pointer',fontWeight:700,fontSize:12,lineHeight:1}}>+</button>}
+    {!compact&&onContacted&&r.alloc_status!=='contacted'&&r.alloc_status!=='secured'&&<button onClick={()=>onContacted(r.id)} title="Mark contacted" style={{flexShrink:0,padding:'2px 7px',borderRadius:5,border:0,background:'var(--amber)',color:'#fff',cursor:'pointer',fontSize:10,fontWeight:700}}>✓</button>}
+    {!compact&&onSecured&&r.alloc_status!=='secured'&&<button onClick={()=>onSecured(r.id)} title="Mark secured (deal won)" style={{flexShrink:0,padding:'2px 7px',borderRadius:5,border:0,background:'var(--green)',color:'#fff',cursor:'pointer',fontSize:10,fontWeight:700}}>$</button>}
+  </div>);
+}
+
+function AllocStat({label,value,color}){
+  return(<div style={{textAlign:'center',minWidth:54}}>
+    <div style={{fontSize:18,fontWeight:800,color:color||'var(--t1)',lineHeight:1}}>{value}</div>
+    <div style={{fontSize:9,color:'var(--t3)',textTransform:'uppercase',letterSpacing:'0.5px',marginTop:2}}>{label}</div>
+  </div>);
+}
+
+function AllocationView({onOpenLead}){
   const [bdes,setBdes]=useState([]);
-  const [active,setActive]=useState({});         // {bde_id:true}
+  const [active,setActive]=useState({});
   const [feed,setFeed]=useState([]);
   const [msg,setMsg]=useState('');
+  const [expanded,setExpanded]=useState(null);
+  const [bdeLeads,setBdeLeads]=useState({});      // {bdeId:[leads]}
+  const [showDb,setShowDb]=useState(false);
+  const [dbLeads,setDbLeads]=useState([]); const [dbTotal,setDbTotal]=useState(0);
+  const [dbPage,setDbPage]=useState(1); const [dbBusy,setDbBusy]=useState(false);
+  const [dragOver,setDragOver]=useState(null);
   const [manual,setManual]=useState({company:'',domain:'',name:'',phone:'',email:'',bde_id:''});
-  const load=async()=>{
-    const d=await apiJSON('/api/allocation/bdes');
-    if(d&&d.bdes){ setBdes(d.bdes);
-      setActive(prev=>{const n={...prev}; d.bdes.forEach(b=>{if(n[b.id]===undefined)n[b.id]=!!b.is_active;}); return n;}); }
-    const f=await apiJSON('/api/allocation/contacted-feed');
-    if(f&&f.contacted) setFeed(f.contacted);
-  };
-  useEffect(()=>{load();},[]);
-  const activeIds=()=>bdes.filter(b=>active[b.id]).map(b=>b.id);
-  const distribute=async()=>{
-    const ids=activeIds();
-    if(!ids.length){setMsg('Select at least one active BDE.');return;}
-    setMsg('Distributing…');
-    const d=await apiJSON('/api/allocation/auto',{method:'POST',body:JSON.stringify({bde_ids:ids})});
-    if(d&&d.ok){ setMsg('Distributed '+d.total+' lead(s) equally across '+ids.length+' BDE(s).'); load(); }
-    else setMsg('Error: '+((d&&d.error)||'failed'));
-  };
-  const addManual=async()=>{
-    if(!manual.domain.trim()){setMsg('Manual add needs at least a domain.');return;}
+  const [showManual,setShowManual]=useState(false);
+
+  const loadBdes=async()=>{ const d=await apiJSON('/api/allocation/bdes');
+    if(d&&d.bdes){ setBdes(d.bdes); setActive(p=>{const n={...p}; d.bdes.forEach(b=>{if(n[b.id]===undefined)n[b.id]=!!b.is_active;}); return n;}); } };
+  const loadFeed=async()=>{ const f=await apiJSON('/api/allocation/contacted-feed'); if(f&&f.contacted)setFeed(f.contacted); };
+  const loadBdeLeads=async(id)=>{ const d=await apiJSON('/api/allocation/bde/'+id+'/leads'); if(d&&d.leads)setBdeLeads(m=>({...m,[id]:d.leads})); };
+  const loadDb=async(page)=>{ setDbBusy(true); const d=await apiJSON('/api/db/master-leads?page='+(page||dbPage)+'&page_size=50'); setDbBusy(false);
+    if(d&&d.rows){ setDbLeads(d.rows); setDbTotal(d.total||0); setDbPage(page||dbPage); } };
+  useEffect(()=>{loadBdes();loadFeed();},[]);
+  useEffect(()=>{ if(showDb&&!dbLeads.length) loadDb(1); },[showDb]);
+
+  const refresh=(ids)=>{ loadBdes(); loadFeed(); (ids||[]).forEach(i=>{ if(i)loadBdeLeads(i); }); if(showDb)loadDb(dbPage); };
+  const toggleExpand=(id)=>{ setExpanded(e=>{ const nx=e===id?null:id; if(nx&&!bdeLeads[nx])loadBdeLeads(nx); return nx; }); };
+  const reassign=async(leadId,toBde,fromBde)=>{
+    const d=await apiJSON('/api/leads/'+leadId+'/reassign',{method:'POST',body:JSON.stringify({bde_id:toBde})});
+    if(d&&d.ok){ const nm=(bdes.find(b=>b.id===toBde)||{}).username||('BDE '+toBde);
+      setMsg('Moved '+lfId(leadId)+' → '+nm); refresh([toBde,fromBde]); }
+    else setMsg('Could not move lead: '+((d&&d.error)||'failed')); };
+  const setStatus=async(leadId,kind,bdeId)=>{ const d=await apiJSON('/api/leads/'+leadId+'/'+kind,{method:'POST',body:'{}'});
+    if(d&&d.ok){ setMsg(lfId(leadId)+' marked '+kind); refresh([bdeId]); } else setMsg('Action failed'); };
+  const distribute=async()=>{ const ids=bdes.filter(b=>active[b.id]).map(b=>b.id);
+    if(!ids.length){setMsg('Turn on at least one BDE (the green switch) first.');return;}
+    setMsg('Sharing leads…'); const d=await apiJSON('/api/allocation/auto',{method:'POST',body:JSON.stringify({bde_ids:ids})});
+    if(d&&d.ok){ setMsg('Shared '+d.total+' unassigned lead(s) evenly across '+ids.length+' BDE(s).'); refresh(ids); }
+    else setMsg('Error: '+((d&&d.error)||'failed')); };
+  const addManual=async()=>{ if(!manual.domain.trim()){setMsg('Enter at least a domain.');return;}
     const d=await apiJSON('/api/leads/manual-add',{method:'POST',body:JSON.stringify(manual)});
-    if(d&&d.ok){ setMsg('Added lead '+lfId(d.id)+'.'); setManual({company:'',domain:'',name:'',phone:'',email:'',bde_id:''}); load(); }
-    else setMsg('Error: '+((d&&d.error)||'failed'));
-  };
-  const th={textAlign:'left',padding:'8px 10px',color:'var(--t3)',fontSize:11,textTransform:'uppercase',borderBottom:'1px solid var(--bd)'};
-  const td={padding:'8px 10px',borderBottom:'1px solid var(--bd)',color:'var(--t1)',fontSize:13};
-  const inp={padding:'9px 11px',background:'var(--bg)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:7,fontSize:13};
-  return(<div style={{padding:'4px 2px'}}>
-    {msg&&<div className="card" style={{padding:'10px 14px',marginBottom:12,color:'var(--t1)',fontSize:13}}>{msg}</div>}
-    <div className="card" style={{padding:18,marginBottom:14}}>
-      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:4}}>Active BDEs</div>
-      <div style={{color:'var(--t3)',fontSize:12,marginBottom:12}}>Pick who is working today, then auto-distribute all unassigned leads equally.</div>
-      <table style={{width:'100%',borderCollapse:'collapse'}}>
-        <thead><tr><th style={th}>Active</th><th style={th}>BDE</th><th style={th}>Name</th><th style={th}>Mobile</th><th style={th}>Assigned</th></tr></thead>
-        <tbody>{bdes.map(b=>(
-          <tr key={b.id}>
-            <td style={td}><div className={'tog '+(active[b.id]?'on':'off')} style={{transform:'scale(0.75)'}}
-                  onClick={()=>setActive(a=>({...a,[b.id]:!a[b.id]}))}><div className="tog-k"></div></div></td>
-            <td style={td}>{b.username}{!b.is_active&&<span style={{color:'#EF4444',fontSize:11}}> (disabled)</span>}</td>
-            <td style={td}>{b.full_name||'—'}</td>
-            <td style={td}>{b.mobile_e164||'—'}</td>
-            <td style={td}><b>{b.assigned_count}</b></td>
-          </tr>))}
-          {!bdes.length&&<tr><td style={td} colSpan={5}>No BDE accounts found.</td></tr>}
-        </tbody>
-      </table>
-      <button onClick={distribute} style={{marginTop:14,padding:'10px 18px',background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Auto-distribute equally</button>
+    if(d&&d.ok){ setMsg('Added '+lfId(d.id)); setManual({company:'',domain:'',name:'',phone:'',email:'',bde_id:''}); setShowManual(false); refresh([manual.bde_id?Number(manual.bde_id):null]); }
+    else setMsg('Error: '+((d&&d.error)||'failed')); };
+
+  const onDragStart=(e,leadId,fromBde)=>{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',JSON.stringify({leadId,fromBde:fromBde||null})); };
+  const onDropBde=(e,toBde)=>{ e.preventDefault(); setDragOver(null);
+    let data; try{ data=JSON.parse(e.dataTransfer.getData('text/plain')); }catch(_){ return; }
+    if(!data||!data.leadId||data.fromBde===toBde) return; reassign(data.leadId,toBde,data.fromBde); };
+
+  const inp={padding:'9px 11px',background:'var(--bg)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:8,fontSize:13};
+  const tdf={padding:'7px 9px',borderBottom:'1px solid var(--bd)',color:'var(--t2)',fontSize:12};
+
+  return(<div style={{padding:'4px 2px',paddingBottom:24}}>
+    {/* Header */}
+    <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12,flexWrap:'wrap'}}>
+      <div style={{color:'var(--t3)',fontSize:13}}>Drag a lead onto a BDE to allocate it. Open a BDE to see their leads & stats.</div>
+      <button onClick={()=>setShowDb(s=>!s)} style={{marginLeft:'auto',padding:'9px 16px',background:showDb?'var(--blue)':'var(--sf)',color:showDb?'#fff':'var(--t1)',border:'1px solid '+(showDb?'var(--blue)':'var(--bd)'),borderRadius:8,fontWeight:700,cursor:'pointer',fontSize:13}}>
+        {showDb?'✕ Close database':'+ Allocate leads from database'}</button>
     </div>
-    <div className="card" style={{padding:18,marginBottom:14}}>
-      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>Manual add lead</div>
-      <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+    {msg&&<div className="card" style={{padding:'9px 14px',marginBottom:12,color:'var(--t1)',fontSize:13}}>{msg}</div>}
+
+    {/* DB leads drag panel */}
+    {showDb&&<div className="card" style={{padding:16,marginBottom:14}}>
+      <div style={{display:'flex',alignItems:'center',marginBottom:10}}>
+        <div style={{fontWeight:700,color:'var(--t1)'}}>All database leads</div>
+        <div style={{color:'var(--t3)',fontSize:12,marginLeft:10}}>{dbTotal} total · drag any onto a BDE below</div>
+        <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center'}}>
+          <button disabled={dbPage<=1} onClick={()=>loadDb(dbPage-1)} style={{padding:'4px 10px',borderRadius:6,border:'1px solid var(--bd)',background:'var(--sf)',color:'var(--t2)',cursor:'pointer'}}>‹</button>
+          <span style={{color:'var(--t3)',fontSize:12}}>p{dbPage}/{Math.max(1,Math.ceil(dbTotal/50))}</span>
+          <button disabled={dbPage>=Math.ceil(dbTotal/50)} onClick={()=>loadDb(dbPage+1)} style={{padding:'4px 10px',borderRadius:6,border:'1px solid var(--bd)',background:'var(--sf)',color:'var(--t2)',cursor:'pointer'}}>›</button>
+        </div>
+      </div>
+      <div style={{maxHeight:300,overflow:'auto',paddingRight:4}}>
+        {dbBusy&&<div style={{color:'var(--t3)',fontSize:13,padding:10}}>Loading…</div>}
+        {!dbBusy&&dbLeads.map(r=><AllocLeadChip key={r.id} r={r} fromBde={r.assigned_bde_id||null} onDragStart={onDragStart} compact/>)}
+        {!dbBusy&&!dbLeads.length&&<div style={{color:'var(--t3)',fontSize:13,padding:10}}>No leads in the database yet.</div>}
+      </div>
+    </div>}
+
+    {/* Auto-distribute control */}
+    <div className="card" style={{padding:16,marginBottom:14}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+        <div style={{fontWeight:700,color:'var(--t1)'}}>Auto-share unassigned leads</div>
+        <div style={{color:'var(--t3)',fontSize:12,flex:1,minWidth:160}}>Turn on the BDEs who are working, then share evenly.</div>
+        <button onClick={distribute} style={{padding:'9px 16px',background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Share evenly</button>
+        <button onClick={()=>setShowManual(s=>!s)} style={{padding:'9px 14px',background:'var(--sf)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:8,fontWeight:600,cursor:'pointer'}}>{showManual?'Cancel':'+ Add lead manually'}</button>
+      </div>
+      {showManual&&<div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginTop:12,paddingTop:12,borderTop:'1px solid var(--bd)'}}>
         <input style={inp} placeholder="Company" value={manual.company} onChange={e=>setManual(m=>({...m,company:e.target.value}))}/>
         <input style={inp} placeholder="Domain *" value={manual.domain} onChange={e=>setManual(m=>({...m,domain:e.target.value}))}/>
         <input style={inp} placeholder="Contact name" value={manual.name} onChange={e=>setManual(m=>({...m,name:e.target.value}))}/>
@@ -3134,18 +3190,61 @@ function AllocationView(){
           <option value="">Assign to… (optional)</option>
           {bdes.map(b=>(<option key={b.id} value={b.id}>{b.username}</option>))}
         </select>
-        <button onClick={addManual} style={{padding:'9px 16px',background:'var(--green)',color:'#fff',border:0,borderRadius:7,fontWeight:700,cursor:'pointer'}}>Add</button>
-      </div>
+        <button onClick={addManual} style={{padding:'9px 16px',background:'var(--green)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Add</button>
+      </div>}
     </div>
-    <div className="card" style={{padding:18}}>
-      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>Recently contacted</div>
+
+    {/* BDE cards */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))',gap:14}}>
+      {bdes.map(b=>{
+        const isOpen=expanded===b.id; const isOver=dragOver===b.id; const leads=bdeLeads[b.id]||[];
+        return(<div key={b.id} className="card"
+          onDragOver={e=>{e.preventDefault();if(dragOver!==b.id)setDragOver(b.id);}}
+          onDragLeave={()=>setDragOver(o=>o===b.id?null:o)}
+          onDrop={e=>onDropBde(e,b.id)}
+          style={{padding:0,overflow:'hidden',border:'2px solid '+(isOver?'var(--green)':'var(--bd)'),
+            boxShadow:isOver?'0 0 0 3px rgba(125,186,75,0.18)':'none',transition:'border-color .12s'}}>
+          {/* Card header */}
+          <div style={{padding:'14px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:12}} onClick={()=>toggleExpand(b.id)}>
+            <div style={{width:38,height:38,borderRadius:'50%',background:'var(--blue)',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:15,flexShrink:0}}>{(b.username||'?').slice(0,1).toUpperCase()}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,color:'var(--t1)',fontSize:14}}>{b.full_name||b.username}</div>
+              <div style={{fontSize:11,color:'var(--t3)'}}>{b.username}{b.mobile_e164?(' · '+b.mobile_e164):''}{!b.is_active&&' · disabled'}</div>
+            </div>
+            <div title="Working today?" onClick={e=>{e.stopPropagation();setActive(a=>({...a,[b.id]:!a[b.id]}));}}
+                 className={'tog '+(active[b.id]?'on':'off')} style={{transform:'scale(0.8)',flexShrink:0}}><div className="tog-k"></div></div>
+            <span style={{color:'var(--t3)',fontSize:14,flexShrink:0}}>{isOpen?'▾':'▸'}</span>
+          </div>
+          {/* Stats strip */}
+          <div style={{display:'flex',justifyContent:'space-around',padding:'10px 8px',borderTop:'1px solid var(--bd)',background:'var(--bg)'}}>
+            <AllocStat label="Leads" value={b.assigned_count} color="var(--blue)"/>
+            <AllocStat label="Contacted" value={b.contacted_count} color="var(--amber)"/>
+            <AllocStat label="Secured" value={b.secured_count} color="var(--green)"/>
+            <AllocStat label="Calls" value={b.call_count} color="var(--violet)"/>
+          </div>
+          {/* Expanded lead block (scrollable, drag source + drop target) */}
+          {isOpen&&<div style={{padding:'12px 14px',borderTop:'1px solid var(--bd)'}}>
+            <div style={{fontSize:11,color:'var(--t3)',marginBottom:8}}>Currently allocated — drag onto another BDE to move</div>
+            <div style={{maxHeight:340,overflow:'auto',paddingRight:4}}>
+              {leads.map(r=><AllocLeadChip key={r.id} r={r} fromBde={b.id} onDragStart={onDragStart}
+                  onOpen={onOpenLead} onContacted={id=>setStatus(id,'contacted',b.id)} onSecured={id=>setStatus(id,'secured',b.id)}/>)}
+              {!leads.length&&<div style={{color:'var(--t3)',fontSize:12,padding:'14px 0',textAlign:'center',border:'1.5px dashed var(--bd)',borderRadius:8}}>No leads yet — drag some here.</div>}
+            </div>
+          </div>}
+        </div>);
+      })}
+      {!bdes.length&&<div className="card" style={{padding:18,color:'var(--t3)'}}>No BDE accounts found. Create them in User Management.</div>}
+    </div>
+
+    {/* Recently contacted / secured feed */}
+    <div className="card" style={{padding:16,marginTop:14}}>
+      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:8}}>Recent activity</div>
       <table style={{width:'100%',borderCollapse:'collapse'}}>
-        <thead><tr><th style={th}>Lead</th><th style={th}>Company</th><th style={th}>Domain</th><th style={th}>BDE</th><th style={th}>When</th></tr></thead>
         <tbody>{feed.map(r=>(
-          <tr key={r.id}><td style={td}>{lfId(r.id)}</td><td style={td}>{r.company_name||'—'}</td>
-            <td style={td}>{r.root_domain}</td><td style={td}>{r.bde_username||'—'}</td>
-            <td style={td}>{r.contacted_at?String(r.contacted_at).replace('T',' ').slice(0,16):'—'}</td></tr>))}
-          {!feed.length&&<tr><td style={td} colSpan={5}>No leads contacted yet.</td></tr>}
+          <tr key={r.id}><td style={tdf}>{lfId(r.id)}</td><td style={tdf}>{r.company_name||r.root_domain}</td>
+            <td style={tdf}>{r.bde_username||'—'}</td>
+            <td style={{...tdf,textAlign:'right'}}>contacted {r.contacted_at?String(r.contacted_at).replace('T',' ').slice(0,16):''}</td></tr>))}
+          {!feed.length&&<tr><td style={tdf} colSpan={4}>No activity yet.</td></tr>}
         </tbody>
       </table>
     </div>
@@ -3156,26 +3255,49 @@ function UsersView(){
   const [users,setUsers]=useState([]);
   const [msg,setMsg]=useState('');
   const [nu,setNu]=useState({username:'',full_name:'',role:'bde',password:''});
+  const [showAdd,setShowAdd]=useState(false);
+  const [collapsed,setCollapsed]=useState({});
   const load=async()=>{ const d=await apiJSON('/api/users'); if(d&&d.users)setUsers(d.users); };
   useEffect(()=>{load();},[]);
   const create=async()=>{
-    if(!nu.username.trim()||!nu.password){setMsg('Username and password required.');return;}
+    if(!nu.username.trim()||!nu.password){setMsg('Username and password are required.');return;}
     const d=await apiJSON('/api/users',{method:'POST',body:JSON.stringify(nu)});
-    if(d&&d.ok){ setMsg('Created '+nu.username+'.'); setNu({username:'',full_name:'',role:'bde',password:''}); load(); }
-    else setMsg('Error: '+((d&&d.error)||'failed'));
-  };
+    if(d&&d.ok){ setMsg('Created '+nu.username+'.'); setNu({username:'',full_name:'',role:'bde',password:''}); setShowAdd(false); load(); }
+    else setMsg('Error: '+((d&&d.error)||'failed')); };
   const setRole=async(id,role)=>{ await apiJSON('/api/users/'+id,{method:'PATCH',body:JSON.stringify({role})}); load(); };
   const toggle=async(u)=>{ await apiJSON('/api/users/'+u.id,{method:'PATCH',body:JSON.stringify({is_active:!u.is_active})}); load(); };
-  const resetPw=async(id)=>{ const pw=prompt('New password (min 6 chars):'); if(!pw)return;
+  const resetPw=async(id)=>{ const pw=prompt('Set a new password (min 6 chars):'); if(!pw)return;
     const d=await apiJSON('/api/users/'+id+'/password',{method:'POST',body:JSON.stringify({password:pw})});
     setMsg(d&&d.ok?'Password updated.':'Error: '+((d&&d.error)||'failed')); };
-  const th={textAlign:'left',padding:'8px 10px',color:'var(--t3)',fontSize:11,textTransform:'uppercase',borderBottom:'1px solid var(--bd)'};
-  const td={padding:'8px 10px',borderBottom:'1px solid var(--bd)',color:'var(--t1)',fontSize:13};
-  const inp={padding:'9px 11px',background:'var(--bg)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:7,fontSize:13};
-  return(<div style={{padding:'4px 2px'}}>
-    {msg&&<div className="card" style={{padding:'10px 14px',marginBottom:12,color:'var(--t1)',fontSize:13}}>{msg}</div>}
-    <div className="card" style={{padding:18,marginBottom:14}}>
-      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>Add user</div>
+  const inp={padding:'10px 12px',background:'var(--bg)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:8,fontSize:13};
+  const roleColor={admin:'var(--violet)',manager:'var(--blue)',bde:'var(--green)',user:'var(--t3)'};
+  const GROUPS=[{key:'admin',label:'Administrators'},{key:'manager',label:'Managers'},{key:'bde',label:'BDEs'},{key:'user',label:'Other'}];
+  const byRole=(k)=>users.filter(u=>u.role===k);
+  const activeCount=users.filter(u=>u.is_active).length;
+
+  const userRow=(u)=>(<div key={u.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 4px',borderBottom:'1px solid var(--bd)',opacity:u.is_active?1:0.55}}>
+    <div style={{width:34,height:34,borderRadius:'50%',background:(roleColor[u.role]||'var(--t3)'),color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:14,flexShrink:0}}>{(u.full_name||u.username||'?').slice(0,1).toUpperCase()}</div>
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{fontWeight:600,color:'var(--t1)',fontSize:13}}>{u.full_name||u.username}</div>
+      <div style={{fontSize:11,color:'var(--t3)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{u.username}{u.email?(' · '+u.email):''}{u.mobile_e164?(' · '+u.mobile_e164):''}</div>
+    </div>
+    <select value={u.role} onChange={e=>setRole(u.id,e.target.value)} style={{...inp,padding:'6px 8px',fontSize:12}}>
+      <option value="bde">BDE</option><option value="manager">Manager</option><option value="admin">Admin</option><option value="user">user</option>
+    </select>
+    <span style={{fontSize:11,fontWeight:700,color:u.is_active?'var(--green)':'#EF4444',minWidth:54,textAlign:'center'}}>{u.is_active?'Active':'Disabled'}</span>
+    <button onClick={()=>toggle(u)} style={{padding:'6px 11px',background:'var(--sf)',color:'var(--t2)',border:'1px solid var(--bd)',borderRadius:7,cursor:'pointer',fontSize:12}}>{u.is_active?'Disable':'Enable'}</button>
+    <button onClick={()=>resetPw(u.id)} style={{padding:'6px 11px',background:'var(--sf)',color:'var(--t2)',border:'1px solid var(--bd)',borderRadius:7,cursor:'pointer',fontSize:12}}>Reset password</button>
+  </div>);
+
+  return(<div style={{padding:'4px 2px',paddingBottom:24}}>
+    <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12,flexWrap:'wrap'}}>
+      <div style={{color:'var(--t1)',fontWeight:700}}>{users.length} users</div>
+      <div style={{color:'var(--t3)',fontSize:13}}>{activeCount} active · {byRole('bde').length} BDEs · {byRole('manager').length} managers</div>
+      <button onClick={()=>setShowAdd(s=>!s)} style={{marginLeft:'auto',padding:'9px 16px',background:showAdd?'var(--sf)':'var(--green)',color:showAdd?'var(--t1)':'#fff',border:'1px solid '+(showAdd?'var(--bd)':'var(--green)'),borderRadius:8,fontWeight:700,cursor:'pointer',fontSize:13}}>{showAdd?'Cancel':'+ Add user'}</button>
+    </div>
+    {msg&&<div className="card" style={{padding:'9px 14px',marginBottom:12,color:'var(--t1)',fontSize:13}}>{msg}</div>}
+    {showAdd&&<div className="card" style={{padding:18,marginBottom:14}}>
+      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>New user</div>
       <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
         <input style={inp} placeholder="Username" value={nu.username} onChange={e=>setNu(m=>({...m,username:e.target.value}))}/>
         <input style={inp} placeholder="Full name" value={nu.full_name} onChange={e=>setNu(m=>({...m,full_name:e.target.value}))}/>
@@ -3183,31 +3305,20 @@ function UsersView(){
           <option value="bde">BDE</option><option value="manager">Manager</option><option value="admin">Admin</option>
         </select>
         <input style={inp} type="password" placeholder="Password" value={nu.password} onChange={e=>setNu(m=>({...m,password:e.target.value}))}/>
-        <button onClick={create} style={{padding:'9px 16px',background:'var(--green)',color:'#fff',border:0,borderRadius:7,fontWeight:700,cursor:'pointer'}}>Create</button>
+        <button onClick={create} style={{padding:'10px 18px',background:'var(--green)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Create user</button>
       </div>
-    </div>
-    <div className="card" style={{padding:18}}>
-      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>All users</div>
-      <table style={{width:'100%',borderCollapse:'collapse'}}>
-        <thead><tr><th style={th}>ID</th><th style={th}>Username</th><th style={th}>Name</th><th style={th}>Role</th><th style={th}>Mobile</th><th style={th}>Active</th><th style={th}>Actions</th></tr></thead>
-        <tbody>{users.map(u=>(
-          <tr key={u.id}>
-            <td style={td}>{u.id}</td><td style={td}>{u.username}</td><td style={td}>{u.full_name||'—'}</td>
-            <td style={td}>
-              <select value={u.role} onChange={e=>setRole(u.id,e.target.value)} style={{...inp,padding:'5px 8px'}}>
-                <option value="bde">BDE</option><option value="manager">Manager</option><option value="admin">Admin</option><option value="user">user</option>
-              </select>
-            </td>
-            <td style={td}>{u.mobile_e164||'—'}</td>
-            <td style={td}><span style={{color:u.is_active?'var(--green)':'#EF4444'}}>{u.is_active?'Yes':'No'}</span></td>
-            <td style={td}>
-              <button onClick={()=>toggle(u)} style={{marginRight:6,padding:'5px 10px',background:'var(--sf)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:6,cursor:'pointer',fontSize:12}}>{u.is_active?'Disable':'Enable'}</button>
-              <button onClick={()=>resetPw(u.id)} style={{padding:'5px 10px',background:'var(--sf)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:6,cursor:'pointer',fontSize:12}}>Reset PW</button>
-            </td>
-          </tr>))}
-        </tbody>
-      </table>
-    </div>
+    </div>}
+    {GROUPS.map(g=>{ const members=byRole(g.key); if(!members.length) return null; const isC=collapsed[g.key];
+      return(<div key={g.key} className="card" style={{padding:'14px 18px',marginBottom:12}}>
+        <div style={{display:'flex',alignItems:'center',cursor:'pointer'}} onClick={()=>setCollapsed(c=>({...c,[g.key]:!c[g.key]}))}>
+          <span style={{width:9,height:9,borderRadius:'50%',background:roleColor[g.key],marginRight:9}}></span>
+          <div style={{fontWeight:700,color:'var(--t1)'}}>{g.label}</div>
+          <div style={{color:'var(--t3)',fontSize:12,marginLeft:8}}>({members.length})</div>
+          <span style={{marginLeft:'auto',color:'var(--t3)'}}>{isC?'▸':'▾'}</span>
+        </div>
+        {!isC&&<div style={{marginTop:8}}>{members.map(userRow)}</div>}
+      </div>);
+    })}
   </div>);
 }
 
@@ -3219,6 +3330,9 @@ function BdeLeadsView({user,onOpenLead}){
   useEffect(()=>{load();},[page]);
   const contacted=async(id)=>{ const d=await apiJSON('/api/leads/'+id+'/contacted',{method:'POST',body:'{}'});
     if(d&&d.ok){ setMsg('Marked '+lfId(id)+' contacted.'); load(); } else setMsg('Error'); };
+  const secured=async(id)=>{ const d=await apiJSON('/api/leads/'+id+'/secured',{method:'POST',body:'{}'});
+    if(d&&d.ok){ setMsg('Marked '+lfId(id)+' secured 🎉'); load(); } else setMsg('Error'); };
+  const stColor={secured:'var(--green)',contacted:'var(--amber)',assigned:'var(--blue)'};
   const th={textAlign:'left',padding:'8px 10px',color:'var(--t3)',fontSize:11,textTransform:'uppercase',borderBottom:'1px solid var(--bd)'};
   const td={padding:'8px 10px',borderBottom:'1px solid var(--bd)',color:'var(--t1)',fontSize:13};
   return(<div style={{padding:'4px 2px'}}>
@@ -3238,10 +3352,13 @@ function BdeLeadsView({user,onOpenLead}){
             <td style={td}>{r.root_domain}</td>
             <td style={td}>{r.phone_e164||'—'}</td>
             <td style={td}>{r.primary_email||'—'}</td>
-            <td style={td}><span style={{color:r.alloc_status==='contacted'?'var(--green)':'var(--amber)'}}>{r.alloc_status||'assigned'}</span></td>
-            <td style={td}>{r.alloc_status==='contacted'
-              ? <span style={{color:'var(--green)'}}>✓ done</span>
-              : <button onClick={()=>contacted(r.id)} style={{padding:'5px 12px',background:'var(--green)',color:'#fff',border:0,borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:700}}>Contacted</button>}</td>
+            <td style={td}><span style={{color:stColor[r.alloc_status]||'var(--t3)',fontWeight:600,textTransform:'capitalize'}}>{r.alloc_status||'assigned'}</span></td>
+            <td style={td}>{r.alloc_status==='secured'
+              ? <span style={{color:'var(--green)',fontWeight:700}}>✓ Secured</span>
+              : <div style={{display:'flex',gap:6}}>
+                  {r.alloc_status!=='contacted'&&<button onClick={()=>contacted(r.id)} style={{padding:'5px 11px',background:'var(--amber)',color:'#fff',border:0,borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:700}}>Contacted</button>}
+                  <button onClick={()=>secured(r.id)} title="Deal won" style={{padding:'5px 11px',background:'var(--green)',color:'#fff',border:0,borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:700}}>Secured</button>
+                </div>}</td>
           </tr>))}
           {!rows.length&&<tr><td style={td} colSpan={8}>No leads allocated to you yet.</td></tr>}
         </tbody>
@@ -3318,6 +3435,8 @@ function LeadDetailView({leadId,onBack,user}){
   useEffect(()=>{ if(leadId) load(); },[leadId]);
   const contacted=async()=>{ const d=await apiJSON('/api/leads/'+leadId+'/contacted',{method:'POST',body:'{}'});
     if(d&&d.ok){ setMsg('Marked contacted.'); load(); } };
+  const secured=async()=>{ const d=await apiJSON('/api/leads/'+leadId+'/secured',{method:'POST',body:'{}'});
+    if(d&&d.ok){ setMsg('Marked secured 🎉'); load(); } };
   const recrawl=async()=>{ const d=await apiJSON('/api/lead/'+leadId+'/recrawl',{method:'POST',body:'{}'});
     if(d&&d.ok) setMsg('Re-queued for enrichment.'); };
   const backBtn=<button onClick={onBack} style={{padding:'7px 14px',background:'var(--sf)',color:'var(--t1)',
@@ -3335,9 +3454,13 @@ function LeadDetailView({leadId,onBack,user}){
       <a href={'https://'+lead.root_domain} target="_blank" rel="noopener noreferrer" style={{color:'var(--violet)',fontSize:13}}>{lead.root_domain} ↗</a>
       <span style={{marginLeft:'auto',color:statusColor,fontSize:12,fontWeight:600}}>enrichment: {status}</span>
       {isMgrAdmin&&<button onClick={recrawl} style={{padding:'7px 12px',background:'var(--sf)',color:'var(--t2)',border:'1px solid var(--bd)',borderRadius:8,cursor:'pointer',fontSize:12}}>Re-crawl</button>}
-      {lead.alloc_status==='contacted'
-        ? <span style={{color:'var(--green)',fontWeight:700}}>✓ Contacted</span>
-        : <button onClick={contacted} style={{padding:'7px 14px',background:'var(--green)',color:'#fff',border:0,borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:13}}>Mark Contacted</button>}
+      {lead.alloc_status==='secured'
+        ? <span style={{color:'var(--green)',fontWeight:700}}>🎉 Secured</span>
+        : <>
+            {lead.alloc_status!=='contacted'&&<button onClick={contacted} style={{padding:'7px 14px',background:'var(--amber)',color:'#fff',border:0,borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:13}}>Mark Contacted</button>}
+            {lead.alloc_status==='contacted'&&<span style={{color:'var(--amber)',fontWeight:700}}>✓ Contacted</span>}
+            <button onClick={secured} title="Deal won" style={{padding:'7px 14px',background:'var(--green)',color:'#fff',border:0,borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:13}}>Mark Secured</button>
+          </>}
     </div>
     {msg&&<div className="card" style={{padding:'9px 14px',marginBottom:12,color:'var(--green)',fontSize:13}}>{msg}</div>}
     {status!=='done'&&<div className="card" style={{padding:'12px 16px',marginBottom:14,color:'var(--t2)',fontSize:13}}>
@@ -3862,7 +3985,7 @@ function App({user, onLogout}){
       {nav==='generate'&&!isBde&&<GenerateView tab={tab} setTab={setTab} stats={stats} hasResults={hasResults} onGenerate={runGeneration} onCancel={cancelGeneration} loading={loading} auState={auState} setAuState={setAuState} cityTier={cityTier} setCityTier={setCityTier} city={city} setCity={setCity} industry={industry} setIndustry={setIndustry} indCountry={indCountry} setIndCountry={setIndCountry} maxLeads={maxLeads} setMaxLeads={setMaxLeads} minSearch={minSearch} setMinSearch={setMinSearch} minCpc={minCpc} setMinCpc={setMinCpc} enrich={enrich} setEnrich={setEnrich} serpOnly={serpOnly} setSerpOnly={setSerpOnly} nWorkers={nWorkers} setNWorkers={setNWorkers} onNav={setNav} phase={phase} logs={logs} progress={progress} counts={counts} theme={theme} industries={industries} auCities={auCities} topCsvText={topCsvText} partialCsvUrl={partialCsvUrl} liveCreditsDetails={liveCreditsDetails} creditsUsedThisRun={creditsUsedThisRun} liveJob={liveJob} realLeads={realLeads} runOutcome={runOutcome}/>}
       {nav==='database'&&!isBde&&<DatabaseView onOpenLead={(id)=>{setSelectedLeadId(id);setNav('lead-detail');}}/>}
       {nav==='cost'&&!isBde&&<CostView/>}
-      {nav==='allocation'&&!isBde&&<AllocationView/>}
+      {nav==='allocation'&&!isBde&&<AllocationView onOpenLead={(id)=>{setSelectedLeadId(id);setNav('lead-detail');}}/>}
       {nav==='users'&&!isBde&&<UsersView/>}
       {nav==='my-leads'&&isBde&&<BdeLeadsView user={user} onOpenLead={(id)=>{setSelectedLeadId(id);setNav('lead-detail');}}/>}
       {nav==='my-mobile'&&<MyMobileView user={user}/>}
