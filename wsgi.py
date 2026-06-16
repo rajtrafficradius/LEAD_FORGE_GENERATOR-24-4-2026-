@@ -71,6 +71,15 @@ def _current_role() -> str:
     except Exception:
         return ""
 
+
+def _current_username() -> str:
+    try:
+        if getattr(current_user, "is_authenticated", False):
+            return getattr(current_user, "username", "") or ""
+    except Exception:
+        pass
+    return "system"
+
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
@@ -233,6 +242,10 @@ def login():
         return _render_login(error="Invalid username or password", status=401)
 
     do_login(user, remember=remember)
+    try:
+        db.AuditRepo.log(user.id, user.username, "login", "")
+    except Exception:
+        pass
     if _wants_json():
         return jsonify({"status": "ok", "user": user.to_dict()})
     return redirect(nxt)
@@ -630,9 +643,18 @@ def api_users_list():
         return jsonify({"error": str(e)}), 500
 
 
+def _is_admin_user(user_id: int) -> bool:
+    try:
+        u = db.UserRepo.get_by_id(int(user_id))
+        return bool(u and u.get("role") == "admin")
+    except Exception:
+        return False
+
+
 @app.route("/api/users", methods=["POST"])
-@admin_required
+@manager_or_admin_required
 def api_users_create():
+    # Managers may manage BDEs/managers but NOT create admins (no privilege escalation).
     from werkzeug.security import generate_password_hash
     d = request.get_json(silent=True) or {}
     username = (d.get("username") or "").strip()
@@ -644,22 +666,30 @@ def api_users_create():
         return jsonify({"error": "username and password required"}), 400
     if role not in db.UserRepo.VALID_ROLES:
         return jsonify({"error": f"invalid role: {role}"}), 400
+    if role == "admin" and _current_role() != "admin":
+        return jsonify({"error": "only an admin can create admin accounts"}), 403
     try:
         pw_hash = generate_password_hash(password, method="pbkdf2:sha256:260000")
         uid, created = db.UserRepo.create_if_absent(username, email, pw_hash, role)
         if not created:
             return jsonify({"error": "username already exists"}), 409
+        db.UserRepo.set_must_change_pw(uid, True)  # force change on first login
         if full_name:
             db.UserRepo.update_profile(uid, full_name=full_name)
+        db.AuditRepo.log(_current_uid(), _current_username(), "user_create", f"{username} ({role})")
         return jsonify({"ok": True, "id": uid})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/users/<int:user_id>", methods=["PATCH"])
-@admin_required
+@manager_or_admin_required
 def api_users_update(user_id):
     d = request.get_json(silent=True) or {}
+    # A manager cannot edit an admin account, nor promote anyone to admin.
+    if _current_role() != "admin":
+        if _is_admin_user(user_id) or d.get("role") == "admin":
+            return jsonify({"error": "only an admin can manage admin accounts"}), 403
     try:
         if "role" in d:
             db.UserRepo.set_role(user_id, d["role"])
@@ -667,21 +697,26 @@ def api_users_update(user_id):
             db.UserRepo.set_active(user_id, bool(d["is_active"]))
         if "full_name" in d or "email" in d:
             db.UserRepo.update_profile(user_id, full_name=d.get("full_name"), email=d.get("email"))
+        db.AuditRepo.log(_current_uid(), _current_username(), "user_update", f"uid={user_id} {d}")
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/users/<int:user_id>/password", methods=["POST"])
-@admin_required
+@manager_or_admin_required
 def api_users_password(user_id):
     from werkzeug.security import generate_password_hash
+    if _current_role() != "admin" and _is_admin_user(user_id):
+        return jsonify({"error": "only an admin can reset an admin's password"}), 403
     d = request.get_json(silent=True) or {}
     pw = d.get("password") or ""
     if len(pw) < 6:
         return jsonify({"error": "password too short"}), 400
     try:
         db.UserRepo.set_password(user_id, generate_password_hash(pw, method="pbkdf2:sha256:260000"))
+        db.UserRepo.set_must_change_pw(user_id, True)  # admin-set pw must be changed by the user
+        db.AuditRepo.log(_current_uid(), _current_username(), "user_password_reset", f"uid={user_id}")
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -755,7 +790,176 @@ def api_lead_alloc_status(lead_id):
         return jsonify({"error": "invalid status"}), 400
     try:
         db.LeadAllocationRepo.set_alloc_status(lead_id, status, _current_uid())
+        db.AuditRepo.log(_current_uid(), _current_username(), "lead_status_"+status, "", lead_id)
         return jsonify({"ok": True, "status": status})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+def _lead_access_ok(lead_id: int) -> bool:
+    role = _current_role()
+    if role in ("admin", "manager"):
+        return True
+    return role == "bde" and _lead_assigned_bde(lead_id) == _current_uid()
+
+
+@app.route("/api/lead/<int:lead_id>", methods=["PATCH"])
+@manager_or_admin_required
+def api_lead_edit(lead_id):
+    """Manual edit of a lead's columns (admin/manager). Every lead is editable;
+    future lead-searches also fill blanks automatically via the upsert."""
+    d = request.get_json(silent=True) or {}
+    try:
+        n = db.MasterLeadRepo.update_fields(lead_id, d)
+        db.AuditRepo.log(_current_uid(), _current_username(), "lead_edit",
+                         ",".join(sorted(d.keys()))[:200], lead_id)
+        return jsonify({"ok": True, "updated": n})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/lead/<int:lead_id>/notes", methods=["POST"])
+@login_required_json
+def api_lead_notes(lead_id):
+    if not _lead_access_ok(lead_id):
+        return jsonify({"error": "forbidden"}), 403
+    notes = (request.get_json(silent=True) or {}).get("notes", "")
+    try:
+        db.MasterLeadRepo.set_followup(lead_id, None, None, notes)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/lead/<int:lead_id>/followup", methods=["POST"])
+@login_required_json
+def api_lead_followup(lead_id):
+    if not _lead_access_ok(lead_id):
+        return jsonify({"error": "forbidden"}), 403
+    d = request.get_json(silent=True) or {}
+    outcome = d.get("outcome")
+    followup_at = (d.get("followup_at") or "").replace("T", " ").strip() or None
+    notes = d.get("notes")
+    try:
+        db.MasterLeadRepo.set_followup(lead_id, outcome, followup_at, notes)
+        db.AuditRepo.log(_current_uid(), _current_username(), "lead_followup",
+                         f"outcome={outcome} at={followup_at}", lead_id)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/lead/<int:lead_id>/touch", methods=["POST"])
+@login_required_json
+def api_lead_touch(lead_id):
+    """Log a click-to-contact touch (call/email/whatsapp) for audit + activity."""
+    if not _lead_access_ok(lead_id):
+        return jsonify({"error": "forbidden"}), 403
+    channel = (request.get_json(silent=True) or {}).get("channel", "call")
+    try:
+        db.AuditRepo.log(_current_uid(), _current_username(), "touch_" + channel, "", lead_id)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Self-service (any authenticated user) ────────────────────────────────────
+@app.route("/api/me/password", methods=["POST"])
+@login_required_json
+def api_me_password():
+    from werkzeug.security import generate_password_hash
+    uid = _current_uid()
+    if uid is None:
+        return jsonify({"error": "not logged in"}), 401
+    pw = (request.get_json(silent=True) or {}).get("password", "")
+    if len(pw) < 6:
+        return jsonify({"error": "password must be at least 6 characters"}), 400
+    try:
+        db.UserRepo.set_password(uid, generate_password_hash(pw, method="pbkdf2:sha256:260000"))
+        db.AuditRepo.log(uid, _current_username(), "self_password_change", "")
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/me/profile", methods=["POST"])
+@login_required_json
+def api_me_profile():
+    uid = _current_uid()
+    if uid is None:
+        return jsonify({"error": "not logged in"}), 401
+    d = request.get_json(silent=True) or {}
+    try:
+        db.UserRepo.update_profile(uid, full_name=d.get("full_name"))
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/me/followups", methods=["GET"])
+@login_required_json
+def api_me_followups():
+    """Due/overdue follow-ups: BDE sees their own; manager/admin see all."""
+    try:
+        bde = _current_uid() if _current_role() == "bde" else None
+        return jsonify({"followups": db.MasterLeadRepo.due_followups(bde_id=bde)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/audit", methods=["GET"])
+@manager_or_admin_required
+def api_audit():
+    try:
+        return jsonify({"events": db.AuditRepo.recent(limit=int(request.args.get("limit", 120) or 120))})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/stats/kpis", methods=["GET"])
+@manager_or_admin_required
+def api_stats_kpis():
+    try:
+        return jsonify(db.MasterLeadRepo.kpi_overview())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Crawler / enrichment controls (admin/manager) ────────────────────────────
+@app.route("/api/crawler/pause", methods=["POST"])
+@manager_or_admin_required
+def api_crawler_pause():
+    import enrichment_worker; enrichment_worker.pause()
+    return jsonify({"ok": True, "paused": True})
+
+
+@app.route("/api/crawler/resume", methods=["POST"])
+@manager_or_admin_required
+def api_crawler_resume():
+    import enrichment_worker; enrichment_worker.resume()
+    return jsonify({"ok": True, "paused": False})
+
+
+@app.route("/api/crawler/retry-errored", methods=["POST"])
+@manager_or_admin_required
+def api_crawler_retry():
+    try:
+        n = db.LeadEnrichmentRepo.retry_errored()
+        return jsonify({"ok": True, "requeued": n})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/crawler/showcase", methods=["POST"])
+@manager_or_admin_required
+def api_crawler_showcase():
+    """One-shot: fully enrich the top N leads RIGHT NOW (for demo/showcase)."""
+    try:
+        import enrichment_worker
+        n = int((request.get_json(silent=True) or {}).get("n", 3))
+        ids = db.LeadEnrichmentRepo.top_pending_ids(limit=max(1, min(10, n)))
+        enrichment_worker.showcase_now(ids)
+        return jsonify({"ok": True, "lead_ids": ids, "message": "Enriching now — refresh in ~1 min."})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -817,6 +1021,7 @@ def api_lead_reassign(lead_id):
         return jsonify({"error": "bde_id required"}), 400
     try:
         db.LeadAllocationRepo.assign(lead_id, int(bde_id), _current_uid())
+        db.AuditRepo.log(_current_uid(), _current_username(), "lead_reassign", f"→bde {bde_id}", lead_id)
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1066,25 +1271,55 @@ def db_master_leads():
                 "rows": rows, "total": total, "page": page, "page_size": page_size,
                 "pages": max(1, (total + page_size - 1) // page_size), "scope": "bde",
             })
-        rows, total = db.MasterLeadRepo.list_page(page=page, page_size=page_size)
-        for r in rows:
-            if r.get("first_seen_at") and hasattr(r["first_seen_at"], "isoformat"):
-                r["first_seen_at"] = r["first_seen_at"].isoformat()
-            # DECIMAL/NULL → float for JSON; keep None so old leads stay blank.
-            if r.get("cost_per_lead_usd") is not None:
-                try:
-                    r["cost_per_lead_usd"] = float(r["cost_per_lead_usd"])
-                except (TypeError, ValueError):
-                    r["cost_per_lead_usd"] = None
+        # ADMIN/MANAGER: search + filter (q / industry / status / bde_id).
+        q = (request.args.get("q") or "").strip() or None
+        industry = (request.args.get("industry") or "").strip() or None
+        status = (request.args.get("status") or "").strip() or None
+        bde_id = request.args.get("bde_id") or None
+        rows, total = db.MasterLeadRepo.search_page(
+            q=q, industry=industry, status=status, bde_id=bde_id,
+            page=page, page_size=page_size)
         return jsonify({
-            "rows": rows,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
+            "rows": rows, "total": total, "page": page, "page_size": page_size,
             "pages": max(1, (total + page_size - 1) // page_size),
         })
     except db.DBUnavailable as e:
         return jsonify({"error": "db_unavailable", "detail": str(e)}), 503
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/db/industries")
+@manager_or_admin_required
+def db_industries():
+    try:
+        return jsonify({"industries": db.MasterLeadRepo.distinct_industries()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/db/master-leads.csv")
+@manager_or_admin_required
+def db_master_leads_csv():
+    """CSV export of the (optionally filtered) lead set."""
+    import io as _io
+    q = (request.args.get("q") or "").strip() or None
+    industry = (request.args.get("industry") or "").strip() or None
+    status = (request.args.get("status") or "").strip() or None
+    bde_id = request.args.get("bde_id") or None
+    try:
+        rows = db.MasterLeadRepo.export_rows(q=q, industry=industry, status=status, bde_id=bde_id)
+        cols = ["id", "display_name", "company_name", "root_domain", "role", "phone_e164",
+                "primary_email", "industry", "country", "revenue", "alloc_status",
+                "assigned_bde_username", "outcome", "followup_at", "first_seen_at"]
+        buf = _io.StringIO()
+        w = _csv.writer(buf)
+        w.writerow(["Lead ID"] + cols[1:])
+        for r in rows:
+            w.writerow([("LF-" + str(r.get("id")).zfill(6))] + [r.get(c, "") for c in cols[1:]])
+        from flask import Response
+        return Response(buf.getvalue(), mimetype="text/csv",
+                        headers={"Content-Disposition": "attachment; filename=leads_export.csv"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1162,6 +1397,13 @@ def api_save_pricing():
 
 
 # ── Shared run-execution helper ─────────────────────────────────────────────
+def _company_from_domain(domain: str) -> str:
+    """Human company name derived from a domain — so leads never land in the DB
+    with a blank company (the old cause of 'empty' rows for paid-only stubs)."""
+    s = (domain or "").split(".")[0].replace("-", " ").replace("_", " ").strip()
+    return s.title() if s else ""
+
+
 def _pipeline_leads_to_master_rows(
     pipeline, industry: str, country: str, run_id: int
 ) -> list[dict]:
@@ -1171,6 +1413,7 @@ def _pipeline_leads_to_master_rows(
         rd = root_domain(ld.get("domain") or "")
         if not (nn and rd):
             continue
+        _company = ld.get("company") or _company_from_domain(rd)
         ts_raw = (ld.get("_domain_source") or "").strip().lower()
         if ts_raw in ("paid", "organic", "competitor", "secondary"):
             ts = ts_raw
@@ -1181,8 +1424,8 @@ def _pipeline_leads_to_master_rows(
         rows.append({
             "normalized_name": nn,
             "root_domain": rd,
-            "display_name": ld.get("name") or None,
-            "company_name": ld.get("company") or None,
+            "display_name": ld.get("name") or _company or None,
+            "company_name": _company or None,
             "role": ld.get("role") or None,
             "phone_e164": ld.get("phone") or None,
             "primary_email": ld.get("email") or None,

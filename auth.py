@@ -54,6 +54,7 @@ class User(UserMixin):
         self.role: str = row.get("role", "user")
         self.full_name: str = row.get("full_name") or ""
         self.mobile_e164: str = row.get("mobile_e164") or ""
+        self.must_change_pw: bool = bool(row.get("must_change_pw", 0))
         self._is_active: bool = bool(row.get("is_active", 1))
 
     def get_id(self) -> str:
@@ -85,6 +86,7 @@ class User(UserMixin):
             "email": self.email,
             "full_name": getattr(self, "full_name", "") or "",
             "mobile_e164": getattr(self, "mobile_e164", "") or "",
+            "must_change_pw": bool(getattr(self, "must_change_pw", False)),
         }
 
 
@@ -388,6 +390,11 @@ def ensure_crm_roster(project_dir: str | Path) -> List[Dict[str, str]]:
             if created_now:
                 created.append({"username": uname, "password": pw, "role": role,
                                 "email": email, "user_id": str(uid)})
+                # Force a password change on first login (shared default passwords).
+                try:
+                    UserRepo.set_must_change_pw(uid, True)
+                except Exception:
+                    pass
                 if r.get("full_name"):
                     try:
                         UserRepo.update_profile(uid, full_name=r.get("full_name"))

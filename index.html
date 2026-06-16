@@ -2156,6 +2156,10 @@ function DatabaseView({onOpenLead}){
   const [stats,setStats]=useState({db:0,run_history:0,startup_error:''});
   const [loading,setLoading]=useState(false);
   const [err,setErr]=useState('');
+  // 2026-06-16: lead search + filters.
+  const [q,setQ]=useState(''); const [qInput,setQInput]=useState('');
+  const [fIndustry,setFIndustry]=useState(''); const [fStatus,setFStatus]=useState(''); const [fBde,setFBde]=useState('');
+  const [industries,setIndustries]=useState([]); const [bdeList,setBdeList]=useState([]);
   const base=(typeof window!=='undefined'&&window.location.origin)||'';
   const load=useCallback(async ()=>{
     setLoading(true);setErr('');
@@ -2173,7 +2177,13 @@ function DatabaseView({onOpenLead}){
           startup_error:j.db_startup_error||j.query_error||'',
         });
       }
-      const url=base+(tab==='runs'?'/api/db/run-history':'/api/db/master-leads')+'?page='+page+'&page_size='+pageSize;
+      let url=base+(tab==='runs'?'/api/db/run-history':'/api/db/master-leads')+'?page='+page+'&page_size='+pageSize;
+      if(tab==='leads'){
+        if(q)url+='&q='+encodeURIComponent(q);
+        if(fIndustry)url+='&industry='+encodeURIComponent(fIndustry);
+        if(fStatus)url+='&status='+fStatus;
+        if(fBde)url+='&bde_id='+fBde;
+      }
       const r=await fetch(url,{credentials:'same-origin'});
       if(r.status===401){window.dispatchEvent(new Event('lf-auth-lost'));return;}
       if(!r.ok){setErr('HTTP '+r.status);setLoading(false);return;}
@@ -2187,8 +2197,14 @@ function DatabaseView({onOpenLead}){
       }
     }catch(e){setErr(e.message||String(e));}
     setLoading(false);
-  },[base,tab,page,pageSize]);
+  },[base,tab,page,pageSize,q,fIndustry,fStatus,fBde]);
   useEffect(()=>{load();},[load]);
+  // Filter option sources (once).
+  useEffect(()=>{
+    apiJSON('/api/db/industries').then(d=>{if(d&&d.industries)setIndustries(d.industries);});
+    apiJSON('/api/allocation/bdes').then(d=>{if(d&&d.bdes)setBdeList(d.bdes);});
+  },[]);
+  const csvHref=base+'/api/db/master-leads.csv?'+[q&&'q='+encodeURIComponent(q),fIndustry&&'industry='+encodeURIComponent(fIndustry),fStatus&&'status='+fStatus,fBde&&'bde_id='+fBde].filter(Boolean).join('&');
   // Aggregates over the loaded page (cheap client-side roll-ups for the
   // header strip — exact, paginated, but reflect THIS page only).
   const agg=(()=>{
@@ -2274,18 +2290,34 @@ function DatabaseView({onOpenLead}){
             </tbody>
           </table>
         ):(
+          <>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginBottom:10}}>
+            <input value={qInput} onChange={e=>setQInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){setPage(1);setQ(qInput);}}} placeholder="Search company / domain / name / email…" style={{flex:'1 1 240px',minWidth:200,padding:'9px 12px',background:'var(--bg)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:8,fontSize:13}}/>
+            <button className="btn-sm btn-blue" onClick={()=>{setPage(1);setQ(qInput);}}>Search</button>
+            <select value={fIndustry} onChange={e=>{setPage(1);setFIndustry(e.target.value);}} style={{padding:'9px 11px',background:'var(--bg)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:8,fontSize:13}}>
+              <option value="">All industries</option>{industries.map(i=><option key={i} value={i}>{i}</option>)}
+            </select>
+            <select value={fStatus} onChange={e=>{setPage(1);setFStatus(e.target.value);}} style={{padding:'9px 11px',background:'var(--bg)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:8,fontSize:13}}>
+              <option value="">Any status</option><option value="unassigned">Unassigned</option><option value="assigned">Assigned</option><option value="contacted">Contacted</option><option value="secured">Secured</option>
+            </select>
+            <select value={fBde} onChange={e=>{setPage(1);setFBde(e.target.value);}} style={{padding:'9px 11px',background:'var(--bg)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:8,fontSize:13}}>
+              <option value="">Any BDE</option>{bdeList.map(b=><option key={b.id} value={b.id}>{b.username}</option>)}
+            </select>
+            {(q||fIndustry||fStatus||fBde)&&<button className="btn-sm btn-ghost" onClick={()=>{setQ('');setQInput('');setFIndustry('');setFStatus('');setFBde('');setPage(1);}}>Clear</button>}
+            <a className="btn-sm btn-green" href={csvHref} style={{marginLeft:'auto',textDecoration:'none'}}>⬇ Export CSV</a>
+          </div>
           <table className="rt">
             <thead><tr>
               <th style={{width:34}}></th>
               <th>ID</th><th>Name</th><th>Company</th><th>Domain</th><th>Role</th>
-              <th>Phone</th><th>Email</th><th>Type</th><th>Industry</th><th>Country</th>
+              <th>Phone</th><th>Email</th><th>Status</th><th>BDE</th><th>Industry</th><th>Country</th>
               <th style={{textAlign:'right'}}>Cost/Lead</th>
             </tr></thead>
             <tbody>
               {loading?(
-                <tr><td colSpan="12" style={{textAlign:'center',padding:30,color:'var(--t3)'}}>Loading…</td></tr>
+                <tr><td colSpan="13" style={{textAlign:'center',padding:30,color:'var(--t3)'}}>Loading…</td></tr>
               ):leads.length===0?(
-                <tr><td colSpan="12" style={{textAlign:'center',padding:30,color:'var(--t3)'}}>No master leads stored yet.</td></tr>
+                <tr><td colSpan="13" style={{textAlign:'center',padding:30,color:'var(--t3)'}}>No leads match — try clearing filters.</td></tr>
               ):leads.map(r=>(
                 <tr key={r.id}>
                   <td><button title="Open full lead page" onClick={()=>onOpenLead&&onOpenLead(r.id)} style={{width:24,height:24,borderRadius:6,border:'1px solid var(--bd)',background:'var(--blue)',color:'#fff',cursor:'pointer',fontWeight:700,lineHeight:'1',fontSize:15}}>+</button></td>
@@ -2296,7 +2328,8 @@ function DatabaseView({onOpenLead}){
                   <td style={{fontSize:11,color:'var(--t2)'}}>{r.role||'—'}</td>
                   <td style={{fontFamily:'var(--mono)',fontSize:11,color:r.phone_e164?'var(--amber)':'var(--t3)'}}>{r.phone_e164||'—'}</td>
                   <td style={{fontSize:11,color:r.primary_email?'var(--green)':'var(--t3)'}}>{r.primary_email||'—'}</td>
-                  <td style={{fontSize:10,color:r.email_type==='personal'?'var(--green)':'var(--t3)'}}>{r.email_type||'—'}</td>
+                  <td style={{fontSize:10,fontWeight:600,textTransform:'capitalize',color:{secured:'var(--green)',contacted:'var(--amber)',assigned:'var(--blue)'}[r.alloc_status]||'var(--t3)'}}>{r.alloc_status||'unassigned'}</td>
+                  <td style={{fontSize:11,color:r.assigned_bde_username?'var(--t1)':'var(--t3)'}}>{r.assigned_bde_username||'—'}</td>
                   <td style={{fontSize:11,color:'var(--t2)'}}>{r.industry||'—'}</td>
                   <td style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--t2)'}}>{r.country||'—'}</td>
                   {/* Blank for leads stored before the cost feature (null). */}
@@ -2305,6 +2338,7 @@ function DatabaseView({onOpenLead}){
               ))}
             </tbody>
           </table>
+          </>
         )}
       </div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:12,fontSize:11,color:'var(--t3)'}}>
@@ -2805,14 +2839,18 @@ function Sidebar({nav,setNav,srvUrl,setSrvUrl,onConnect,credits,lastDrain,detail
   const NAV = role==='bde'
     ? [
         {id:'my-leads', icon:'database', l:'My Leads', badge:'Live'},
-        {id:'my-mobile',icon:'settings', l:'My Mobile'},
+        {id:'my-day',   icon:'clock',    l:'My Day'},
+        {id:'profile',  icon:'settings', l:'My Profile'},
       ]
     : [
         {id:'generate',  icon:'zap',         l:'Generate'},
         {id:'database',  icon:'database',    l:'Database', badge:'Live'},
         {id:'allocation',icon:'users',       l:'Allocation'},
+        {id:'kpis',      icon:'trending',    l:'Dashboard'},
+        {id:'crawler',   icon:'activity',    l:'Enrichment'},
         {id:'users',     icon:'settings',    l:'User Management'},
         {id:'cost',      icon:'dollar-sign', l:'Cost / Pricing'},
+        {id:'profile',   icon:'shield',      l:'My Profile'},
       ];
   const apolloSvc=(details&&details.services&&details.services.apollo)||{};
   const _fmt=(v)=>(v===null||v===undefined||v===0?'—':Number(v).toLocaleString('en-US'));
@@ -3466,10 +3504,18 @@ function LeadDetailView({leadId,onBack,user}){
   const [calls,setCalls]=useState([]);
   const [openTx,setOpenTx]=useState({});  // {callId:true} expanded transcripts
   const [msg,setMsg]=useState('');
+  const [notes,setNotes]=useState(''); const [outcome,setOutcome]=useState(''); const [fdate,setFdate]=useState('');
+  const [editing,setEditing]=useState(false); const [ef,setEf]=useState({});
   const role=(user&&user.role)||'admin';
   const isMgrAdmin=role==='admin'||role==='manager';
   const load=async()=>{ const d=await apiJSON('/api/lead/'+leadId+'/full');
-    if(d&&d.lead) setLead(d.lead); else setLead(null);
+    if(d&&d.lead){ setLead(d.lead);
+      setNotes(d.lead.notes||''); setOutcome(d.lead.outcome||'');
+      setFdate(d.lead.followup_at?String(d.lead.followup_at).replace(' ','T').slice(0,16):'');
+      setEf({company_name:d.lead.company_name||'',display_name:d.lead.display_name||'',role:d.lead.role||'',
+             phone_e164:d.lead.phone_e164||'',primary_email:d.lead.primary_email||'',industry:d.lead.industry||'',
+             linkedin_url:d.lead.linkedin_url||'',revenue:d.lead.revenue||''});
+    } else setLead(null);
     const c=await apiJSON('/api/lead/'+leadId+'/calls');
     if(c&&c.calls) setCalls(c.calls); };
   useEffect(()=>{ if(leadId) load(); },[leadId]);
@@ -3479,6 +3525,12 @@ function LeadDetailView({leadId,onBack,user}){
   const secured=()=>setAllocStatus(lead&&lead.alloc_status==='secured'?'contacted':'secured');
   const recrawl=async()=>{ const d=await apiJSON('/api/lead/'+leadId+'/recrawl',{method:'POST',body:'{}'});
     if(d&&d.ok) setMsg('Re-queued for enrichment.'); };
+  const saveFollowup=async()=>{ const d=await apiJSON('/api/lead/'+leadId+'/followup',{method:'POST',body:JSON.stringify({outcome,followup_at:fdate,notes})});
+    if(d&&d.ok){ setMsg('Notes & follow-up saved.'); load(); } else setMsg('Save failed'); };
+  const saveEdit=async()=>{ const d=await apiJSON('/api/lead/'+leadId,{method:'PATCH',body:JSON.stringify(ef)});
+    if(d&&d.ok){ setMsg('Lead details updated.'); setEditing(false); load(); } else setMsg('Edit failed: '+((d&&d.error)||'')); };
+  const touch=(channel)=>{ try{ apiJSON('/api/lead/'+leadId+'/touch',{method:'POST',body:JSON.stringify({channel})}); }catch(e){} };
+  const _digits=(s)=>String(s||'').replace(/[^0-9]/g,'');
   const backBtn=<button onClick={onBack} style={{padding:'7px 14px',background:'var(--sf)',color:'var(--t1)',
     border:'1px solid var(--bd)',borderRadius:8,cursor:'pointer',fontSize:13}}>← Back</button>;
   if(lead===undefined) return(<div style={{padding:20}}>{backBtn}<div style={{marginTop:20,color:'var(--t3)'}}>Loading lead…</div></div>);
@@ -3497,6 +3549,7 @@ function LeadDetailView({leadId,onBack,user}){
       <a href={'https://'+lead.root_domain} target="_blank" rel="noopener noreferrer" style={{color:'var(--violet)',fontSize:13}}>{lead.root_domain} ↗</a>
       <span style={{marginLeft:'auto',color:statusColor,fontSize:12,fontWeight:600}}>enrichment: {status}</span>
       {isMgrAdmin&&<button onClick={recrawl} style={{padding:'7px 12px',background:'var(--sf)',color:'var(--t2)',border:'1px solid var(--bd)',borderRadius:8,cursor:'pointer',fontSize:12}}>Re-crawl</button>}
+      {isMgrAdmin&&<button onClick={()=>setEditing(e=>!e)} style={{padding:'7px 12px',background:'var(--sf)',color:'var(--t2)',border:'1px solid var(--bd)',borderRadius:8,cursor:'pointer',fontSize:12}}>{editing?'Close edit':'✎ Edit details'}</button>}
       <button onClick={contacted} title={lead.alloc_status==='contacted'?'Contacted — click to undo':'Mark contacted'} style={{padding:'7px 14px',border:'1px solid var(--amber)',background:lead.alloc_status==='contacted'?'var(--amber)':'transparent',color:lead.alloc_status==='contacted'?'#fff':'var(--amber)',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:13}}>{lead.alloc_status==='contacted'?'✓ Contacted':'Mark Contacted'}</button>
       <button onClick={secured} title={lead.alloc_status==='secured'?'Secured — click to undo':'Deal won'} style={{padding:'7px 14px',border:'1px solid var(--green)',background:lead.alloc_status==='secured'?'var(--green)':'transparent',color:lead.alloc_status==='secured'?'#fff':'var(--green)',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:13}}>{lead.alloc_status==='secured'?'✓ Secured':'Mark Secured'}</button>
     </div>
@@ -3504,6 +3557,37 @@ function LeadDetailView({leadId,onBack,user}){
     {status!=='done'&&<div className="card" style={{padding:'12px 16px',marginBottom:14,color:'var(--t2)',fontSize:13}}>
       {status==='error'?('Enrichment error: '+(lead.enrich_error||'unknown')) :'Enrichment in progress — website + Apollo data will appear here shortly. '}
     </div>}
+
+    {/* Edit panel (admin/manager) — every lead is modifiable */}
+    {editing&&<div className="card" style={{padding:16,marginBottom:14,borderLeft:'4px solid var(--amber)'}}>
+      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>Edit lead details</div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:8}}>
+        {[['company_name','Company'],['display_name','Contact name'],['role','Role'],['phone_e164','Phone'],['primary_email','Email'],['industry','Industry'],['linkedin_url','LinkedIn'],['revenue','Revenue (number)']].map(([k,lab])=>(
+          <div key={k}><div style={{fontSize:11,color:'var(--t3)',marginBottom:3}}>{lab}</div>
+          <input value={ef[k]||''} onChange={e=>setEf(f=>({...f,[k]:e.target.value}))} style={{..._crmInp,width:'100%'}}/></div>
+        ))}
+      </div>
+      <div style={{marginTop:12,display:'flex',gap:8}}>
+        <button onClick={saveEdit} style={{padding:'9px 18px',background:'var(--green)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Save changes</button>
+        <button onClick={()=>setEditing(false)} style={{padding:'9px 14px',background:'var(--sf)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:8,cursor:'pointer'}}>Cancel</button>
+      </div>
+    </div>}
+
+    {/* Notes & follow-up — what makes BDEs live in the tool */}
+    <div className="card" style={{padding:16,marginBottom:14,borderLeft:'4px solid var(--green)'}}>
+      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>Notes & follow-up</div>
+      <textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Call notes, context, what was said…" rows={3} style={{..._crmInp,width:'100%',resize:'vertical',marginBottom:10}}/>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+        <div><div style={{fontSize:11,color:'var(--t3)',marginBottom:3}}>Outcome</div>
+          <select value={outcome} onChange={e=>setOutcome(e.target.value)} style={_crmInp}>
+            <option value="">—</option><option value="interested">Interested</option><option value="not_interested">Not interested</option>
+            <option value="callback">Callback</option><option value="no_answer">No answer</option><option value="voicemail">Voicemail</option><option value="wrong_number">Wrong number</option>
+          </select></div>
+        <div><div style={{fontSize:11,color:'var(--t3)',marginBottom:3}}>Follow-up reminder</div>
+          <input type="datetime-local" value={fdate} onChange={e=>setFdate(e.target.value)} style={_crmInp}/></div>
+        <button onClick={saveFollowup} style={{marginLeft:'auto',alignSelf:'flex-end',padding:'9px 18px',background:'var(--green)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Save</button>
+      </div>
+    </div>
 
     {/* COMPACT AI SUMMARY — what a caller needs at a glance, first */}
     {(ai.summary||ai.call_strategy)&&<div className="card" style={{padding:'16px 18px',marginBottom:14,borderLeft:'4px solid var(--blue)'}}>
@@ -3557,6 +3641,13 @@ function LeadDetailView({leadId,onBack,user}){
         <LDField label="Phone" value={lead.phone_e164} mono/>
         <LDField label="Email" value={lead.primary_email}/>
         <LDField label="LinkedIn" value={lead.linkedin_url}/>
+        {/* Click-to-contact — opens the channel + logs the touch */}
+        <div style={{display:'flex',gap:8,marginTop:12,flexWrap:'wrap'}}>
+          {lead.phone_e164&&<a href={'tel:'+_digits(lead.phone_e164)} onClick={()=>touch('call')} style={{padding:'8px 14px',background:'var(--green)',color:'#fff',borderRadius:8,fontWeight:700,fontSize:13,textDecoration:'none'}}>📞 Call</a>}
+          {lead.phone_e164&&<a href={'https://wa.me/'+_digits(lead.phone_e164)} target="_blank" rel="noopener noreferrer" onClick={()=>touch('whatsapp')} style={{padding:'8px 14px',background:'#25D366',color:'#fff',borderRadius:8,fontWeight:700,fontSize:13,textDecoration:'none'}}>WhatsApp</a>}
+          {lead.primary_email&&<a href={'mailto:'+lead.primary_email} onClick={()=>touch('email')} style={{padding:'8px 14px',background:'var(--blue)',color:'#fff',borderRadius:8,fontWeight:700,fontSize:13,textDecoration:'none'}}>✉ Email</a>}
+          {!lead.phone_e164&&!lead.primary_email&&<span style={{color:'var(--t3)',fontSize:12}}>No phone/email yet — add via Edit details.</span>}
+        </div>
       </LDSection>
       <LDSection title="Company details (Apollo free data)" accent="var(--violet)">
         <LDField label="Revenue" value={_apolloRevenue(a)}/>
@@ -4016,14 +4107,14 @@ function App({user, onLogout}){
   // by the Root wrapper — App only mounts once a user is signed in.)
   useEffect(()=>{
     if(user&&user.role==='bde'){
-      setNav(n=>(n==='my-leads'||n==='my-mobile')?n:'my-leads');
+      setNav(n=>(['my-leads','my-day','my-mobile','profile','lead-detail'].includes(n))?n:'my-leads');
     }
   },[user]);
 
   const role=(user&&user.role)||'admin';
   const isBde=role==='bde';
 
-  const VIEW_TITLES={generate:{title:<>Lead <em>Generation</em> Engine</>,sub:'Configure your search and generate qualified leads'},database:{title:<>Railway <em>Database</em></>,sub:'Live MySQL — run_history, master_leads, and per-run statistics'},allocation:{title:<>Lead <em>Allocation</em></>,sub:'Assign leads to your BDEs and track who has been contacted'},'my-leads':{title:<>My <em>Leads</em></>,sub:'Leads allocated to you — call them and mark contacted'},'my-mobile':{title:<>My <em>Mobile</em></>,sub:'The number recorded when you contact a lead'},cost:{title:<>Cost <em>/ Pricing</em></>,sub:'Per-run cost and unit pricing'},analytics:{title:<>Analytics <em>& Insights</em></>,sub:'Performance overview across all runs'},heatmap:{title:<>Geographic <em>Heatmap</em></>,sub:'Ballarat suburb-level lead density visualization'},history:{title:<>Run <em>History</em></>,sub:'All previous lead generation runs'},intelligence:{title:<>AI <em>Intelligence</em></>,sub:'Master database · ML keyword learning · self-expanding dictionary'},pipeline:{title:<>Lead <em>Pipeline</em></>,sub:'Manage and track leads through your sales process'},schedule:{title:<>Scheduled <em>Runs</em></>,sub:'Automate your lead generation on a recurring schedule'},users:{title:<>Team <em>Management</em></>,sub:'Manage users, roles, and permissions'},settings:{title:<>Platform <em>Settings</em></>,sub:'API keys, preferences, and billing'}};
+  const VIEW_TITLES={generate:{title:<>Lead <em>Generation</em> Engine</>,sub:'Configure your search and generate qualified leads'},database:{title:<>Railway <em>Database</em></>,sub:'Live MySQL — run_history, master_leads, and per-run statistics'},allocation:{title:<>Lead <em>Allocation</em></>,sub:'Assign leads to your BDEs and track who has been contacted'},'my-leads':{title:<>My <em>Leads</em></>,sub:'Leads allocated to you — call them and mark contacted'},'my-day':{title:<>My <em>Day</em></>,sub:'Your follow-ups due today'},'my-mobile':{title:<>My <em>Mobile</em></>,sub:'The number recorded when you contact a lead'},profile:{title:<>My <em>Profile</em></>,sub:'Your name, mobile and password'},kpis:{title:<>Performance <em>Dashboard</em></>,sub:'Conversion funnel, BDE leaderboard, and call stats'},crawler:{title:<>Lead <em>Enrichment</em></>,sub:'Background website + Apollo + AI enrichment status and controls'},cost:{title:<>Cost <em>/ Pricing</em></>,sub:'Per-run cost and unit pricing'},analytics:{title:<>Analytics <em>& Insights</em></>,sub:'Performance overview across all runs'},heatmap:{title:<>Geographic <em>Heatmap</em></>,sub:'Ballarat suburb-level lead density visualization'},history:{title:<>Run <em>History</em></>,sub:'All previous lead generation runs'},intelligence:{title:<>AI <em>Intelligence</em></>,sub:'Master database · ML keyword learning · self-expanding dictionary'},pipeline:{title:<>Lead <em>Pipeline</em></>,sub:'Manage and track leads through your sales process'},schedule:{title:<>Scheduled <em>Runs</em></>,sub:'Automate your lead generation on a recurring schedule'},users:{title:<>Team <em>Management</em></>,sub:'Manage users, roles, and permissions'},settings:{title:<>Platform <em>Settings</em></>,sub:'API keys, preferences, and billing'}};
   const vt=VIEW_TITLES[nav]||{title:nav,sub:''};
 
   return(<>
@@ -4048,6 +4139,10 @@ function App({user, onLogout}){
       {nav==='cost'&&!isBde&&<CostView/>}
       {nav==='allocation'&&!isBde&&<AllocationView onOpenLead={(id)=>{setSelectedLeadId(id);setNav('lead-detail');}}/>}
       {nav==='users'&&!isBde&&<UsersView/>}
+      {nav==='kpis'&&!isBde&&<KpiView/>}
+      {nav==='crawler'&&!isBde&&<CrawlerView/>}
+      {nav==='profile'&&<MyProfileView user={user}/>}
+      {nav==='my-day'&&isBde&&<MyDayView user={user} onOpenLead={(id)=>{setSelectedLeadId(id);setNav('lead-detail');}}/>}
       {nav==='my-leads'&&isBde&&<BdeLeadsView user={user} onOpenLead={(id)=>{setSelectedLeadId(id);setNav('lead-detail');}}/>}
       {nav==='my-mobile'&&<MyMobileView user={user}/>}
       {nav==='lead-detail'&&<LeadDetailView leadId={selectedLeadId} user={user} onBack={()=>setNav(isBde?'my-leads':'database')}/>}
@@ -4084,6 +4179,174 @@ function App({user, onLogout}){
   </>);
 }
 
+/* ─── CRM v2 views (2026-06-16) ─── */
+const _crmInp={padding:'10px 12px',background:'var(--bg)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:8,fontSize:13,boxSizing:'border-box'};
+
+function MyProfileView({user}){
+  const [name,setName]=useState(user.full_name||'');
+  const [mobile,setMobile]=useState(user.mobile_e164||'');
+  const [pw,setPw]=useState(''); const [pw2,setPw2]=useState('');
+  const [msg,setMsg]=useState('');
+  const saveName=async()=>{ const d=await apiJSON('/api/me/profile',{method:'POST',body:JSON.stringify({full_name:name})}); setMsg(d&&d.ok?'Profile saved.':'Error'); };
+  const saveMobile=async()=>{ const d=await apiJSON('/api/me/mobile',{method:'POST',body:JSON.stringify({mobile_e164:mobile.trim()})}); setMsg(d&&d.ok?'Mobile saved.':'Error'); };
+  const savePw=async()=>{ if(pw.length<6){setMsg('Password must be at least 6 characters.');return;} if(pw!==pw2){setMsg('Passwords do not match.');return;}
+    const d=await apiJSON('/api/me/password',{method:'POST',body:JSON.stringify({password:pw})}); if(d&&d.ok){setMsg('Password changed.');setPw('');setPw2('');} else setMsg('Error: '+((d&&d.error)||'failed')); };
+  return(<div style={{padding:'4px 2px',maxWidth:520}}>
+    {msg&&<div className="card" style={{padding:'9px 14px',marginBottom:12,color:'var(--green)',fontSize:13}}>{msg}</div>}
+    <div className="card" style={{padding:18,marginBottom:14}}>
+      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>Profile</div>
+      <div style={{color:'var(--t3)',fontSize:12,marginBottom:6}}>Signed in as <b style={{color:'var(--t1)'}}>{user.username}</b> · {(_ROLE_LABEL[user.role]||user.role)}</div>
+      <input style={{..._crmInp,width:'100%',marginBottom:8}} placeholder="Full name" value={name} onChange={e=>setName(e.target.value)}/>
+      <button onClick={saveName} style={{padding:'9px 16px',background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Save name</button>
+    </div>
+    {user.role==='bde'&&<div className="card" style={{padding:18,marginBottom:14}}>
+      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:4}}>My mobile number</div>
+      <div style={{color:'var(--t3)',fontSize:12,marginBottom:8}}>Recorded as the caller when you contact a lead. Full international format.</div>
+      <input style={{..._crmInp,width:'100%',maxWidth:300,marginBottom:8}} placeholder="+61400000000" value={mobile} onChange={e=>setMobile(e.target.value)}/>
+      <div><button onClick={saveMobile} style={{padding:'9px 16px',background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Save mobile</button></div>
+    </div>}
+    <div className="card" style={{padding:18}}>
+      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>Change password</div>
+      <input style={{..._crmInp,width:'100%',marginBottom:8}} type="password" placeholder="New password" value={pw} onChange={e=>setPw(e.target.value)}/>
+      <input style={{..._crmInp,width:'100%',marginBottom:8}} type="password" placeholder="Confirm new password" value={pw2} onChange={e=>setPw2(e.target.value)}/>
+      <button onClick={savePw} style={{padding:'9px 16px',background:'var(--green)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Update password</button>
+    </div>
+  </div>);
+}
+
+function MyDayView({user,onOpenLead}){
+  const [items,setItems]=useState([]); const [msg,setMsg]=useState('');
+  const load=async()=>{ const d=await apiJSON('/api/me/followups'); if(d&&d.followups)setItems(d.followups); };
+  useEffect(()=>{load();},[]);
+  const td={padding:'9px 10px',borderBottom:'1px solid var(--bd)',color:'var(--t1)',fontSize:13};
+  const th={textAlign:'left',padding:'8px 10px',color:'var(--t3)',fontSize:11,textTransform:'uppercase',borderBottom:'1px solid var(--bd)'};
+  return(<div style={{padding:'4px 2px'}}>
+    <div className="card" style={{padding:'12px 16px',marginBottom:12}}>
+      <span style={{fontWeight:700,color:'var(--t1)'}}>My day</span>
+      <span style={{color:'var(--t3)',marginLeft:10}}>{items.length} follow-up{items.length===1?'':'s'} due</span>
+      {msg&&<span style={{color:'var(--green)',marginLeft:12,fontSize:13}}>{msg}</span>}
+    </div>
+    <div className="card" style={{padding:14}}>
+      <table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead><tr><th style={th}></th><th style={th}>Lead</th><th style={th}>Company</th><th style={th}>Phone</th><th style={th}>Due</th><th style={th}>Outcome</th></tr></thead>
+        <tbody>{items.map(r=>(
+          <tr key={r.id}>
+            <td style={td}><button onClick={()=>onOpenLead&&onOpenLead(r.id)} style={{width:24,height:24,borderRadius:6,border:'1px solid var(--bd)',background:'var(--blue)',color:'#fff',cursor:'pointer',fontWeight:700,fontSize:15,lineHeight:1}}>+</button></td>
+            <td style={td}>{lfId(r.id)}</td>
+            <td style={td}>{r.company_name||r.display_name||r.root_domain}</td>
+            <td style={td}>{r.phone_e164||'—'}</td>
+            <td style={td}><span style={{color:(r.followup_at&&new Date(r.followup_at)<new Date())?'#EF4444':'var(--amber)'}}>{r.followup_at?String(r.followup_at).replace('T',' ').slice(0,16):'—'}</span></td>
+            <td style={td}>{r.outcome||r.alloc_status||'—'}</td>
+          </tr>))}
+          {!items.length&&<tr><td style={td} colSpan={6}>Nothing due — you're all caught up. 🎉</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  </div>);
+}
+
+function CrawlerView(){
+  const [s,setS]=useState(null); const [msg,setMsg]=useState('');
+  const load=async()=>{ const d=await apiJSON('/api/crawler/status'); if(d&&!d.__status)setS(d); };
+  useEffect(()=>{ load(); const t=setInterval(load,5000); return()=>clearInterval(t); },[]);
+  const act=async(path,label)=>{ const d=await apiJSON('/api/crawler/'+path,{method:'POST',body:'{}'});
+    setMsg(d&&(d.ok)?(label+(d.requeued!=null?(' ('+d.requeued+' re-queued)'):'')+(d.message?(' — '+d.message):'')):'Error'); load(); };
+  const q=(s&&s.queue)||{}; const w=(s&&s.worker)||{};
+  const Stat=({label,value,color})=>(<div style={{textAlign:'center',minWidth:80}}>
+    <div style={{fontSize:24,fontWeight:800,color:color||'var(--t1)'}}>{value!=null?value:'—'}</div>
+    <div style={{fontSize:10,color:'var(--t3)',textTransform:'uppercase'}}>{label}</div></div>);
+  return(<div style={{padding:'4px 2px',maxWidth:760}}>
+    {msg&&<div className="card" style={{padding:'9px 14px',marginBottom:12,color:'var(--t1)',fontSize:13}}>{msg}</div>}
+    <div className="card" style={{padding:18,marginBottom:14}}>
+      <div style={{display:'flex',alignItems:'center',marginBottom:14}}>
+        <div style={{fontWeight:700,color:'var(--t1)'}}>Enrichment crawler</div>
+        <span style={{marginLeft:10,fontSize:12,fontWeight:700,color:w.paused?'var(--amber)':'var(--green)'}}>{w.paused?'PAUSED':'RUNNING'}</span>
+      </div>
+      <div style={{display:'flex',justifyContent:'space-around',flexWrap:'wrap',gap:12}}>
+        <Stat label="Pending" value={q.pending||0} color="var(--t2)"/>
+        <Stat label="Crawling" value={q.crawling||0} color="var(--amber)"/>
+        <Stat label="Done" value={q.done||0} color="var(--green)"/>
+        <Stat label="Errors" value={q.error||0} color="#EF4444"/>
+        <Stat label="Total leads" value={q.total_leads||0} color="var(--blue)"/>
+      </div>
+      <div style={{marginTop:14,color:'var(--t3)',fontSize:12}}>This session: {w.done||0} enriched · {w.errors||0} errors · {w.openai_calls||0} OpenAI calls · {w.apollo_calls||0} Apollo calls{w.last?(' · last: '+w.last):''}</div>
+    </div>
+    <div className="card" style={{padding:18}}>
+      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>Controls</div>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+        {w.paused
+          ? <button onClick={()=>act('resume','Resumed.')} style={{padding:'9px 16px',background:'var(--green)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>▶ Resume</button>
+          : <button onClick={()=>act('pause','Paused.')} style={{padding:'9px 16px',background:'var(--amber)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>⏸ Pause</button>}
+        <button onClick={()=>act('retry-errored','Re-queued errored leads.')} style={{padding:'9px 16px',background:'var(--sf)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:8,fontWeight:600,cursor:'pointer'}}>↻ Retry errored</button>
+        <button onClick={()=>act('showcase','Showcase started.')} title="Fully enrich the top 3 leads right now (demo)" style={{padding:'9px 16px',background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>✨ Fill top 3 now (showcase)</button>
+      </div>
+    </div>
+  </div>);
+}
+
+function KpiView(){
+  const [k,setK]=useState(null); const [audit,setAudit]=useState([]);
+  useEffect(()=>{ apiJSON('/api/stats/kpis').then(d=>{if(d&&!d.__status)setK(d);}); apiJSON('/api/audit?limit=60').then(d=>{if(d&&d.events)setAudit(d.events);}); },[]);
+  const f=(k&&k.funnel)||{}; const lb=(k&&k.leaderboard)||[]; const calls=(k&&k.calls)||{};
+  const td={padding:'8px 10px',borderBottom:'1px solid var(--bd)',color:'var(--t1)',fontSize:13};
+  const th={textAlign:'left',padding:'8px 10px',color:'var(--t3)',fontSize:11,textTransform:'uppercase',borderBottom:'1px solid var(--bd)'};
+  const Card=({label,value,color})=>(<div className="card" style={{padding:'16px 18px',flex:'1 1 130px',textAlign:'center'}}>
+    <div style={{fontSize:28,fontWeight:800,color:color||'var(--t1)'}}>{value!=null?value:'—'}</div>
+    <div style={{fontSize:11,color:'var(--t3)',textTransform:'uppercase',marginTop:4}}>{label}</div></div>);
+  const mins=Math.round((calls.total_seconds||0)/60);
+  return(<div style={{padding:'4px 2px',paddingBottom:24}}>
+    <div style={{display:'flex',gap:14,flexWrap:'wrap',marginBottom:14}}>
+      <Card label="Total leads" value={f.total} color="var(--t1)"/>
+      <Card label="Allocated" value={f.allocated} color="var(--blue)"/>
+      <Card label="Contacted" value={f.contacted} color="var(--amber)"/>
+      <Card label="Secured" value={f.secured} color="var(--green)"/>
+      <Card label="Calls" value={calls.total} color="var(--violet)"/>
+      <Card label="Call minutes" value={mins} color="var(--violet)"/>
+    </div>
+    <div className="card" style={{padding:18,marginBottom:14}}>
+      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>BDE leaderboard</div>
+      <table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead><tr><th style={th}>BDE</th><th style={th}>Allocated</th><th style={th}>Contacted</th><th style={th}>Secured</th><th style={th}>Conversion</th></tr></thead>
+        <tbody>{lb.map(r=>{ const conv=r.allocated?Math.round(100*r.secured/r.allocated):0;
+          return(<tr key={r.id}><td style={td}>{r.full_name||r.username}</td><td style={td}>{r.allocated}</td>
+            <td style={{...td,color:'var(--amber)'}}>{r.contacted}</td><td style={{...td,color:'var(--green)',fontWeight:700}}>{r.secured}</td>
+            <td style={td}>{conv}%</td></tr>);})}
+          {!lb.length&&<tr><td style={td} colSpan={5}>No BDE data yet.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+    <div className="card" style={{padding:18}}>
+      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>Recent activity</div>
+      <div style={{maxHeight:340,overflow:'auto'}}>
+        {audit.map(e=>(<div key={e.id} style={{display:'flex',gap:10,padding:'6px 0',borderBottom:'1px solid var(--bd)',fontSize:12}}>
+          <span style={{color:'var(--t3)',whiteSpace:'nowrap'}}>{e.created_at?String(e.created_at).replace('T',' ').slice(5,16):''}</span>
+          <span style={{color:'var(--blue)',fontWeight:600,minWidth:120}}>{e.username}</span>
+          <span style={{color:'var(--t2)'}}>{e.action}{e.lead_id?(' '+lfId(e.lead_id)):''}{e.detail?(' · '+e.detail):''}</span>
+        </div>))}
+        {!audit.length&&<div style={{color:'var(--t3)',fontSize:13}}>No activity logged yet.</div>}
+      </div>
+    </div>
+  </div>);
+}
+
+function ForcePwGate({onDone}){
+  const [pw,setPw]=useState(''); const [pw2,setPw2]=useState(''); const [err,setErr]=useState(''); const [busy,setBusy]=useState(false);
+  const submit=async(e)=>{ if(e)e.preventDefault(); if(busy)return;
+    if(pw.length<6){setErr('At least 6 characters.');return;} if(pw!==pw2){setErr('Passwords do not match.');return;}
+    setBusy(true); const d=await apiJSON('/api/me/password',{method:'POST',body:JSON.stringify({password:pw})}); setBusy(false);
+    if(d&&d.ok) onDone(); else setErr('Error: '+((d&&d.error)||'failed')); };
+  return(<div style={{position:'fixed',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'var(--bg)',zIndex:950}}>
+    <form onSubmit={submit} className="card" style={{width:380,padding:'32px'}}>
+      <h2 style={{margin:'0 0 6px',color:'var(--t1)'}}>Set a new password</h2>
+      <div style={{color:'var(--t3)',fontSize:13,marginBottom:14}}>For security, please replace your temporary password before continuing.</div>
+      {err&&<div style={{color:'#EF4444',fontSize:13,marginBottom:8}}>{err}</div>}
+      <input style={{..._crmInp,width:'100%',margin:'6px 0'}} type="password" placeholder="New password" value={pw} autoFocus onChange={e=>setPw(e.target.value)}/>
+      <input style={{..._crmInp,width:'100%',margin:'6px 0'}} type="password" placeholder="Confirm new password" value={pw2} onChange={e=>setPw2(e.target.value)}/>
+      <button type="submit" disabled={busy} style={{width:'100%',padding:'12px',marginTop:10,background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>{busy?'Saving…':'Set password & continue'}</button>
+    </form>
+  </div>);
+}
+
 /* ─── ROOT: auth gate. App (and its protected fetches) only mounts once a user
    is signed in, so the login screen never triggers protected API calls. ─── */
 function Root(){
@@ -4109,6 +4372,9 @@ function Root(){
   }
   if(user===null){
     return <LoginView onLogin={setUser}/>;
+  }
+  if(user.must_change_pw){
+    return <ForcePwGate onDone={()=>setUser(u=>({...u, must_change_pw:false}))}/>;
   }
   return <App user={user} onLogout={onLogout}/>;
 }

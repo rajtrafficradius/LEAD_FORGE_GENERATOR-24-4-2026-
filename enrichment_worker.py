@@ -53,7 +53,22 @@ PER_LEAD_DELAY = float(os.environ.get("ENRICH_PER_LEAD_DELAY", "2") or "2")
 OPENAI_MODEL = os.environ.get("ENRICH_OPENAI_MODEL", "gpt-4o-mini")
 
 _started = False
+_paused = False
 _stats = {"done": 0, "errors": 0, "openai_calls": 0, "apollo_calls": 0, "last": ""}
+
+
+def pause() -> None:
+    global _paused
+    _paused = True
+
+
+def resume() -> None:
+    global _paused
+    _paused = False
+
+
+def is_paused() -> bool:
+    return _paused
 
 
 # ── website crawl (requests + BeautifulSoup) ─────────────────────────────────
@@ -271,6 +286,12 @@ def _enrich_one(lead: Dict[str, Any]) -> None:
         apollo = apollo_org_full(domain, apollo_key)
         ai = analyze_with_openai(company, domain, crawl.get("combined_text", ""), apollo, openai_key)
         db.LeadEnrichmentRepo.save_result(lead_id, crawl, apollo, ai)
+        # Fill blank core columns (company/industry/revenue) so the Database
+        # view fills up automatically as enrichment runs.
+        try:
+            db.MasterLeadRepo.enrich_core_from_apollo(lead_id, apollo)
+        except Exception:
+            pass
         _stats["done"] += 1
         _stats["last"] = f"{company} ({domain})"
         log.info("enriched lead %s (%s): %d page(s), apollo=%s, ai=%s",
@@ -298,7 +319,7 @@ def _loop(is_busy: Callable[[], bool]) -> None:
     idle_ticks = 0
     while True:
         try:
-            if is_busy():
+            if _paused or is_busy():
                 time.sleep(POLL_SECONDS)
                 continue
             lead = db.LeadEnrichmentRepo.claim_next()
@@ -321,7 +342,26 @@ def _loop(is_busy: Callable[[], bool]) -> None:
 
 
 def get_stats() -> Dict[str, Any]:
-    return dict(_stats)
+    s = dict(_stats); s["paused"] = _paused; s["started"] = _started
+    return s
+
+
+def showcase_now(lead_ids) -> None:
+    """Force immediate full enrichment of specific leads (admin 'showcase'
+    button). Runs in a detached thread so the HTTP request returns instantly."""
+    import db
+    def _run():
+        for lid in (lead_ids or []):
+            try:
+                row = db.LeadEnrichmentRepo.get_full(int(lid))
+                if not row:
+                    continue
+                _enrich_one({"lead_id": int(lid), "root_domain": row.get("root_domain"),
+                             "company_name": row.get("company_name"),
+                             "display_name": row.get("display_name")})
+            except Exception as e:
+                log.warning("showcase enrich %s failed: %s", lid, e)
+    threading.Thread(target=_run, name="enrich-showcase", daemon=True).start()
 
 
 def start_background_worker(is_busy: Optional[Callable[[], bool]] = None) -> bool:

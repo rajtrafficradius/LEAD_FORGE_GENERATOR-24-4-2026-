@@ -216,6 +216,7 @@ _SCHEMA_SQL: Sequence[str] = (
         role          ENUM('admin','manager','bde','user') NOT NULL DEFAULT 'user',
         full_name     VARCHAR(128) NULL,
         mobile_e164   VARCHAR(24)  NULL,
+        must_change_pw TINYINT(1)  NOT NULL DEFAULT 0,
         is_active     TINYINT(1)   NOT NULL DEFAULT 1,
         created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
         last_login_at DATETIME NULL,
@@ -282,6 +283,9 @@ _SCHEMA_SQL: Sequence[str] = (
         alloc_status      ENUM('unassigned','assigned','contacted','secured') NOT NULL DEFAULT 'unassigned',
         contacted_at      DATETIME NULL,
         secured_at        DATETIME NULL,
+        outcome           VARCHAR(32) NULL,
+        followup_at       DATETIME NULL,
+        notes             MEDIUMTEXT NULL,
         PRIMARY KEY (id),
         UNIQUE KEY uk_name_domain (normalized_name, root_domain),
         KEY idx_root_domain (root_domain),
@@ -340,6 +344,20 @@ _SCHEMA_SQL: Sequence[str] = (
         KEY idx_call_bde (bde_user_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """,
+    """
+    CREATE TABLE IF NOT EXISTS audit_log (
+        id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        user_id    INT UNSIGNED NULL,
+        username   VARCHAR(64),
+        action     VARCHAR(48) NOT NULL,
+        detail     VARCHAR(512),
+        lead_id    BIGINT UNSIGNED NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY idx_audit_created (created_at),
+        KEY idx_audit_user (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
 )
 
 
@@ -367,6 +385,11 @@ _SCHEMA_MIGRATIONS: Sequence[Tuple[str, str, str]] = (
     ("master_leads", "contacted_at",      "DATETIME NULL"),
     # 2026-06-16: 'secured' funnel stage for the allocation board.
     ("master_leads", "secured_at",        "DATETIME NULL"),
+    # 2026-06-16 (CRM v2): per-lead notes / outcome / follow-up + forced pw change.
+    ("master_leads", "outcome",           "VARCHAR(32) NULL"),
+    ("master_leads", "followup_at",       "DATETIME NULL"),
+    ("master_leads", "notes",             "MEDIUMTEXT NULL"),
+    ("users",        "must_change_pw",    "TINYINT(1) NOT NULL DEFAULT 0"),
 )
 
 
@@ -441,7 +464,7 @@ class UserRepo:
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT id, username, email, password_hash, role, full_name, "
-                    "mobile_e164, is_active, last_login_at "
+                    "mobile_e164, must_change_pw, is_active, last_login_at "
                     "FROM users WHERE username = %s AND is_active = 1",
                     (username,),
                 )
@@ -453,7 +476,7 @@ class UserRepo:
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT id, username, email, role, full_name, mobile_e164, "
-                    "is_active, last_login_at "
+                    "must_change_pw, is_active, last_login_at "
                     "FROM users WHERE id = %s",
                     (user_id,),
                 )
@@ -538,11 +561,23 @@ class UserRepo:
             conn.commit()
 
     @staticmethod
-    def set_password(user_id: int, password_hash: str) -> None:
+    def set_password(user_id: int, password_hash: str, clear_force: bool = True) -> None:
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute("UPDATE users SET password_hash=%s WHERE id=%s",
-                            (password_hash, user_id))
+                if clear_force:
+                    cur.execute("UPDATE users SET password_hash=%s, must_change_pw=0 WHERE id=%s",
+                                (password_hash, user_id))
+                else:
+                    cur.execute("UPDATE users SET password_hash=%s WHERE id=%s",
+                                (password_hash, user_id))
+            conn.commit()
+
+    @staticmethod
+    def set_must_change_pw(user_id: int, must: bool) -> None:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE users SET must_change_pw=%s WHERE id=%s",
+                            (1 if must else 0, user_id))
             conn.commit()
 
     @staticmethod
@@ -1030,6 +1065,245 @@ class MasterLeadRepo:
                 row = cur.fetchone()
                 return int(row["c"]) if row else 0
 
+    # ── CRM v2 (2026-06-16): search / filter / edit / follow-ups / KPIs ──────
+    _SEARCH_COLS = ("ml.id, ml.normalized_name, ml.root_domain, ml.display_name, "
+                    "ml.company_name, ml.role, ml.phone_e164, ml.primary_email, "
+                    "ml.email_type, ml.linkedin_url, ml.traffic_source, ml.industry, "
+                    "ml.country, ml.revenue, ml.cost_per_lead_usd, ml.alloc_status, "
+                    "ml.assigned_bde_id, ml.contacted_at, ml.secured_at, ml.followup_at, "
+                    "ml.outcome, ml.first_seen_at")
+    _EDITABLE = ("display_name", "company_name", "role", "phone_e164", "primary_email",
+                 "email_type", "linkedin_url", "industry", "notes", "outcome")
+
+    @staticmethod
+    def _build_where(q, industry, status, bde_id):
+        where, args = [], []
+        if q:
+            where.append("(ml.company_name LIKE %s OR ml.display_name LIKE %s OR "
+                         "ml.root_domain LIKE %s OR ml.primary_email LIKE %s)")
+            like = "%" + q + "%"; args += [like, like, like, like]
+        if industry:
+            where.append("ml.industry=%s"); args.append(industry)
+        if status in ("unassigned", "assigned", "contacted", "secured"):
+            where.append("ml.alloc_status=%s"); args.append(status)
+        if bde_id:
+            where.append("ml.assigned_bde_id=%s"); args.append(int(bde_id))
+        return ((" WHERE " + " AND ".join(where)) if where else ""), args
+
+    @staticmethod
+    def _fmt_lead(r):
+        for k in ("contacted_at", "secured_at", "followup_at", "first_seen_at"):
+            if r.get(k) and hasattr(r[k], "isoformat"):
+                r[k] = r[k].isoformat()
+        if r.get("cost_per_lead_usd") is not None:
+            try: r["cost_per_lead_usd"] = float(r["cost_per_lead_usd"])
+            except (TypeError, ValueError): r["cost_per_lead_usd"] = None
+        return r
+
+    @staticmethod
+    def search_page(q=None, industry=None, status=None, bde_id=None,
+                    page: int = 1, page_size: int = 50):
+        page = max(1, int(page)); page_size = max(1, min(200, int(page_size)))
+        offset = (page - 1) * page_size
+        wsql, args = MasterLeadRepo._build_where(q, industry, status, bde_id)
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) AS c FROM master_leads ml" + wsql, tuple(args))
+                total = int((cur.fetchone() or {}).get("c", 0))
+                cur.execute(
+                    "SELECT " + MasterLeadRepo._SEARCH_COLS + ", u.username AS assigned_bde_username "
+                    "FROM master_leads ml LEFT JOIN users u ON ml.assigned_bde_id=u.id"
+                    + wsql + " ORDER BY ml.id DESC LIMIT %s OFFSET %s",
+                    tuple(args) + (page_size, offset),
+                )
+                rows = [MasterLeadRepo._fmt_lead(r) for r in (cur.fetchall() or [])]
+        return rows, total
+
+    @staticmethod
+    def export_rows(q=None, industry=None, status=None, bde_id=None, limit: int = 10000):
+        wsql, args = MasterLeadRepo._build_where(q, industry, status, bde_id)
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT " + MasterLeadRepo._SEARCH_COLS + ", u.username AS assigned_bde_username "
+                    "FROM master_leads ml LEFT JOIN users u ON ml.assigned_bde_id=u.id"
+                    + wsql + " ORDER BY ml.id DESC LIMIT %s",
+                    tuple(args) + (int(limit),),
+                )
+                return [MasterLeadRepo._fmt_lead(r) for r in (cur.fetchall() or [])]
+
+    @staticmethod
+    def distinct_industries() -> List[str]:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT DISTINCT industry FROM master_leads "
+                            "WHERE industry IS NOT NULL AND industry<>'' ORDER BY industry")
+                return [r["industry"] for r in (cur.fetchall() or [])]
+
+    @staticmethod
+    def get_one(lead_id: int) -> Optional[Dict[str, Any]]:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM master_leads WHERE id=%s", (lead_id,))
+                return cur.fetchone()
+
+    @staticmethod
+    def update_fields(lead_id: int, fields: Dict[str, Any]) -> int:
+        """Manual edit — overwrite the whitelisted columns with provided values."""
+        sets, args = [], []
+        for k, v in (fields or {}).items():
+            if k in MasterLeadRepo._EDITABLE:
+                if k == "revenue":
+                    continue  # handled below (numeric)
+                sets.append(f"{k}=%s"); args.append(v if v != "" else None)
+        if "revenue" in (fields or {}):
+            try:
+                sets.append("revenue=%s"); args.append(int(float(fields["revenue"] or 0)))
+            except (TypeError, ValueError):
+                pass
+        if not sets:
+            return 0
+        args.append(lead_id)
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"UPDATE master_leads SET {', '.join(sets)} WHERE id=%s", tuple(args))
+                n = cur.rowcount
+            conn.commit()
+            return int(n or 0)
+
+    @staticmethod
+    def set_followup(lead_id: int, outcome: Optional[str], followup_at: Optional[str],
+                     notes: Optional[str]) -> None:
+        sets, args = [], []
+        if outcome is not None:
+            sets.append("outcome=%s"); args.append(outcome or None)
+        if followup_at is not None:
+            sets.append("followup_at=%s"); args.append(followup_at or None)
+        if notes is not None:
+            sets.append("notes=%s"); args.append(notes or None)
+        if not sets:
+            return
+        args.append(lead_id)
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"UPDATE master_leads SET {', '.join(sets)} WHERE id=%s", tuple(args))
+            conn.commit()
+
+    @staticmethod
+    def due_followups(bde_id: Optional[int] = None, limit: int = 200) -> List[Dict[str, Any]]:
+        """Leads with a follow-up due now/overdue (optionally for one BDE)."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                sql = ("SELECT ml.id, ml.display_name, ml.company_name, ml.root_domain, "
+                       "ml.phone_e164, ml.primary_email, ml.alloc_status, ml.outcome, "
+                       "ml.followup_at, ml.assigned_bde_id "
+                       "FROM master_leads ml WHERE ml.followup_at IS NOT NULL "
+                       "AND ml.followup_at <= NOW() + INTERVAL 1 DAY ")
+                args: list = []
+                if bde_id:
+                    sql += "AND ml.assigned_bde_id=%s "; args.append(int(bde_id))
+                sql += "ORDER BY ml.followup_at ASC LIMIT %s"; args.append(int(limit))
+                cur.execute(sql, tuple(args))
+                rows = list(cur.fetchall() or [])
+        for r in rows:
+            if r.get("followup_at") and hasattr(r["followup_at"], "isoformat"):
+                r["followup_at"] = r["followup_at"].isoformat()
+        return rows
+
+    @staticmethod
+    def enrich_core_from_apollo(lead_id: int, apollo: Dict[str, Any]) -> None:
+        """Fill BLANK core columns (company/industry/revenue) from the Apollo org
+        object so the Database view fills up as the crawler runs. Never clobbers."""
+        if not apollo:
+            return
+        company = apollo.get("name") or ""
+        industry = apollo.get("industry") or ""
+        rev = 0
+        for k in ("annual_revenue", "organization_revenue", "estimated_annual_revenue"):
+            try:
+                if apollo.get(k):
+                    rev = int(float(apollo[k])); break
+            except (TypeError, ValueError):
+                pass
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE master_leads SET "
+                    " company_name = COALESCE(NULLIF(company_name,''), %s), "
+                    " industry     = COALESCE(NULLIF(industry,''), %s), "
+                    " revenue      = IF(revenue>0, revenue, %s) "
+                    "WHERE id=%s",
+                    (company or None, industry or None, rev, lead_id),
+                )
+            conn.commit()
+
+    @staticmethod
+    def kpi_overview() -> Dict[str, Any]:
+        """Funnel totals + per-BDE leaderboard + call stats for the manager dashboard."""
+        out: Dict[str, Any] = {"funnel": {}, "leaderboard": [], "calls": {}}
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT COUNT(*) AS total, "
+                    "SUM(alloc_status<>'unassigned') AS allocated, "
+                    "SUM(alloc_status IN ('contacted','secured')) AS contacted, "
+                    "SUM(alloc_status='secured') AS secured FROM master_leads")
+                f = cur.fetchone() or {}
+                out["funnel"] = {k: int(f.get(k) or 0) for k in ("total", "allocated", "contacted", "secured")}
+                cur.execute(
+                    "SELECT u.id, u.username, u.full_name, "
+                    "COUNT(ml.id) AS allocated, "
+                    "SUM(ml.alloc_status IN ('contacted','secured')) AS contacted, "
+                    "SUM(ml.alloc_status='secured') AS secured "
+                    "FROM users u LEFT JOIN master_leads ml ON ml.assigned_bde_id=u.id "
+                    "WHERE u.role='bde' GROUP BY u.id ORDER BY secured DESC, contacted DESC")
+                lb = []
+                for r in (cur.fetchall() or []):
+                    lb.append({"id": r["id"], "username": r["username"],
+                               "full_name": r.get("full_name") or "",
+                               "allocated": int(r.get("allocated") or 0),
+                               "contacted": int(r.get("contacted") or 0),
+                               "secured": int(r.get("secured") or 0)})
+                out["leaderboard"] = lb
+                cur.execute("SELECT COUNT(*) AS c, COALESCE(SUM(duration_sec),0) AS secs FROM lead_calls")
+                c = cur.fetchone() or {}
+                out["calls"] = {"total": int(c.get("c") or 0), "total_seconds": int(c.get("secs") or 0)}
+        return out
+
+
+# ── Audit-log repo (CRM v2, 2026-06-16) ───────────────────────────────────────
+
+
+class AuditRepo:
+    """Lightweight activity trail: who did what, when. Best-effort (never blocks)."""
+
+    @staticmethod
+    def log(user_id: Optional[int], username: str, action: str,
+            detail: str = "", lead_id: Optional[int] = None) -> None:
+        try:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO audit_log (user_id, username, action, detail, lead_id) "
+                        "VALUES (%s,%s,%s,%s,%s)",
+                        (user_id, (username or "")[:64], action[:48], (detail or "")[:512], lead_id),
+                    )
+                conn.commit()
+        except Exception as e:
+            log.debug("audit log skipped: %s", e)
+
+    @staticmethod
+    def recent(limit: int = 100) -> List[Dict[str, Any]]:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id, user_id, username, action, detail, lead_id, created_at "
+                            "FROM audit_log ORDER BY id DESC LIMIT %s", (int(limit),))
+                rows = list(cur.fetchall() or [])
+        for r in rows:
+            if r.get("created_at") and hasattr(r["created_at"], "isoformat"):
+                r["created_at"] = r["created_at"].isoformat()
+        return rows
+
 
 # ── Lead-allocation repo (CRM layer, 2026-06-15) ──────────────────────────────
 
@@ -1431,6 +1705,25 @@ class LeadEnrichmentRepo:
                     (lead_id,),
                 )
             conn.commit()
+
+    @staticmethod
+    def retry_errored() -> int:
+        """Re-queue every 'error' (and stuck 'crawling') row → 'pending'."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE lead_enrichment SET crawl_status='pending', error_text=NULL "
+                            "WHERE crawl_status IN ('error','crawling')")
+                n = cur.rowcount
+            conn.commit()
+            return int(n or 0)
+
+    @staticmethod
+    def top_pending_ids(limit: int = 3) -> List[int]:
+        """Lead ids to force-enrich for the showcase (lowest id = oldest leads)."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM master_leads ORDER BY id ASC LIMIT %s", (int(limit),))
+                return [int(r["id"]) for r in (cur.fetchall() or [])]
 
     @staticmethod
     def status_counts() -> Dict[str, int]:
