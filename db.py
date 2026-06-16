@@ -1061,6 +1061,32 @@ class LeadAllocationRepo:
             conn.commit()
 
     @staticmethod
+    def unassign(lead_id: int, actor_id: Optional[int]) -> None:
+        """Return one lead to the unassigned database pool."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT assigned_bde_id FROM master_leads WHERE id=%s",
+                    (lead_id,),
+                )
+                row = cur.fetchone() or {}
+                previous_bde = row.get("assigned_bde_id")
+                cur.execute(
+                    "UPDATE master_leads SET assigned_bde_id=NULL, assigned_by_id=NULL, "
+                    "assigned_at=NULL, alloc_status='unassigned', contacted_at=NULL, secured_at=NULL "
+                    "WHERE id=%s",
+                    (lead_id,),
+                )
+                LeadAllocationRepo._event(
+                    cur,
+                    lead_id,
+                    "unassign",
+                    actor_id,
+                    int(previous_bde) if previous_bde else None,
+                )
+            conn.commit()
+
+    @staticmethod
     def mark_contacted(lead_id: int, actor_id: Optional[int]) -> None:
         with get_conn() as conn:
             with conn.cursor() as cur:
@@ -1086,10 +1112,39 @@ class LeadAllocationRepo:
             conn.commit()
 
     @staticmethod
+    def unassign(lead_id: int, actor_id: Optional[int]) -> None:
+        """Send a lead back to the database pool (deallocate from its BDE).
+        Resets the allocation funnel to 'unassigned' (clean slate)."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE master_leads SET assigned_bde_id=NULL, assigned_by_id=NULL, "
+                    "assigned_at=NULL, alloc_status='unassigned', contacted_at=NULL, "
+                    "secured_at=NULL WHERE id=%s",
+                    (lead_id,),
+                )
+                LeadAllocationRepo._event(cur, lead_id, "unassign", actor_id, None)
+            conn.commit()
+
+    @staticmethod
+    def unassigned_count(industry: Optional[str] = None) -> int:
+        """How many leads are currently in the pool (unassigned)."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                if industry:
+                    cur.execute("SELECT COUNT(*) AS c FROM master_leads "
+                                "WHERE alloc_status='unassigned' AND industry=%s", (industry,))
+                else:
+                    cur.execute("SELECT COUNT(*) AS c FROM master_leads "
+                                "WHERE alloc_status='unassigned'")
+                return int((cur.fetchone() or {}).get("c", 0))
+
+    @staticmethod
     def auto_distribute(bde_ids: Sequence[int], actor_id: Optional[int],
                         industry: Optional[str] = None, limit: int = 100000) -> Dict[int, int]:
-        """Round-robin every UNASSIGNED lead equally across `bde_ids`.
-        Returns {bde_id: count_assigned}. Equal ±1 by construction."""
+        """Round-robin every UNASSIGNED lead equally across `bde_ids` (up to
+        `limit` leads total). Returns {bde_id: count_assigned}. Equal ±1.
+        For 'N per BDE' the caller passes limit = N * len(bde_ids)."""
         if not bde_ids:
             return {}
         assigned: Dict[int, int] = {b: 0 for b in bde_ids}

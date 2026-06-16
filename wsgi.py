@@ -747,9 +747,42 @@ def api_allocation_auto():
     industry = (d.get("industry") or "").strip() or None
     if not bde_ids:
         return jsonify({"error": "no active BDEs selected"}), 400
+    # per_bde: allocate exactly N to EACH active BDE. None/0 = allocate the whole
+    # remaining pool evenly.
     try:
-        assigned = db.LeadAllocationRepo.auto_distribute(bde_ids, _current_uid(), industry=industry)
+        per_bde = int(d.get("per_bde") or 0)
+    except (TypeError, ValueError):
+        per_bde = 0
+    try:
+        if per_bde > 0:
+            needed = per_bde * len(bde_ids)
+            available = db.LeadAllocationRepo.unassigned_count(industry)
+            if available < needed:
+                return jsonify({
+                    "error": "insufficient",
+                    "available": available, "needed": needed, "per_bde": per_bde,
+                    "message": (f"Only {available} unassigned lead(s) available, but "
+                                f"{per_bde} × {len(bde_ids)} BDE(s) = {needed} needed. "
+                                f"Reduce the per-BDE number (max "
+                                f"{available // len(bde_ids)} each) or add more leads."),
+                }), 400
+            assigned = db.LeadAllocationRepo.auto_distribute(
+                bde_ids, _current_uid(), industry=industry, limit=needed)
+        else:
+            assigned = db.LeadAllocationRepo.auto_distribute(
+                bde_ids, _current_uid(), industry=industry)
         return jsonify({"ok": True, "assigned": assigned, "total": sum(assigned.values())})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/leads/<int:lead_id>/unassign", methods=["POST"])
+@manager_or_admin_required
+def api_lead_unassign(lead_id):
+    """Deallocate a lead from its BDE — back into the database pool."""
+    try:
+        db.LeadAllocationRepo.unassign(lead_id, _current_uid())
+        return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

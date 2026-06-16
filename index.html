@@ -3078,7 +3078,8 @@ function AllocLeadChip({r,fromBde,onDragStart,onContacted,onSecured,onOpen,compa
       background:'var(--bg)',border:'1px solid var(--bd)',borderRadius:8,cursor:'grab'}}>
     <span style={{color:'var(--t3)',fontSize:13,lineHeight:1}}>⠿</span>
     <div style={{flex:1,minWidth:0}}>
-      <div style={{fontSize:12,fontWeight:600,color:'var(--t1)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.company_name||r.display_name||r.root_domain}</div>
+      <div style={{fontSize:12,fontWeight:600,color:'var(--t1)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.company_name||r.root_domain}</div>
+      <div style={{fontSize:11,color:'var(--t2)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.display_name?('👤 '+r.display_name):<span style={{color:'var(--t3)'}}>no contact name</span>}</div>
       <div style={{fontSize:10,color:'var(--t3)',fontFamily:'var(--mono)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lfId(r.id)} · {r.root_domain}{r.call_count>0?(' · '+r.call_count+'📞'):''}</div>
     </div>
     <span style={{fontSize:9,fontWeight:700,color:sc,border:'1px solid '+sc,borderRadius:10,padding:'1px 6px',textTransform:'capitalize',flexShrink:0}}>{r.alloc_status||(fromBde?'assigned':'free')}</span>
@@ -3108,6 +3109,8 @@ function AllocationView({onOpenLead}){
   const [dragOver,setDragOver]=useState(null);
   const [manual,setManual]=useState({company:'',domain:'',name:'',phone:'',email:'',bde_id:''});
   const [showManual,setShowManual]=useState(false);
+  const [perBdeN,setPerBdeN]=useState(10);
+  const [dbOver,setDbOver]=useState(false);
 
   const loadBdes=async()=>{ const d=await apiJSON('/api/allocation/bdes');
     if(d&&d.bdes){ setBdes(d.bdes); setActive(p=>{const n={...p}; d.bdes.forEach(b=>{if(n[b.id]===undefined)n[b.id]=!!b.is_active;}); return n;}); } };
@@ -3127,10 +3130,15 @@ function AllocationView({onOpenLead}){
     else setMsg('Could not move lead: '+((d&&d.error)||'failed')); };
   const setStatus=async(leadId,kind,bdeId)=>{ const d=await apiJSON('/api/leads/'+leadId+'/'+kind,{method:'POST',body:'{}'});
     if(d&&d.ok){ setMsg(lfId(leadId)+' marked '+kind); refresh([bdeId]); } else setMsg('Action failed'); };
-  const distribute=async()=>{ const ids=bdes.filter(b=>active[b.id]).map(b=>b.id);
+  const distribute=async(perBde)=>{ const ids=bdes.filter(b=>active[b.id]).map(b=>b.id);
     if(!ids.length){setMsg('Turn on at least one BDE (the green switch) first.');return;}
-    setMsg('Sharing leads…'); const d=await apiJSON('/api/allocation/auto',{method:'POST',body:JSON.stringify({bde_ids:ids})});
-    if(d&&d.ok){ setMsg('Shared '+d.total+' unassigned lead(s) evenly across '+ids.length+' BDE(s).'); refresh(ids); }
+    if(perBde>0 && (!Number.isFinite(perBde))){setMsg('Enter a valid number per BDE.');return;}
+    const body={bde_ids:ids}; if(perBde>0)body.per_bde=perBde;
+    setMsg('Allocating…'); const d=await apiJSON('/api/allocation/auto',{method:'POST',body:JSON.stringify(body)});
+    if(d&&d.ok){ setMsg(perBde>0
+        ? ('Allocated '+perBde+' lead(s) to each of '+ids.length+' BDE(s) — '+d.total+' total.')
+        : ('Shared all '+d.total+' remaining lead(s) evenly across '+ids.length+' BDE(s).')); refresh(ids); }
+    else if(d&&d.error==='insufficient'){ setMsg('⚠ '+(d.message||'Not enough unassigned leads — reduce the per-BDE number.')); }
     else setMsg('Error: '+((d&&d.error)||'failed')); };
   const addManual=async()=>{ if(!manual.domain.trim()){setMsg('Enter at least a domain.');return;}
     const d=await apiJSON('/api/leads/manual-add',{method:'POST',body:JSON.stringify(manual)});
@@ -3141,6 +3149,12 @@ function AllocationView({onOpenLead}){
   const onDropBde=(e,toBde)=>{ e.preventDefault(); setDragOver(null);
     let data; try{ data=JSON.parse(e.dataTransfer.getData('text/plain')); }catch(_){ return; }
     if(!data||!data.leadId||data.fromBde===toBde) return; reassign(data.leadId,toBde,data.fromBde); };
+  const unassignLead=async(leadId,fromBde)=>{ const d=await apiJSON('/api/leads/'+leadId+'/unassign',{method:'POST',body:'{}'});
+    if(d&&d.ok){ setMsg('Returned '+lfId(leadId)+' to the database pool (deallocated).'); refresh([fromBde]); }
+    else setMsg('Could not deallocate: '+((d&&d.error)||'failed')); };
+  const onDropDb=(e)=>{ e.preventDefault(); setDbOver(false);
+    let data; try{ data=JSON.parse(e.dataTransfer.getData('text/plain')); }catch(_){ return; }
+    if(!data||!data.leadId||!data.fromBde) return; unassignLead(data.leadId,data.fromBde); };
 
   const inp={padding:'9px 11px',background:'var(--bg)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:8,fontSize:13};
   const tdf={padding:'7px 9px',borderBottom:'1px solid var(--bd)',color:'var(--t2)',fontSize:12};
@@ -3154,17 +3168,23 @@ function AllocationView({onOpenLead}){
     </div>
     {msg&&<div className="card" style={{padding:'9px 14px',marginBottom:12,color:'var(--t1)',fontSize:13}}>{msg}</div>}
 
-    {/* DB leads drag panel */}
-    {showDb&&<div className="card" style={{padding:16,marginBottom:14}}>
-      <div style={{display:'flex',alignItems:'center',marginBottom:10}}>
+    {/* DB leads drag panel — also a DROP ZONE to deallocate (drag a BDE lead here) */}
+    {showDb&&<div className="card"
+      onDragOver={e=>{e.preventDefault();if(!dbOver)setDbOver(true);}}
+      onDragLeave={()=>setDbOver(false)}
+      onDrop={onDropDb}
+      style={{padding:16,marginBottom:14,border:'2px solid '+(dbOver?'var(--amber)':'var(--bd)'),
+        boxShadow:dbOver?'0 0 0 3px rgba(245,158,11,0.18)':'none'}}>
+      <div style={{display:'flex',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:6}}>
         <div style={{fontWeight:700,color:'var(--t1)'}}>All database leads</div>
-        <div style={{color:'var(--t3)',fontSize:12,marginLeft:10}}>{dbTotal} total · drag any onto a BDE below</div>
+        <div style={{color:'var(--t3)',fontSize:12,marginLeft:6}}>{dbTotal} total · drag onto a BDE to allocate · drop a BDE's lead here to deallocate</div>
         <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center'}}>
           <button disabled={dbPage<=1} onClick={()=>loadDb(dbPage-1)} style={{padding:'4px 10px',borderRadius:6,border:'1px solid var(--bd)',background:'var(--sf)',color:'var(--t2)',cursor:'pointer'}}>‹</button>
           <span style={{color:'var(--t3)',fontSize:12}}>p{dbPage}/{Math.max(1,Math.ceil(dbTotal/50))}</span>
           <button disabled={dbPage>=Math.ceil(dbTotal/50)} onClick={()=>loadDb(dbPage+1)} style={{padding:'4px 10px',borderRadius:6,border:'1px solid var(--bd)',background:'var(--sf)',color:'var(--t2)',cursor:'pointer'}}>›</button>
         </div>
       </div>
+      {dbOver&&<div style={{textAlign:'center',color:'var(--amber)',fontWeight:700,fontSize:13,padding:'6px 0'}}>↩ Drop here to return the lead to the pool</div>}
       <div style={{maxHeight:300,overflow:'auto',paddingRight:4}}>
         {dbBusy&&<div style={{color:'var(--t3)',fontSize:13,padding:10}}>Loading…</div>}
         {!dbBusy&&dbLeads.map(r=><AllocLeadChip key={r.id} r={r} fromBde={r.assigned_bde_id||null} onDragStart={onDragStart} compact/>)}
@@ -3172,13 +3192,30 @@ function AllocationView({onOpenLead}){
       </div>
     </div>}
 
-    {/* Auto-distribute control */}
+    {/* Auto-distribute control — two options */}
     <div className="card" style={{padding:16,marginBottom:14}}>
-      <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-        <div style={{fontWeight:700,color:'var(--t1)'}}>Auto-share unassigned leads</div>
-        <div style={{color:'var(--t3)',fontSize:12,flex:1,minWidth:160}}>Turn on the BDEs who are working, then share evenly.</div>
-        <button onClick={distribute} style={{padding:'9px 16px',background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Share evenly</button>
+      <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:12}}>
+        <div style={{fontWeight:700,color:'var(--t1)'}}>Allocate leads to BDEs</div>
+        <div style={{color:'var(--t3)',fontSize:12,flex:1,minWidth:160}}>First turn on the BDEs working today (the green switch on each card), then choose how to allocate.</div>
         <button onClick={()=>setShowManual(s=>!s)} style={{padding:'9px 14px',background:'var(--sf)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:8,fontWeight:600,cursor:'pointer'}}>{showManual?'Cancel':'+ Add lead manually'}</button>
+      </div>
+      <div style={{display:'flex',gap:14,flexWrap:'wrap',alignItems:'stretch'}}>
+        {/* Option 1: all remaining */}
+        <div style={{flex:'1 1 240px',border:'1px solid var(--bd)',borderRadius:10,padding:'12px 14px',display:'flex',flexDirection:'column',gap:8}}>
+          <div style={{fontWeight:700,color:'var(--t1)',fontSize:13}}>Allocate all balance leads</div>
+          <div style={{color:'var(--t3)',fontSize:12,flex:1}}>Shares every remaining unassigned lead in the database evenly across the active BDEs.</div>
+          <button onClick={()=>distribute(0)} style={{padding:'10px 16px',background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Allocate all remaining</button>
+        </div>
+        {/* Option 2: fixed number each */}
+        <div style={{flex:'1 1 240px',border:'1px solid var(--bd)',borderRadius:10,padding:'12px 14px',display:'flex',flexDirection:'column',gap:8}}>
+          <div style={{fontWeight:700,color:'var(--t1)',fontSize:13}}>Allocate a set number to each BDE</div>
+          <div style={{color:'var(--t3)',fontSize:12,flex:1}}>Gives this many leads to <b>every</b> active BDE. If the pool doesn't have enough, you'll be told to lower the number.</div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <input type="number" min="1" value={perBdeN} onChange={e=>setPerBdeN(e.target.value)} style={{...inp,width:90}}/>
+            <span style={{color:'var(--t2)',fontSize:13}}>per BDE</span>
+            <button onClick={()=>distribute(parseInt(perBdeN,10)||0)} style={{marginLeft:'auto',padding:'10px 16px',background:'var(--green)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Allocate</button>
+          </div>
+        </div>
       </div>
       {showManual&&<div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginTop:12,paddingTop:12,borderTop:'1px solid var(--bd)'}}>
         <input style={inp} placeholder="Company" value={manual.company} onChange={e=>setManual(m=>({...m,company:e.target.value}))}/>
