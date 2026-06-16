@@ -2370,8 +2370,11 @@ function HistoryView(){
   </div></div>);
 }
 
-/* ─── USERS VIEW ─── */
-function UsersView(){
+/* ─── USERS VIEW (LEGACY MOCK — dead code, superseded by the real CRM
+   UsersView further down. Renamed so it no longer collides with it: a
+   duplicate `function UsersView` declaration makes in-browser Babel refuse
+   to transpile the WHOLE script → blank page. 2026-06-16.) ─── */
+function UsersViewLegacy(){
   const [users,setUsers]=useState(USERS);
   const [showInvite,setShowInvite]=useState(false);
   const [invEmail,setInvEmail]=useState('');
