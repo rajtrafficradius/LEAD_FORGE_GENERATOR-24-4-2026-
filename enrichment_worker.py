@@ -363,6 +363,26 @@ def _enrich_one(lead: Dict[str, Any]) -> None:
         log.warning("enrich lead %s failed: %s", lead_id, e)
 
 
+def _backfill_failed_ai(db) -> bool:
+    """Process ONE already-crawled lead whose AI cheat-sheet is missing/failed,
+    reusing stored crawl+Apollo data (no re-crawl). When OpenAI is healthy we
+    include leads that currently only have an Apollo fallback (so they get
+    upgraded to the full AI cheat-sheet); when the key is bad we touch only leads
+    with NO summary yet — so a bad key never re-loops over fallbacks. Returns True
+    if a lead was processed."""
+    try:
+        healthy = _stats.get("openai_status") == "ok"
+        ids = db.LeadEnrichmentRepo.failed_ai_ids(limit=1, include_fallback=healthy)
+        if not ids:
+            return False
+        _reanalyze_one(int(ids[0]), os.environ.get("OPENAI_API_KEY", ""))
+        _stats["last"] = f"AI backfill: lead {ids[0]}"
+        return True
+    except Exception as e:
+        log.debug("AI backfill skipped: %s", e)
+        return False
+
+
 def _loop(is_busy: Callable[[], bool]) -> None:
     import db
     log.info("enrichment worker started (poll=%ss, max_pages=%s)", POLL_SECONDS, MAX_PAGES)
@@ -382,12 +402,21 @@ def _loop(is_busy: Callable[[], bool]) -> None:
             lead = db.LeadEnrichmentRepo.claim_next()
             if not lead:
                 idle_ticks += 1
-                # Periodically pick up newly-generated leads, then idle.
+                # Periodically pick up newly-generated leads.
                 if idle_ticks % 3 == 0:
                     try:
                         db.LeadEnrichmentRepo.backfill_pending()
                     except Exception:
                         pass
+                # No fresh crawl work → adaptively backfill AI cheat-sheets for
+                # already-crawled leads whose AI failed. When OpenAI is healthy we
+                # also UPGRADE Apollo-fallback summaries to the full AI version;
+                # when the key is bad we only fill leads that have NO summary yet
+                # (so a bad key never makes us reprocess fallbacks forever).
+                if _backfill_failed_ai(db):
+                    idle_ticks = 0
+                    time.sleep(PER_LEAD_DELAY)
+                    continue
                 time.sleep(POLL_SECONDS)
                 continue
             idle_ticks = 0
@@ -403,31 +432,39 @@ def get_stats() -> Dict[str, Any]:
     return s
 
 
+def _reanalyze_one(lead_id: int, openai_key: str) -> bool:
+    """Recompute the AI cheat-sheet for ONE already-crawled lead, reusing the
+    stored website text + Apollo data (NO re-crawl, NO extra Apollo call).
+    Returns True on success."""
+    import db
+    row = db.LeadEnrichmentRepo.get_crawl_apollo(int(lead_id))
+    if not row:
+        return False
+    crawl = row.get("crawl_json") or {}
+    apollo = row.get("apollo_json") or {}
+    company = row.get("company_name") or row.get("display_name") or row.get("root_domain") or ""
+    ai = analyze_with_openai(company, row.get("root_domain") or "",
+                             (crawl or {}).get("combined_text", ""), apollo, openai_key)
+    db.LeadEnrichmentRepo.save_ai(int(lead_id), ai)
+    try:
+        db.MasterLeadRepo.enrich_core_from_apollo(int(lead_id), apollo)
+    except Exception:
+        pass
+    return True
+
+
 def reanalyze(lead_ids) -> None:
     """Recompute the AI cheat-sheet for already-crawled leads, reusing the stored
     website text + Apollo data (NO re-crawl, NO extra Apollo call). Used to
     backfill leads whose AI failed earlier (e.g. a bad OpenAI key) once a valid
     key is set. Runs detached so the HTTP request returns instantly."""
-    import db
     def _run():
         openai_key = os.environ.get("OPENAI_API_KEY", "")
         n = 0
         for lid in (lead_ids or []):
             try:
-                row = db.LeadEnrichmentRepo.get_crawl_apollo(int(lid))
-                if not row:
-                    continue
-                crawl = row.get("crawl_json") or {}
-                apollo = row.get("apollo_json") or {}
-                company = row.get("company_name") or row.get("display_name") or row.get("root_domain") or ""
-                ai = analyze_with_openai(company, row.get("root_domain") or "",
-                                         (crawl or {}).get("combined_text", ""), apollo, openai_key)
-                db.LeadEnrichmentRepo.save_ai(int(lid), ai)
-                try:
-                    db.MasterLeadRepo.enrich_core_from_apollo(int(lid), apollo)
-                except Exception:
-                    pass
-                n += 1
+                if _reanalyze_one(int(lid), openai_key):
+                    n += 1
             except Exception as e:
                 log.warning("reanalyze %s failed: %s", lid, e)
         log.info("reanalyze complete: %d lead(s) refreshed", n)

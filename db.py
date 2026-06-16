@@ -1726,17 +1726,22 @@ class LeadEnrichmentRepo:
                 return [int(r["id"]) for r in (cur.fetchall() or [])]
 
     @staticmethod
-    def failed_ai_ids(limit: int = 5000) -> List[int]:
+    def failed_ai_ids(limit: int = 5000, include_fallback: bool = True) -> List[int]:
         """Crawled leads whose AI cheat-sheet failed/empty (e.g. bad OpenAI key) —
-        candidates for cheap re-analysis (no re-crawl)."""
+        candidates for cheap re-analysis (no re-crawl). When include_fallback is
+        False, leads that already have an Apollo-derived fallback summary are
+        excluded (so a bad key doesn't make the worker reprocess them forever);
+        when True (e.g. after fixing the key) they're included so fallbacks get
+        upgraded to the full AI cheat-sheet."""
+        sql = ("SELECT lead_id FROM lead_enrichment WHERE crawl_status='done' AND "
+               "(ai_summary_json IS NULL OR JSON_EXTRACT(ai_summary_json,'$._note') IS NOT NULL)")
+        if not include_fallback:
+            sql += (" AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(ai_summary_json,'$._source')),'')"
+                    " <> 'apollo-fallback'")
+        sql += " ORDER BY lead_id ASC LIMIT %s"
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT lead_id FROM lead_enrichment WHERE crawl_status='done' AND "
-                    "(ai_summary_json IS NULL OR JSON_EXTRACT(ai_summary_json,'$._note') IS NOT NULL) "
-                    "ORDER BY lead_id ASC LIMIT %s",
-                    (int(limit),),
-                )
+                cur.execute(sql, (int(limit),))
                 return [int(r["lead_id"]) for r in (cur.fetchall() or [])]
 
     @staticmethod
