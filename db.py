@@ -1734,7 +1734,12 @@ class LeadEnrichmentRepo:
         when True (e.g. after fixing the key) they're included so fallbacks get
         upgraded to the full AI cheat-sheet."""
         sql = ("SELECT lead_id FROM lead_enrichment WHERE crawl_status='done' AND "
-               "(ai_summary_json IS NULL OR JSON_EXTRACT(ai_summary_json,'$._note') IS NOT NULL)")
+               "(ai_summary_json IS NULL OR JSON_EXTRACT(ai_summary_json,'$._note') IS NOT NULL) "
+               # Only leads that actually HAVE something to analyse — a lead with no
+               # crawl text AND no Apollo data can never be improved by re-analysis,
+               # so excluding it stops the worker looping on dead/blocked sites.
+               "AND (CAST(JSON_EXTRACT(crawl_json,'$.fetched') AS UNSIGNED) > 0 "
+               "     OR (apollo_json IS NOT NULL AND JSON_LENGTH(apollo_json) > 0))")
         if not include_fallback:
             sql += (" AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(ai_summary_json,'$._source')),'')"
                     " <> 'apollo-fallback'")

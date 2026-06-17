@@ -950,6 +950,19 @@ def api_crawler_retry():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/crawler/openai-test", methods=["POST", "GET"])
+@manager_or_admin_required
+def api_crawler_openai_test():
+    """Live OpenAI key probe FROM INSIDE this deployment — reports whether the
+    env var is present (+ masked tail), any stray quotes/whitespace, and the exact
+    API result. The decisive Railway diagnostic for 'AI summaries not generating'."""
+    try:
+        import enrichment_worker
+        return jsonify({"ok": True, "probe": enrichment_worker.openai_health_probe()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/crawler/reanalyze", methods=["POST"])
 @manager_or_admin_required
 def api_crawler_reanalyze():

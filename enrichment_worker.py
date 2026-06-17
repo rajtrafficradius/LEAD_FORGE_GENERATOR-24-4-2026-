@@ -74,6 +74,70 @@ def _idle_current() -> None:
     _current["phase"] = "idle"
 
 
+def _openai_key() -> str:
+    """Read the OpenAI key from the environment, defensively cleaned. Users very
+    often paste it into Railway with surrounding quotes or a trailing newline/
+    space — which silently 401s even when the key itself is valid. Strip those."""
+    raw = os.environ.get("OPENAI_API_KEY", "") or ""
+    k = raw.strip()
+    if len(k) >= 2 and k[0] in ("'", '"') and k[-1] == k[0]:
+        k = k[1:-1].strip()
+    return k
+
+
+def openai_health_probe() -> Dict[str, Any]:
+    """Live check of the OpenAI key IN THIS ENVIRONMENT: reports whether the env
+    var is present (+ masked head/tail so the operator can confirm it matches what
+    they pasted), whether it had stray quotes/whitespace, and the EXACT result of a
+    minimal real API call (HTTP status + error code/message). This is the single
+    most useful Railway diagnostic because it runs inside the deployed container."""
+    raw = os.environ.get("OPENAI_API_KEY", "") or ""
+    k = _openai_key()
+    info: Dict[str, Any] = {
+        "present": bool(k), "raw_len": len(raw), "clean_len": len(k),
+        "had_whitespace": raw != raw.strip(),
+        "had_quotes": bool(raw.strip()) and raw.strip()[0] in ("'", '"'),
+        "key_head": k[:7] if k else "", "key_tail": k[-4:] if len(k) >= 4 else "",
+        "model": OPENAI_MODEL, "called": False, "ok": False,
+        "http_status": None, "detail": "", "latency_ms": None,
+    }
+    if not k:
+        info["detail"] = ("OPENAI_API_KEY is missing/empty in this environment. "
+                          "On Railway: add it to THIS service's Variables (exact name "
+                          "OPENAI_API_KEY) and redeploy.")
+        _stats["openai_status"] = "no key"
+        return info
+    try:
+        t0 = time.time()
+        resp = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {k}", "Content-Type": "application/json"},
+            json={"model": OPENAI_MODEL, "messages": [{"role": "user", "content": "ping"}],
+                  "max_tokens": 1},
+            timeout=30,
+        )
+        info["called"] = True
+        info["http_status"] = resp.status_code
+        info["latency_ms"] = int((time.time() - t0) * 1000)
+        if resp.status_code == 200:
+            info["ok"] = True
+            info["detail"] = "OpenAI key is valid and working."
+            _stats["openai_status"] = "ok"
+        else:
+            try:
+                err = (resp.json().get("error") or {})
+                info["detail"] = (f"{err.get('code') or err.get('type') or ''}: "
+                                  f"{err.get('message') or ''}")[:400]
+            except Exception:
+                info["detail"] = resp.text[:400]
+            _stats["openai_status"] = ("401 — invalid OPENAI_API_KEY" if resp.status_code == 401
+                                       else f"HTTP {resp.status_code}")
+    except Exception as e:
+        info["detail"] = f"network error: {e}"[:400]
+        _stats["openai_status"] = f"error: {e}"
+    return info
+
+
 def pause() -> None:
     global _paused
     _paused = True
@@ -275,7 +339,14 @@ def analyze_with_openai(company: str, domain: str, crawl_text: str,
     if not api_key:
         return _fallback("OPENAI_API_KEY not set — showing Apollo data only")
     if not crawl_text and not apollo:
-        return {**_empty_sheet(), "_note": "no website text or Apollo data to analyse"}
+        # Nothing to analyse (site uncrawlable + not in Apollo). Give a minimal
+        # company/domain stub so it isn't blank, and mark it 'no-data' so the
+        # backfill never loops on it (re-analysis can't help without data).
+        stub = _basic_summary(company, domain, apollo, crawl_text)
+        stub["_source"] = "no-data"
+        stub["_note"] = ("Website couldn't be crawled and no Apollo record exists for this "
+                         "domain — no data to build an AI summary from.")
+        return stub
     ap = apollo or {}
     ctx = {
         "company": company or domain,
@@ -369,7 +440,7 @@ def _enrich_one(lead: Dict[str, Any]) -> None:
             _set_current(pages=n, pages_total=total, page_url=url)
         crawl = crawl_site(domain, progress=_prog)
         apollo_key = os.environ.get("APOLLO_API_KEY", "")
-        openai_key = os.environ.get("OPENAI_API_KEY", "")
+        openai_key = _openai_key()
         _set_current(phase="apollo")
         apollo = apollo_org_full(domain, apollo_key)
         _set_current(phase="analyzing")
@@ -410,7 +481,7 @@ def _backfill_failed_ai(db) -> bool:
         _set_current(phase="analyzing", lead_id=int(ids[0]), domain="", company="",
                      pages=0, pages_total=0, page_url="(re-analysing stored data)",
                      started=time.time())
-        _reanalyze_one(int(ids[0]), os.environ.get("OPENAI_API_KEY", ""))
+        _reanalyze_one(int(ids[0]), _openai_key())
         _stats["last"] = f"AI backfill: lead {ids[0]}"
         return True
     except Exception as e:
@@ -421,6 +492,21 @@ def _backfill_failed_ai(db) -> bool:
 def _loop(is_busy: Callable[[], bool]) -> None:
     import db
     log.info("enrichment worker started (poll=%ss, max_pages=%s)", POLL_SECONDS, MAX_PAGES)
+    # Probe OpenAI at startup so health is known deterministically (not just as a
+    # side effect of a crawl) — and log it loudly so it's visible in Railway logs.
+    _last_probe = [0.0]
+    def _probe(reason=""):
+        try:
+            p = openai_health_probe()
+            _last_probe[0] = time.time()
+            log.warning("OPENAI PROBE%s: present=%s clean_len=%s tail=%s had_quotes=%s had_ws=%s "
+                        "http=%s ok=%s — %s", (" ("+reason+")") if reason else "",
+                        p.get("present"), p.get("clean_len"), p.get("key_tail"),
+                        p.get("had_quotes"), p.get("had_whitespace"), p.get("http_status"),
+                        p.get("ok"), p.get("detail"))
+        except Exception as e:
+            log.warning("OpenAI probe failed: %s", e)
+    _probe("startup")
     # Initial backfill so existing leads get queued.
     try:
         added = db.LeadEnrichmentRepo.backfill_pending()
@@ -443,6 +529,11 @@ def _loop(is_busy: Callable[[], bool]) -> None:
                         db.LeadEnrichmentRepo.backfill_pending()
                     except Exception:
                         pass
+                # If OpenAI isn't known-healthy, re-probe every ~3 min so a key
+                # fixed on Railway (without a redeploy) is picked up automatically
+                # and the backfill switches into upgrade mode on its own.
+                if _stats.get("openai_status") != "ok" and (time.time() - _last_probe[0]) > 180:
+                    _probe("periodic")
                 # No fresh crawl work → adaptively backfill AI cheat-sheets for
                 # already-crawled leads whose AI failed. When OpenAI is healthy we
                 # also UPGRADE Apollo-fallback summaries to the full AI version;
@@ -510,7 +601,7 @@ def reanalyze(lead_ids) -> None:
     backfill leads whose AI failed earlier (e.g. a bad OpenAI key) once a valid
     key is set. Runs detached so the HTTP request returns instantly."""
     def _run():
-        openai_key = os.environ.get("OPENAI_API_KEY", "")
+        openai_key = _openai_key()
         n = 0
         for lid in (lead_ids or []):
             try:

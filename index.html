@@ -4249,6 +4249,10 @@ function MyDayView({user,onOpenLead}){
 function CrawlerView({onOpenLead}){
   const [s,setS]=useState(null); const [msg,setMsg]=useState('');
   const [bucket,setBucket]=useState(null); const [rows,setRows]=useState([]); const [rowsLoading,setRowsLoading]=useState(false);
+  const [probe,setProbe]=useState(null); const [probing,setProbing]=useState(false);
+  const testKey=async()=>{ setProbing(true); setProbe(null);
+    const d=await apiJSON('/api/crawler/openai-test',{method:'POST',body:'{}'});
+    setProbing(false); setProbe((d&&d.probe)||{error:(d&&d.error)||'failed'}); load(); };
   const load=async()=>{ const d=await apiJSON('/api/crawler/status'); if(d&&!d.__status)setS(d); };
   useEffect(()=>{ load(); const t=setInterval(load,2500); return()=>clearInterval(t); },[]);
   const act=async(path,label)=>{ const d=await apiJSON('/api/crawler/'+path,{method:'POST',body:'{}'});
@@ -4344,7 +4348,24 @@ function CrawlerView({onOpenLead}){
           : <button onClick={()=>act('pause','Paused.')} style={{padding:'9px 16px',background:'var(--amber)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>⏸ Pause</button>}
         <button onClick={()=>act('retry-errored','Re-queued errored leads.')} style={{padding:'9px 16px',background:'var(--sf)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:8,fontWeight:600,cursor:'pointer'}}>↻ Retry errored / stuck</button>
         <button onClick={()=>act('reanalyze','Re-analysis started.')} title="Re-run the AI summary for leads whose AI failed (reuses crawled data; no re-crawl). Use after fixing the OpenAI key." style={{padding:'9px 16px',background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>↺ Re-analyse failed leads</button>
+        <button onClick={testKey} disabled={probing} title="Live test of the OpenAI key inside this deployment — shows whether it's present and what OpenAI returns." style={{padding:'9px 16px',background:'var(--violet)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:probing?'wait':'pointer'}}>{probing?'Testing…':'🔑 Test OpenAI key'}</button>
       </div>
+      {probe&&<div style={{marginTop:12,padding:'12px 14px',borderRadius:10,border:'1px solid '+(probe.ok?'var(--green)':'#EF4444'),background:'var(--sf)',fontSize:12.5}}>
+        {probe.error&&<div style={{color:'#EF4444'}}>Probe error: {probe.error}</div>}
+        {!probe.error&&<div>
+          <div style={{fontWeight:700,color:probe.ok?'var(--green)':'#EF4444',marginBottom:6}}>{probe.ok?'✓ OpenAI key is valid and working':('✕ OpenAI not working'+(probe.http_status?(' (HTTP '+probe.http_status+')'):''))}</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:'4px 16px',color:'var(--t2)'}}>
+            <span>Key present: <b style={{color:probe.present?'var(--green)':'#EF4444'}}>{probe.present?'yes':'NO'}</b></span>
+            <span>Key length: <b>{probe.clean_len}</b></span>
+            <span>Key tail: <b style={{fontFamily:'var(--mono)'}}>{probe.key_tail?('…'+probe.key_tail):'—'}</b></span>
+            <span>HTTP: <b>{probe.http_status||'—'}</b></span>
+            {probe.had_quotes&&<span style={{color:'var(--amber)'}}>⚠ had surrounding quotes (auto-stripped)</span>}
+            {probe.had_whitespace&&<span style={{color:'var(--amber)'}}>⚠ had stray whitespace (auto-stripped)</span>}
+          </div>
+          {probe.detail&&<div style={{marginTop:6,color:'var(--t1)'}}>{probe.detail}</div>}
+          {!probe.present&&<div style={{marginTop:6,color:'var(--t3)'}}>On Railway: add <b>OPENAI_API_KEY</b> to <b>this service's</b> Variables (exact name), then redeploy. Confirm the key tail above matches what you pasted.</div>}
+        </div>}
+      </div>}
     </div>
   </div>);
 }
