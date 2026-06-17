@@ -3492,12 +3492,43 @@ function LDSection({title,children,accent}){
     {children}
   </div>);
 }
+/* Coerce ANY value (string / number / object / array) into displayable text, so
+   AI/Apollo fields that arrive as objects (e.g. objections as {objection,rebuttal})
+   can never crash a render with "Objects are not valid as a React child". */
+function _txt(x){
+  if(x===null||x===undefined) return '';
+  if(typeof x==='string'||typeof x==='number'||typeof x==='boolean') return String(x);
+  if(Array.isArray(x)) return x.map(_txt).filter(Boolean).join(', ');
+  if(typeof x==='object'){
+    if(x.objection||x.rebuttal) return [x.objection,x.rebuttal].filter(Boolean).map(_txt).join(' — ');
+    if(x.point||x.text||x.title||x.name) return _txt(x.point||x.text||x.title||x.name);
+    const vals=Object.values(x).filter(v=>typeof v==='string'||typeof v==='number');
+    if(vals.length) return vals.map(String).join(' — ');
+    try{ return JSON.stringify(x); }catch(e){ return String(x); }
+  }
+  return String(x);
+}
 function LDChips({items,color}){
   if(!items||!items.length) return null;
   return(<div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:4}}>
     {items.map((x,i)=>(<span key={i} style={{background:'var(--bg)',border:'1px solid var(--bd)',
-      color:color||'var(--t2)',borderRadius:20,padding:'3px 11px',fontSize:12}}>{x}</span>))}
+      color:color||'var(--t2)',borderRadius:20,padding:'3px 11px',fontSize:12}}>{_txt(x)}</span>))}
   </div>);
+}
+/* Catches any render error in a view and shows a message instead of blanking the
+   whole SPA. Keyed by nav so it resets when you navigate elsewhere. */
+class ErrorBoundary extends React.Component{
+  constructor(p){ super(p); this.state={err:null}; }
+  static getDerivedStateFromError(err){ return {err}; }
+  componentDidCatch(err,info){ try{ console.error('View render error:',err,info); }catch(e){} }
+  render(){
+    if(this.state.err) return(<div style={{padding:24}}>
+      <div style={{color:'#EF4444',fontWeight:700,fontSize:15,marginBottom:8}}>This view hit a rendering error.</div>
+      <div style={{color:'var(--t3)',fontSize:13,marginBottom:14,whiteSpace:'pre-wrap',maxWidth:700}}>{String((this.state.err&&this.state.err.message)||this.state.err)}</div>
+      <button onClick={()=>this.setState({err:null})} style={{padding:'8px 16px',background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Retry</button>
+    </div>);
+    return this.props.children;
+  }
 }
 
 function LeadDetailView({leadId,onBack,user}){
@@ -3622,15 +3653,15 @@ function LeadDetailView({leadId,onBack,user}){
       </LDSection>
       <LDSection title="Tendencies & buying signals" accent="var(--violet)">
         {ai.tendencies&&<div style={{color:'var(--t1)',fontSize:13,lineHeight:1.5,marginBottom:8}}>{ai.tendencies}</div>}
-        {ai.buying_signals&&ai.buying_signals.length>0&&<ul style={ulSt}>{ai.buying_signals.map((t,i)=><li key={i}>{t}</li>)}</ul>}
+        {ai.buying_signals&&ai.buying_signals.length>0&&<ul style={ulSt}>{ai.buying_signals.map((t,i)=><li key={i}>{_txt(t)}</li>)}</ul>}
         {!ai.tendencies&&!(ai.buying_signals||[]).length&&<div style={{color:'var(--t3)',fontSize:13}}>—</div>}
       </LDSection>
       <LDSection title="On the call" accent="var(--blue)">
-        {ai.talking_points&&ai.talking_points.length>0&&<div><div style={lblSt}>Talking points</div><ul style={ulSt}>{ai.talking_points.map((t,i)=><li key={i}>{t}</li>)}</ul></div>}
-        {ai.pain_points&&ai.pain_points.length>0&&<div style={{marginTop:6}}><div style={lblSt}>Pain points</div><ul style={ulSt}>{ai.pain_points.map((t,i)=><li key={i}>{t}</li>)}</ul></div>}
-        {ai.objections&&ai.objections.length>0&&<div style={{marginTop:6}}><div style={lblSt}>Likely objections</div><ul style={ulSt}>{ai.objections.map((t,i)=><li key={i}>{t}</li>)}</ul></div>}
+        {ai.talking_points&&ai.talking_points.length>0&&<div><div style={lblSt}>Talking points</div><ul style={ulSt}>{ai.talking_points.map((t,i)=><li key={i}>{_txt(t)}</li>)}</ul></div>}
+        {ai.pain_points&&ai.pain_points.length>0&&<div style={{marginTop:6}}><div style={lblSt}>Pain points</div><ul style={ulSt}>{ai.pain_points.map((t,i)=><li key={i}>{_txt(t)}</li>)}</ul></div>}
+        {ai.objections&&ai.objections.length>0&&<div style={{marginTop:6}}><div style={lblSt}>Likely objections</div><ul style={ulSt}>{ai.objections.map((t,i)=><li key={i}>{_txt(t)}</li>)}</ul></div>}
         {ai.decision_maker_titles&&ai.decision_maker_titles.length>0&&<div style={{marginTop:6}}><div style={lblSt}>Ask for</div><LDChips items={ai.decision_maker_titles} color="var(--green)"/></div>}
-        {ai.icebreakers&&ai.icebreakers.length>0&&<div style={{marginTop:6}}><div style={lblSt}>Icebreakers</div><ul style={ulSt}>{ai.icebreakers.map((t,i)=><li key={i}>{t}</li>)}</ul></div>}
+        {ai.icebreakers&&ai.icebreakers.length>0&&<div style={{marginTop:6}}><div style={lblSt}>Icebreakers</div><ul style={ulSt}>{ai.icebreakers.map((t,i)=><li key={i}>{_txt(t)}</li>)}</ul></div>}
       </LDSection>
     </div>
 
@@ -4135,6 +4166,7 @@ function App({user, onLogout}){
         </div>
       </div>
 
+      <ErrorBoundary key={nav+':'+String(selectedLeadId)}>
       {nav==='generate'&&!isBde&&<GenerateView tab={tab} setTab={setTab} stats={stats} hasResults={hasResults} onGenerate={runGeneration} onCancel={cancelGeneration} loading={loading} auState={auState} setAuState={setAuState} cityTier={cityTier} setCityTier={setCityTier} city={city} setCity={setCity} industry={industry} setIndustry={setIndustry} indCountry={indCountry} setIndCountry={setIndCountry} maxLeads={maxLeads} setMaxLeads={setMaxLeads} minSearch={minSearch} setMinSearch={setMinSearch} minCpc={minCpc} setMinCpc={setMinCpc} enrich={enrich} setEnrich={setEnrich} serpOnly={serpOnly} setSerpOnly={setSerpOnly} nWorkers={nWorkers} setNWorkers={setNWorkers} onNav={setNav} phase={phase} logs={logs} progress={progress} counts={counts} theme={theme} industries={industries} auCities={auCities} topCsvText={topCsvText} partialCsvUrl={partialCsvUrl} liveCreditsDetails={liveCreditsDetails} creditsUsedThisRun={creditsUsedThisRun} liveJob={liveJob} realLeads={realLeads} runOutcome={runOutcome}/>}
       {nav==='database'&&!isBde&&<DatabaseView onOpenLead={(id)=>{setSelectedLeadId(id);setNav('lead-detail');}}/>}
       {nav==='cost'&&!isBde&&<CostView/>}
@@ -4149,6 +4181,7 @@ function App({user, onLogout}){
       {nav==='lead-detail'&&<LeadDetailView leadId={selectedLeadId} user={user} onBack={()=>setNav(isBde?'my-leads':'database')}/>}
       {/* 2026-06-04: mock placeholder views removed (Analytics/Heatmap/
           History/AI Intelligence/Pipeline/Schedule/Users/Settings). */}
+      </ErrorBoundary>
     </main>
 
     {/* Drawer hidden — progress shown inline on Generate view */}

@@ -327,6 +327,32 @@ def _basic_summary(company: str, domain: str, apollo: Dict[str, Any],
     return out
 
 
+def _one_str(v: Any) -> str:
+    """Flatten any value the model returns into readable text (the model sometimes
+    returns objects, e.g. an objection as {objection, rebuttal})."""
+    if v is None:
+        return ""
+    if isinstance(v, str):
+        return v
+    if isinstance(v, (int, float, bool)):
+        return str(v)
+    if isinstance(v, dict):
+        if v.get("objection") or v.get("rebuttal"):
+            return " — ".join(str(v[k]) for k in ("objection", "rebuttal") if v.get(k))
+        parts = [str(x) for x in v.values() if isinstance(x, (str, int, float))]
+        return " — ".join(parts) if parts else json.dumps(v, default=str)
+    if isinstance(v, list):
+        return ", ".join(_one_str(x) for x in v)
+    return str(v)
+
+
+def _str_list(v: Any) -> List[str]:
+    """Normalise a cheat-sheet array field into a clean list of strings."""
+    items = v if isinstance(v, list) else ([v] if v else [])
+    out = [_one_str(it).strip() for it in items]
+    return [s for s in out if s]
+
+
 def analyze_with_openai(company: str, domain: str, crawl_text: str,
                         apollo: Dict[str, Any], api_key: str) -> Dict[str, Any]:
     """Turn the crawled website text + Apollo data into a DETAILED but scannable
@@ -410,10 +436,9 @@ def analyze_with_openai(company: str, domain: str, crawl_text: str,
                 data = json.loads(content)
             except Exception:
                 return {**_basic_summary(company, domain, apollo, crawl_text), "summary": content[:2000]}
-            out = {k: data.get(k, "") for k in _CS_STR}
+            out = {k: _one_str(data.get(k, "")) for k in _CS_STR}
             for k in _CS_ARR:
-                v = data.get(k, [])
-                out[k] = v if isinstance(v, list) else ([v] if v else [])
+                out[k] = _str_list(data.get(k, []))
             return out
         _stats["openai_status"] = ("401 — invalid OPENAI_API_KEY"
                                    if resp.status_code == 401 else f"HTTP {resp.status_code}")
