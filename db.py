@@ -378,6 +378,8 @@ _SCHEMA_MIGRATIONS: Sequence[Tuple[str, str, str]] = (
     # backward-compatible — existing rows get NULL / 'unassigned' defaults.
     ("users",        "full_name",         "VARCHAR(128) NULL"),
     ("users",        "mobile_e164",       "VARCHAR(24) NULL"),
+    # 2026-06-17: BDE's 3CX extension/DN — the extension click-to-call rings.
+    ("users",        "threecx_ext",       "VARCHAR(16) NULL"),
     ("master_leads", "assigned_bde_id",   "INT UNSIGNED NULL"),
     ("master_leads", "assigned_by_id",    "INT UNSIGNED NULL"),
     ("master_leads", "assigned_at",       "DATETIME NULL"),
@@ -464,7 +466,7 @@ class UserRepo:
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT id, username, email, password_hash, role, full_name, "
-                    "mobile_e164, must_change_pw, is_active, last_login_at "
+                    "mobile_e164, threecx_ext, must_change_pw, is_active, last_login_at "
                     "FROM users WHERE username = %s AND is_active = 1",
                     (username,),
                 )
@@ -475,7 +477,7 @@ class UserRepo:
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT id, username, email, role, full_name, mobile_e164, "
+                    "SELECT id, username, email, role, full_name, mobile_e164, threecx_ext, "
                     "must_change_pw, is_active, last_login_at "
                     "FROM users WHERE id = %s",
                     (user_id,),
@@ -582,12 +584,17 @@ class UserRepo:
 
     @staticmethod
     def update_profile(user_id: int, full_name: Optional[str] = None,
-                       email: Optional[str] = None) -> None:
+                       email: Optional[str] = None, mobile_e164: Optional[str] = None,
+                       threecx_ext: Optional[str] = None) -> None:
         sets, params = [], []
         if full_name is not None:
             sets.append("full_name=%s"); params.append(full_name)
         if email is not None:
             sets.append("email=%s"); params.append(email)
+        if mobile_e164 is not None:
+            sets.append("mobile_e164=%s"); params.append(mobile_e164)
+        if threecx_ext is not None:
+            sets.append("threecx_ext=%s"); params.append(threecx_ext)
         if not sets:
             return
         params.append(user_id)

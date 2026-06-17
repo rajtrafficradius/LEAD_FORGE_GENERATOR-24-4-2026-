@@ -211,6 +211,37 @@ def _get_token() -> str:
     return ""
 
 
+def make_call(extension: str, destination: str) -> Dict[str, Any]:
+    """Click-to-call via the 3CX v20 Call Control API: rings the agent's own
+    extension (`extension`) and, on answer, dials `destination` (the lead's
+    number). The exact Call Control route differs by 3CX edition, so it's
+    configurable via THREECX_MAKECALL_PATH (use {dn} for the extension). No-op
+    with a clear reason until configured."""
+    if not is_pull_configured():
+        return {"ok": False, "reason": "3CX not configured "
+                "(set THREECX_PBX_URL, THREECX_APP_ID, THREECX_SECRET on Railway)"}
+    if not extension:
+        return {"ok": False, "reason": "no 3CX extension set for your user — add it in My Profile"}
+    if not destination:
+        return {"ok": False, "reason": "this lead has no phone number yet — add one first"}
+    token = _get_token()
+    if not token:
+        return {"ok": False, "reason": "could not obtain a 3CX token (check Client ID/secret)"}
+    path = os.environ.get("THREECX_MAKECALL_PATH", "/callcontrol/{dn}/makecall").replace("{dn}", str(extension))
+    try:
+        r = requests.post(
+            f"{_pbx_host()}{path}",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={"destination": destination, "reason": "LeadForge click-to-call"},
+            timeout=20,
+        )
+        if r.status_code in (200, 201, 202):
+            return {"ok": True, "detail": f"calling {destination} from ext {extension}…"}
+        return {"ok": False, "reason": f"3CX HTTP {r.status_code}", "body": r.text[:300]}
+    except Exception as e:
+        return {"ok": False, "reason": str(e)}
+
+
 def pull_recent_calls(limit: int = 100) -> Dict[str, Any]:
     """Pull recent CDR rows from the PBX and ingest them. Endpoint paths vary by
     3CX edition, so the exact CDR route is configurable via THREECX_CDR_PATH.

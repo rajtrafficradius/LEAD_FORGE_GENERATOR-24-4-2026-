@@ -54,6 +54,7 @@ class User(UserMixin):
         self.role: str = row.get("role", "user")
         self.full_name: str = row.get("full_name") or ""
         self.mobile_e164: str = row.get("mobile_e164") or ""
+        self.threecx_ext: str = row.get("threecx_ext") or ""
         self.must_change_pw: bool = bool(row.get("must_change_pw", 0))
         self._is_active: bool = bool(row.get("is_active", 1))
 
@@ -86,6 +87,7 @@ class User(UserMixin):
             "email": self.email,
             "full_name": getattr(self, "full_name", "") or "",
             "mobile_e164": getattr(self, "mobile_e164", "") or "",
+            "threecx_ext": getattr(self, "threecx_ext", "") or "",
             "must_change_pw": bool(getattr(self, "must_change_pw", False)),
         }
 

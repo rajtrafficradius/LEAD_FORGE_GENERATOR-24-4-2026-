@@ -2161,6 +2161,7 @@ function DatabaseView({onOpenLead}){
   const [q,setQ]=useState(''); const [qInput,setQInput]=useState('');
   const [fIndustry,setFIndustry]=useState(''); const [fStatus,setFStatus]=useState(''); const [fBde,setFBde]=useState('');
   const [industries,setIndustries]=useState([]); const [bdeList,setBdeList]=useState([]);
+  const [assignOpen,setAssignOpen]=useState(null); const [assignMsg,setAssignMsg]=useState('');
   const base=(typeof window!=='undefined'&&window.location.origin)||'';
   const load=useCallback(async ()=>{
     setLoading(true);setErr('');
@@ -2206,6 +2207,10 @@ function DatabaseView({onOpenLead}){
     apiJSON('/api/allocation/bdes').then(d=>{if(d&&d.bdes)setBdeList(d.bdes);});
   },[]);
   const csvHref=base+'/api/db/master-leads.csv?'+[q&&'q='+encodeURIComponent(q),fIndustry&&'industry='+encodeURIComponent(fIndustry),fStatus&&'status='+fStatus,fBde&&'bde_id='+fBde].filter(Boolean).join('&');
+  const assign=async(id,bdeId)=>{ setAssignOpen(null); if(!bdeId)return;
+    const d=await apiJSON('/api/leads/'+id+'/reassign',{method:'POST',body:JSON.stringify({bde_id:Number(bdeId)})});
+    if(d&&d.__status<400){ const b=bdeList.find(x=>String(x.id)===String(bdeId)); setAssignMsg('Assigned '+lfId(id)+' → '+((b&&b.username)||('BDE '+bdeId))); load(); }
+    else setAssignMsg('Assign failed: '+((d&&d.error)||'error')); };
   // Aggregates over the loaded page (cheap client-side roll-ups for the
   // header strip — exact, paginated, but reflect THIS page only).
   const agg=(()=>{
@@ -2307,12 +2312,13 @@ function DatabaseView({onOpenLead}){
             {(q||fIndustry||fStatus||fBde)&&<button className="btn-sm btn-ghost" onClick={()=>{setQ('');setQInput('');setFIndustry('');setFStatus('');setFBde('');setPage(1);}}>Clear</button>}
             <a className="btn-sm btn-green" href={csvHref} style={{marginLeft:'auto',textDecoration:'none'}}>⬇ Export CSV</a>
           </div>
+          {assignMsg&&<div style={{margin:'0 0 10px',padding:'7px 12px',borderRadius:8,background:'var(--sf)',border:'1px solid var(--bd)',color:'var(--t1)',fontSize:12.5}}>{assignMsg}</div>}
           <table className="rt">
             <thead><tr>
-              <th style={{width:34}}></th>
               <th>ID</th><th>Name</th><th>Company</th><th>Domain</th><th>Role</th>
               <th>Phone</th><th>Email</th><th>Status</th><th>BDE</th><th>Industry</th><th>Country</th>
               <th style={{textAlign:'right'}}>Cost/Lead</th>
+              <th style={{width:54,textAlign:'center'}}>Assign</th>
             </tr></thead>
             <tbody>
               {loading?(
@@ -2320,8 +2326,7 @@ function DatabaseView({onOpenLead}){
               ):leads.length===0?(
                 <tr><td colSpan="13" style={{textAlign:'center',padding:30,color:'var(--t3)'}}>No leads match — try clearing filters.</td></tr>
               ):leads.map(r=>(
-                <tr key={r.id}>
-                  <td><button title="Open full lead page" onClick={()=>onOpenLead&&onOpenLead(r.id)} style={{width:24,height:24,borderRadius:6,border:'1px solid var(--bd)',background:'var(--blue)',color:'#fff',cursor:'pointer',fontWeight:700,lineHeight:'1',fontSize:15}}>+</button></td>
+                <tr key={r.id} onClick={()=>onOpenLead&&onOpenLead(r.id)} style={{cursor:'pointer'}} title="Click anywhere to open full lead details">
                   <td style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--blue)'}}>{lfId(r.id)}</td>
                   <td style={{fontSize:12,color:'var(--t1)',fontWeight:600}}>{r.display_name||r.normalized_name||'—'}</td>
                   <td style={{fontSize:12}}>{r.company_name||'—'}</td>
@@ -2335,6 +2340,14 @@ function DatabaseView({onOpenLead}){
                   <td style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--t2)'}}>{r.country||'—'}</td>
                   {/* Blank for leads stored before the cost feature (null). */}
                   <td style={{textAlign:'right',fontFamily:'var(--mono)',fontSize:11,color:(r.cost_per_lead_usd!=null&&Number(r.cost_per_lead_usd)>0)?'var(--green)':'var(--t3)'}}>{(r.cost_per_lead_usd!=null&&Number(r.cost_per_lead_usd)>0)?('$'+Number(r.cost_per_lead_usd).toFixed(2)):''}</td>
+                  <td style={{textAlign:'center'}} onClick={e=>e.stopPropagation()}>
+                    {assignOpen===r.id
+                      ? <select autoFocus defaultValue="" onChange={e=>assign(r.id,e.target.value)} onBlur={()=>setAssignOpen(null)} style={{padding:'3px 4px',background:'var(--bg)',color:'var(--t1)',border:'1px solid var(--blue)',borderRadius:6,fontSize:11,maxWidth:96}}>
+                          <option value="" disabled>Pick BDE…</option>
+                          {bdeList.map(b=><option key={b.id} value={b.id}>{b.full_name||b.username}</option>)}
+                        </select>
+                      : <button title={r.assigned_bde_username?('Reassign (currently '+r.assigned_bde_username+')'):'Assign this lead to a BDE'} onClick={()=>setAssignOpen(r.id)} style={{width:24,height:24,borderRadius:6,border:'1px solid var(--bd)',background:r.assigned_bde_username?'var(--blue)':'var(--green)',color:'#fff',cursor:'pointer',fontWeight:700,lineHeight:'1',fontSize:15}}>+</button>}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -3538,6 +3551,7 @@ function LeadDetailView({leadId,onBack,user}){
   const [msg,setMsg]=useState('');
   const [notes,setNotes]=useState(''); const [outcome,setOutcome]=useState(''); const [fdate,setFdate]=useState('');
   const [editing,setEditing]=useState(false); const [ef,setEf]=useState({});
+  const [quickPhone,setQuickPhone]=useState('');
   const role=(user&&user.role)||'admin';
   const isMgrAdmin=role==='admin'||role==='manager';
   const load=async()=>{ const d=await apiJSON('/api/lead/'+leadId+'/full');
@@ -3562,6 +3576,12 @@ function LeadDetailView({leadId,onBack,user}){
   const saveEdit=async()=>{ const d=await apiJSON('/api/lead/'+leadId,{method:'PATCH',body:JSON.stringify(ef)});
     if(d&&d.ok){ setMsg('Lead details updated.'); setEditing(false); load(); } else setMsg('Edit failed: '+((d&&d.error)||'')); };
   const touch=(channel)=>{ try{ apiJSON('/api/lead/'+leadId+'/touch',{method:'POST',body:JSON.stringify({channel})}); }catch(e){} };
+  const savePhone=async()=>{ const v=(quickPhone||'').trim(); if(!v)return;
+    const d=await apiJSON('/api/lead/'+leadId,{method:'PATCH',body:JSON.stringify({phone_e164:v})});
+    if(d&&d.ok){ setMsg('Phone number saved.'); setQuickPhone(''); load(); } else setMsg('Could not save phone: '+((d&&d.error)||'')); };
+  const call3cx=async()=>{ setMsg('Dialing via 3CX…');
+    const d=await apiJSON('/api/3cx/call',{method:'POST',body:JSON.stringify({lead_id:leadId})});
+    if(d&&d.ok){ setMsg('3CX: '+(d.detail||'calling…')); touch('call'); } else setMsg('3CX: '+((d&&(d.error||d.reason))||'failed')); };
   const _digits=(s)=>String(s||'').replace(/[^0-9]/g,'');
   const backBtn=<button onClick={onBack} style={{padding:'7px 14px',background:'var(--sf)',color:'var(--t1)',
     border:'1px solid var(--bd)',borderRadius:8,cursor:'pointer',fontSize:13}}>← Back</button>;
@@ -3673,12 +3693,19 @@ function LeadDetailView({leadId,onBack,user}){
         <LDField label="Phone" value={lead.phone_e164} mono/>
         <LDField label="Email" value={lead.primary_email}/>
         <LDField label="LinkedIn" value={lead.linkedin_url}/>
+        {/* Quick add / update phone — so a BDE can add the number in one step */}
+        <div style={{display:'flex',gap:6,marginTop:10,alignItems:'center'}}>
+          <input value={quickPhone} onChange={e=>setQuickPhone(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')savePhone();}}
+            placeholder={lead.phone_e164?('Update phone ('+lead.phone_e164+')'):'Add phone number e.g. +61…'}
+            style={{flex:'1 1 auto',minWidth:120,padding:'7px 10px',background:'var(--bg)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:8,fontSize:13}}/>
+          <button onClick={savePhone} style={{padding:'7px 12px',background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,fontSize:12,cursor:'pointer',whiteSpace:'nowrap'}}>Save</button>
+        </div>
         {/* Click-to-contact — opens the channel + logs the touch */}
-        <div style={{display:'flex',gap:8,marginTop:12,flexWrap:'wrap'}}>
+        <div style={{display:'flex',gap:8,marginTop:10,flexWrap:'wrap'}}>
+          {lead.phone_e164&&<button onClick={call3cx} title="Place the call through 3CX (rings your extension first)" style={{padding:'8px 14px',background:'var(--violet)',color:'#fff',border:0,borderRadius:8,fontWeight:700,fontSize:13,cursor:'pointer'}}>☎ Call via 3CX</button>}
           {lead.phone_e164&&<a href={'tel:'+_digits(lead.phone_e164)} onClick={()=>touch('call')} style={{padding:'8px 14px',background:'var(--green)',color:'#fff',borderRadius:8,fontWeight:700,fontSize:13,textDecoration:'none'}}>📞 Call</a>}
           {lead.phone_e164&&<a href={'https://wa.me/'+_digits(lead.phone_e164)} target="_blank" rel="noopener noreferrer" onClick={()=>touch('whatsapp')} style={{padding:'8px 14px',background:'#25D366',color:'#fff',borderRadius:8,fontWeight:700,fontSize:13,textDecoration:'none'}}>WhatsApp</a>}
           {lead.primary_email&&<a href={'mailto:'+lead.primary_email} onClick={()=>touch('email')} style={{padding:'8px 14px',background:'var(--blue)',color:'#fff',borderRadius:8,fontWeight:700,fontSize:13,textDecoration:'none'}}>✉ Email</a>}
-          {!lead.phone_e164&&!lead.primary_email&&<span style={{color:'var(--t3)',fontSize:12}}>No phone/email yet — add via Edit details.</span>}
         </div>
       </LDSection>
       <LDSection title="Company details (Apollo free data)" accent="var(--violet)">
@@ -4219,10 +4246,12 @@ const _crmInp={padding:'10px 12px',background:'var(--bg)',color:'var(--t1)',bord
 function MyProfileView({user}){
   const [name,setName]=useState(user.full_name||'');
   const [mobile,setMobile]=useState(user.mobile_e164||'');
+  const [ext,setExt]=useState(user.threecx_ext||'');
   const [pw,setPw]=useState(''); const [pw2,setPw2]=useState('');
   const [msg,setMsg]=useState('');
   const saveName=async()=>{ const d=await apiJSON('/api/me/profile',{method:'POST',body:JSON.stringify({full_name:name})}); setMsg(d&&d.ok?'Profile saved.':'Error'); };
   const saveMobile=async()=>{ const d=await apiJSON('/api/me/mobile',{method:'POST',body:JSON.stringify({mobile_e164:mobile.trim()})}); setMsg(d&&d.ok?'Mobile saved.':'Error'); };
+  const saveExt=async()=>{ const d=await apiJSON('/api/me/profile',{method:'POST',body:JSON.stringify({threecx_ext:ext.trim()})}); setMsg(d&&d.ok?'3CX extension saved.':'Error'); };
   const savePw=async()=>{ if(pw.length<6){setMsg('Password must be at least 6 characters.');return;} if(pw!==pw2){setMsg('Passwords do not match.');return;}
     const d=await apiJSON('/api/me/password',{method:'POST',body:JSON.stringify({password:pw})}); if(d&&d.ok){setMsg('Password changed.');setPw('');setPw2('');} else setMsg('Error: '+((d&&d.error)||'failed')); };
   return(<div style={{padding:'4px 2px',maxWidth:520}}>
@@ -4239,6 +4268,12 @@ function MyProfileView({user}){
       <input style={{..._crmInp,width:'100%',maxWidth:300,marginBottom:8}} placeholder="+61400000000" value={mobile} onChange={e=>setMobile(e.target.value)}/>
       <div><button onClick={saveMobile} style={{padding:'9px 16px',background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Save mobile</button></div>
     </div>}
+    <div className="card" style={{padding:18,marginBottom:14}}>
+      <div style={{fontWeight:700,color:'var(--t1)',marginBottom:4}}>My 3CX extension</div>
+      <div style={{color:'var(--t3)',fontSize:12,marginBottom:8}}>Your 3CX extension / DN. "Call via 3CX" on a lead rings this extension first, then dials the lead.</div>
+      <input style={{..._crmInp,width:'100%',maxWidth:300,marginBottom:8}} placeholder="e.g. 1001" value={ext} onChange={e=>setExt(e.target.value)}/>
+      <div><button onClick={saveExt} style={{padding:'9px 16px',background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Save extension</button></div>
+    </div>
     <div className="card" style={{padding:18}}>
       <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>Change password</div>
       <input style={{..._crmInp,width:'100%',marginBottom:8}} type="password" placeholder="New password" value={pw} onChange={e=>setPw(e.target.value)}/>

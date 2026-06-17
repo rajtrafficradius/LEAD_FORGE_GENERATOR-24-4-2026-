@@ -890,8 +890,44 @@ def api_me_profile():
         return jsonify({"error": "not logged in"}), 401
     d = request.get_json(silent=True) or {}
     try:
-        db.UserRepo.update_profile(uid, full_name=d.get("full_name"))
+        db.UserRepo.update_profile(uid, full_name=d.get("full_name"),
+                                   mobile_e164=d.get("mobile_e164"),
+                                   threecx_ext=d.get("threecx_ext"))
         return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/3cx/call", methods=["POST"])
+@login_required_json
+def api_3cx_call():
+    """Click-to-call: ring the current user's 3CX extension, then dial the lead.
+    Inert (clear reason) until 3CX creds are set on Railway."""
+    lead_id = (request.get_json(silent=True) or {}).get("lead_id")
+    try:
+        lead_id = int(lead_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "lead_id required"}), 400
+    if not _lead_access_ok(lead_id):
+        return jsonify({"error": "forbidden"}), 403
+    try:
+        phone = ""
+        with db.get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT phone_e164 FROM master_leads WHERE id=%s", (lead_id,))
+                phone = ((cur.fetchone() or {}).get("phone_e164")) or ""
+        ext = (db.UserRepo.get_by_id(_current_uid()) or {}).get("threecx_ext") or ""
+        import threecx
+        res = threecx.make_call(ext, phone)
+        try:
+            db.AuditRepo.log(_current_uid(), _current_username(),
+                             "3cx_call" if res.get("ok") else "3cx_call_failed",
+                             (res.get("detail") or res.get("reason") or "")[:160], lead_id)
+        except Exception:
+            pass
+        if res.get("ok"):
+            return jsonify(res)
+        return jsonify({**res, "error": res.get("reason")}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
