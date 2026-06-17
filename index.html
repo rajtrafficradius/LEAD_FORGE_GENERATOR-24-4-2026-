@@ -4253,7 +4253,7 @@ function CrawlerView({onOpenLead}){
   const testKey=async()=>{ setProbing(true); setProbe(null);
     const d=await apiJSON('/api/crawler/openai-test',{method:'POST',body:'{}'});
     setProbing(false); setProbe((d&&d.probe)||{error:(d&&d.error)||'failed'}); load(); };
-  const load=async()=>{ const d=await apiJSON('/api/crawler/status'); if(d&&!d.__status)setS(d); };
+  const load=async()=>{ const d=await apiJSON('/api/crawler/status'); if(d&&d.__status<400&&d.queue)setS(d); };
   useEffect(()=>{ load(); const t=setInterval(load,2500); return()=>clearInterval(t); },[]);
   const act=async(path,label)=>{ const d=await apiJSON('/api/crawler/'+path,{method:'POST',body:'{}'});
     setMsg(d&&(d.ok)?(label+(d.requeued!=null?(' ('+d.requeued+' re-queued)'):'')+(d.message?(' — '+d.message):'')):'Error'); load(); };
@@ -4283,7 +4283,7 @@ function CrawlerView({onOpenLead}){
     <div className="card" style={{padding:18,marginBottom:14}}>
       <div style={{display:'flex',alignItems:'center',marginBottom:14}}>
         <div style={{fontWeight:700,color:'var(--t1)'}}>Enrichment crawler</div>
-        <span style={{marginLeft:10,fontSize:12,fontWeight:700,color:w.paused?'var(--amber)':'var(--green)'}}>{w.paused?'PAUSED':'RUNNING'}</span>
+        <span style={{marginLeft:10,fontSize:12,fontWeight:700,color:!s?'var(--t3)':(w.paused?'var(--amber)':'var(--green)')}}>{!s?'CONNECTING…':(w.paused?'PAUSED':'RUNNING')}</span>
       </div>
       {/* live progress bar */}
       <div style={{marginBottom:16}}>
@@ -4372,7 +4372,7 @@ function CrawlerView({onOpenLead}){
 
 function KpiView(){
   const [k,setK]=useState(null); const [audit,setAudit]=useState([]);
-  useEffect(()=>{ apiJSON('/api/stats/kpis').then(d=>{if(d&&!d.__status)setK(d);}); apiJSON('/api/audit?limit=60').then(d=>{if(d&&d.events)setAudit(d.events);}); },[]);
+  useEffect(()=>{ apiJSON('/api/stats/kpis').then(d=>{if(d&&d.__status<400&&d.funnel)setK(d);}); apiJSON('/api/audit?limit=60').then(d=>{if(d&&d.events)setAudit(d.events);}); },[]);
   const f=(k&&k.funnel)||{}; const lb=(k&&k.leaderboard)||[]; const calls=(k&&k.calls)||{};
   const td={padding:'8px 10px',borderBottom:'1px solid var(--bd)',color:'var(--t1)',fontSize:13};
   const th={textAlign:'left',padding:'8px 10px',color:'var(--t3)',fontSize:11,textTransform:'uppercase',borderBottom:'1px solid var(--bd)'};
