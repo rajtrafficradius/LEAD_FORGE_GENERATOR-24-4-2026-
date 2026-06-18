@@ -1263,6 +1263,18 @@ def api_3cx_sync():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/3cx/status", methods=["GET", "POST"])
+@manager_or_admin_required
+def api_3cx_status():
+    """Live 3CX connectivity check from inside the deployment: PBX reachable,
+    OAuth token obtainable, and which scopes (XAPI / Call Control) are enabled."""
+    try:
+        import threecx
+        return jsonify(threecx.test_connection())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/me/mobile", methods=["POST"])
 @login_required_json
 def api_me_mobile():

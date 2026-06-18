@@ -4252,6 +4252,9 @@ function MyProfileView({user}){
   const saveName=async()=>{ const d=await apiJSON('/api/me/profile',{method:'POST',body:JSON.stringify({full_name:name})}); setMsg(d&&d.ok?'Profile saved.':'Error'); };
   const saveMobile=async()=>{ const d=await apiJSON('/api/me/mobile',{method:'POST',body:JSON.stringify({mobile_e164:mobile.trim()})}); setMsg(d&&d.ok?'Mobile saved.':'Error'); };
   const saveExt=async()=>{ const d=await apiJSON('/api/me/profile',{method:'POST',body:JSON.stringify({threecx_ext:ext.trim()})}); setMsg(d&&d.ok?'3CX extension saved.':'Error'); };
+  const isMgr=user.role==='admin'||user.role==='manager';
+  const [tcx,setTcx]=useState(null); const [tcxBusy,setTcxBusy]=useState(false);
+  const test3cx=async()=>{ setTcxBusy(true); setTcx(null); const d=await apiJSON('/api/3cx/status'); setTcxBusy(false); setTcx((d&&d.__status<400)?d:{reason:(d&&d.error)||'request failed'}); };
   const savePw=async()=>{ if(pw.length<6){setMsg('Password must be at least 6 characters.');return;} if(pw!==pw2){setMsg('Passwords do not match.');return;}
     const d=await apiJSON('/api/me/password',{method:'POST',body:JSON.stringify({password:pw})}); if(d&&d.ok){setMsg('Password changed.');setPw('');setPw2('');} else setMsg('Error: '+((d&&d.error)||'failed')); };
   return(<div style={{padding:'4px 2px',maxWidth:520}}>
@@ -4273,6 +4276,17 @@ function MyProfileView({user}){
       <div style={{color:'var(--t3)',fontSize:12,marginBottom:8}}>Your 3CX extension / DN. "Call via 3CX" on a lead rings this extension first, then dials the lead.</div>
       <input style={{..._crmInp,width:'100%',maxWidth:300,marginBottom:8}} placeholder="e.g. 1001" value={ext} onChange={e=>setExt(e.target.value)}/>
       <div><button onClick={saveExt} style={{padding:'9px 16px',background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Save extension</button></div>
+      {isMgr&&<div style={{marginTop:14,borderTop:'1px solid var(--bd)',paddingTop:12}}>
+        <button onClick={test3cx} disabled={tcxBusy} title="Verify the 3CX credentials + PBX URL from inside the server" style={{padding:'8px 14px',background:'var(--violet)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:tcxBusy?'wait':'pointer'}}>{tcxBusy?'Testing…':'Test 3CX connection'}</button>
+        {tcx&&<div style={{marginTop:10,fontSize:12.5,color:'var(--t2)',lineHeight:1.7}}>
+          <div>PBX URL: <b style={{color:tcx.pbx_url?'var(--t1)':'#EF4444'}}>{tcx.pbx_url||'NOT SET'}</b></div>
+          <div>Client ID: <b style={{color:tcx.app_id?'var(--t1)':'#EF4444'}}>{tcx.app_id||'NOT SET'}</b> · secret: <b style={{color:tcx.secret_present?'var(--green)':'#EF4444'}}>{tcx.secret_present?'set':'NOT SET'}</b></div>
+          <div>OAuth token: <b style={{color:tcx.token?'var(--green)':'#EF4444'}}>{tcx.token?'obtained ✓':'failed'}</b></div>
+          {tcx.xapi_http!=null&&<div>XAPI / call logs: <b style={{color:String(tcx.xapi_http)==='200'?'var(--green)':'var(--amber)'}}>HTTP {String(tcx.xapi_http)}</b></div>}
+          {tcx.callcontrol_http!=null&&<div>Call Control / dialing: <b style={{color:tcx.callcontrol_enabled?'var(--green)':'var(--amber)'}}>HTTP {String(tcx.callcontrol_http)}{tcx.callcontrol_enabled?' ✓':''}</b>{!tcx.callcontrol_enabled&&<span style={{color:'var(--amber)'}}> — enable Call Control API + select extensions in 3CX</span>}</div>}
+          {tcx.reason&&<div style={{color:'#EF4444',marginTop:4}}>{tcx.reason}</div>}
+        </div>}
+      </div>}
     </div>
     <div className="card" style={{padding:18}}>
       <div style={{fontWeight:700,color:'var(--t1)',marginBottom:10}}>Change password</div>

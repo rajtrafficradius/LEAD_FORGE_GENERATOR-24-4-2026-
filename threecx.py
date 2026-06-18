@@ -191,32 +191,72 @@ def is_pull_configured() -> bool:
                 and os.environ.get("THREECX_SECRET"))
 
 
+_token_cache: Dict[str, Any] = {"token": "", "exp": 0.0}
+
+
 def _get_token() -> str:
-    """3CX v20 OAuth client-credentials token. Returns '' if unconfigured/fails."""
+    """3CX v20 OAuth client-credentials token (cached ~the hour it's valid).
+    Returns '' if unconfigured/fails."""
     if not is_pull_configured():
         return ""
+    import time as _t
+    if _token_cache["token"] and _t.time() < _token_cache["exp"]:
+        return _token_cache["token"]
     try:
         r = requests.post(
             f"{_pbx_host()}/connect/token",
             data={"grant_type": "client_credentials",
                   "client_id": os.environ.get("THREECX_APP_ID", ""),
                   "client_secret": os.environ.get("THREECX_SECRET", "")},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
             timeout=20,
         )
         if r.status_code == 200:
-            return r.json().get("access_token", "") or ""
+            j = r.json()
+            tok = j.get("access_token", "") or ""
+            exp = int(j.get("expires_in", 3600) or 3600)
+            _token_cache["token"] = tok
+            _token_cache["exp"] = _t.time() + max(60, exp - 60)  # refresh a min early
+            return tok
         log.warning("3CX token HTTP %s: %s", r.status_code, r.text[:200])
     except Exception as e:
         log.warning("3CX token error: %s", e)
     return ""
 
 
+def _device_id(dev: Dict[str, Any]) -> str:
+    for k in ("device_id", "deviceId", "dummy_id", "id", "dn"):
+        if isinstance(dev, dict) and dev.get(k) not in (None, ""):
+            return str(dev[k])
+    return ""
+
+
+def get_devices(dn: str, token: str) -> list:
+    """GET /callcontrol/{dn} → that extension's registered devices (each carries a
+    device_id needed for make-call). v20 Call Control API."""
+    try:
+        r = requests.get(
+            f"{_pbx_host()}/callcontrol/{dn}",
+            headers={"Authorization": f"Bearer {token}"}, timeout=20,
+        )
+        if r.status_code == 200:
+            data = r.json()
+            devs = data.get("devices") if isinstance(data, dict) else data
+            return devs or []
+        log.debug("get_devices(%s) HTTP %s: %s", dn, r.status_code, r.text[:200])
+    except Exception as e:
+        log.debug("get_devices(%s) failed: %s", dn, e)
+    return []
+
+
 def make_call(extension: str, destination: str) -> Dict[str, Any]:
-    """Click-to-call via the 3CX v20 Call Control API: rings the agent's own
-    extension (`extension`) and, on answer, dials `destination` (the lead's
-    number). The exact Call Control route differs by 3CX edition, so it's
-    configurable via THREECX_MAKECALL_PATH (use {dn} for the extension). No-op
-    with a clear reason until configured."""
+    """Click-to-call via the 3CX v20 Call Control API. Flow:
+      1. OAuth token (cached).
+      2. GET /callcontrol/{dn} → find a registered device for the agent extension.
+      3. POST /callcontrol/{dn}/devices/{deviceId}/makecall {reason,destination,timeout}
+         → rings the agent's device, then dials the lead on answer (HTTP 202).
+    Path overridable via THREECX_MAKECALL_PATH (use {dn} and {device}); a fixed
+    device can be forced via THREECX_DEVICE_ID. Clear reason returned until set."""
     if not is_pull_configured():
         return {"ok": False, "reason": "3CX not configured "
                 "(set THREECX_PBX_URL, THREECX_APP_ID, THREECX_SECRET on Railway)"}
@@ -226,20 +266,68 @@ def make_call(extension: str, destination: str) -> Dict[str, Any]:
         return {"ok": False, "reason": "this lead has no phone number yet — add one first"}
     token = _get_token()
     if not token:
-        return {"ok": False, "reason": "could not obtain a 3CX token (check Client ID/secret)"}
-    path = os.environ.get("THREECX_MAKECALL_PATH", "/callcontrol/{dn}/makecall").replace("{dn}", str(extension))
+        return {"ok": False, "reason": "could not obtain a 3CX token (check Client ID/secret + that Call Control API access is enabled)"}
+    device_id = os.environ.get("THREECX_DEVICE_ID", "")
+    if not device_id:
+        devs = get_devices(extension, token)
+        if devs:
+            device_id = _device_id(devs[0])
+    if not device_id:
+        return {"ok": False, "reason": f"no registered device found for extension {extension} — "
+                "the extension must be online (3CX app/softphone/desk phone registered), and the "
+                "extension must be in the API app's 'Select Extensions' list"}
+    path = (os.environ.get("THREECX_MAKECALL_PATH", "/callcontrol/{dn}/devices/{device}/makecall")
+            .replace("{dn}", str(extension)).replace("{device}", str(device_id)))
     try:
         r = requests.post(
             f"{_pbx_host()}{path}",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={"destination": destination, "reason": "LeadForge click-to-call"},
+            json={"reason": "LeadForge click-to-call", "destination": str(destination),
+                  "timeout": int(os.environ.get("THREECX_CALL_TIMEOUT", "30") or "30")},
             timeout=20,
         )
         if r.status_code in (200, 201, 202):
-            return {"ok": True, "detail": f"calling {destination} from ext {extension}…"}
+            return {"ok": True, "detail": f"ringing ext {extension} → {destination}…", "device": device_id}
         return {"ok": False, "reason": f"3CX HTTP {r.status_code}", "body": r.text[:300]}
     except Exception as e:
         return {"ok": False, "reason": str(e)}
+
+
+def test_connection() -> Dict[str, Any]:
+    """Verify the 3CX credentials from inside the deployment: PBX reachable, token
+    obtainable, and which API scopes work (XAPI users, Call Control). The one-click
+    'is 3CX wired up?' check for the admin."""
+    out: Dict[str, Any] = {"pbx_url": _pbx_host(), "app_id": os.environ.get("THREECX_APP_ID", ""),
+                           "secret_present": bool(os.environ.get("THREECX_SECRET")),
+                           "configured": is_pull_configured(), "token": False}
+    if not _pbx_host():
+        out["reason"] = "THREECX_PBX_URL not set (the address you log into 3CX with)"
+        return out
+    if not out["configured"]:
+        out["reason"] = "THREECX_APP_ID and/or THREECX_SECRET not set"
+        return out
+    token = _get_token()
+    out["token"] = bool(token)
+    if not token:
+        out["reason"] = "token request failed — check Client ID/secret and that the PBX URL is correct"
+        return out
+    # XAPI (Configuration API) probe — confirms reporting/CDR access.
+    try:
+        r = requests.get(f"{_pbx_host()}/xapi/v1/Users?$top=1",
+                         headers={"Authorization": f"Bearer {token}"}, timeout=20)
+        out["xapi_http"] = r.status_code
+    except Exception as e:
+        out["xapi_http"] = f"err: {e}"
+    # Call Control probe — confirms dialing access is enabled.
+    try:
+        r = requests.get(f"{_pbx_host()}/callcontrol",
+                         headers={"Authorization": f"Bearer {token}"}, timeout=20)
+        out["callcontrol_http"] = r.status_code
+        out["callcontrol_enabled"] = (r.status_code == 200)
+    except Exception as e:
+        out["callcontrol_http"] = f"err: {e}"
+    out["ok"] = bool(token)
+    return out
 
 
 def pull_recent_calls(limit: int = 100) -> Dict[str, Any]:
@@ -252,12 +340,13 @@ def pull_recent_calls(limit: int = 100) -> Dict[str, Any]:
     token = _get_token()
     if not token:
         return {"ok": False, "reason": "could not obtain 3CX token"}
-    path = os.environ.get("THREECX_CDR_PATH", "/xapi/v1/ReportCallLogData")
+    # v20 XAPI call-history view (OData). Overridable via THREECX_CDR_PATH.
+    path = os.environ.get("THREECX_CDR_PATH", "/xapi/v1/CallHistoryView")
     try:
         r = requests.get(
             f"{_pbx_host()}{path}",
             headers={"Authorization": f"Bearer {token}"},
-            params={"$top": int(limit)}, timeout=40,
+            params={"$top": int(limit), "$orderby": "StartTime desc"}, timeout=40,
         )
         if r.status_code != 200:
             return {"ok": False, "reason": f"CDR HTTP {r.status_code}", "body": r.text[:300]}
