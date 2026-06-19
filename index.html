@@ -719,6 +719,128 @@ body{background:radial-gradient(1200px 620px at 16% -10%,rgba(75,184,217,0.08),t
 [data-theme="dark"] .card,[data-theme="dark"] .kpi,[data-theme="dark"] .crd,[data-theme="dark"] .rsi-card,[data-theme="dark"] .intel-strip-item,[data-theme="dark"] .kanban-col{background-image:linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0) 58%)}
 .sb,.topbar{border-color:rgba(132,192,222,0.18)}
 
+/* ═══════════════ HAULIX REDESIGN — monochrome bubbly dark system (2026-06) ═══════════════
+   Replicates the Haulix / Phenomenon aesthetic: near-black canvas, bubbly rounded
+   tiles, monochrome black/white with ONE lime accent + semantic status pills,
+   macOS (SF Pro) type, card-row tables, frosted chrome & spring view transitions.
+   Overrides the layer above via the cascade. Class names, handlers, buttons and
+   ALL functionality are unchanged — visual only. */
+:root{
+  --sans:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Segoe UI Variable Display','Segoe UI','Helvetica Neue',Inter,system-ui,sans-serif;
+  --r:16px;--r-lg:22px;--ease:cubic-bezier(0.22,1,0.36,1);--spring:cubic-bezier(0.34,1.56,0.64,1);
+  --accent:#c8f250;--accent-ink:#172408;
+  --bg:#08090c;--sf:#15161c;--sf2:#1d1f27;--sb:#0c0d11;--inp:#101116;
+  --bd:rgba(255,255,255,0.09);--bd2:rgba(255,255,255,0.055);
+  --b5:rgba(255,255,255,0.045);--b10:rgba(255,255,255,0.08);--b20:rgba(255,255,255,0.15);
+  --t1:#f5f6f8;--t2:rgba(245,246,248,0.6);--t3:rgba(245,246,248,0.38);--t4:rgba(245,246,248,0.16);
+  --glass:rgba(20,21,27,0.6);--glass-strong:rgba(13,14,18,0.82);--hair:rgba(255,255,255,0.08);--blur:saturate(150%) blur(24px);
+  --sh:0 1px 2px rgba(0,0,0,0.5),0 16px 40px -16px rgba(0,0,0,0.7);
+  --sh-lg:0 2px 6px rgba(0,0,0,0.5),0 40px 84px -24px rgba(0,0,0,0.82);
+}
+[data-theme="light"]{
+  --bg:#E7E8EC;--sf:#FFFFFF;--sf2:#F3F4F8;--sb:#FFFFFF;--inp:#FFFFFF;
+  --bd:rgba(15,18,28,0.1);--bd2:rgba(15,18,28,0.06);
+  --b5:rgba(15,18,28,0.04);--b10:rgba(15,18,28,0.07);--b20:rgba(15,18,28,0.14);
+  --t1:#0c0e14;--t2:#4a505c;--t3:#878d99;--t4:#c3c8d0;
+  --glass:rgba(255,255,255,0.72);--glass-strong:rgba(255,255,255,0.92);--hair:rgba(255,255,255,0.9);
+  --sh:0 1px 2px rgba(16,24,40,0.06),0 16px 36px -16px rgba(16,24,40,0.18);
+  --sh-lg:0 2px 6px rgba(16,24,40,0.06),0 40px 80px -24px rgba(16,24,40,0.26);
+}
+html,body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;letter-spacing:-0.012em}
+body{background:radial-gradient(135% 95% at 50% -28%,#121319 0%,var(--bg) 56%) fixed}
+[data-theme="light"] body{background:radial-gradient(135% 95% at 50% -28%,#FFFFFF 0%,#E7E8EC 60%) fixed}
+*{-webkit-tap-highlight-color:transparent}
+::selection{background:rgba(200,242,80,0.28);color:#fff}
+[data-theme="light"] ::selection{color:#0c0e14}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.14);border-radius:8px;border:2.5px solid transparent;background-clip:padding-box}
+[data-theme="light"] ::-webkit-scrollbar-thumb{background:rgba(15,18,28,0.2);background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.3);background-clip:padding-box}
+
+/* Display type — big, tight, macOS */
+.tb-title{font-size:26px;font-weight:700;letter-spacing:-0.8px}
+.tb-title em{color:var(--accent)!important;-webkit-text-fill-color:var(--accent)}
+.kpi-val,.rsi-val,.ds-num,.ls-n,.intel-strip-val{letter-spacing:-1px;font-family:var(--sans)!important;font-variant-numeric:tabular-nums}
+
+/* Sidebar — frosted, monochrome, WHITE active selection */
+.sb{background:var(--glass-strong);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border-right:1px solid var(--bd);box-shadow:none}
+.nav-item{border:1px solid transparent;border-left:0;border-radius:12px;color:var(--t2);transition:background .2s var(--ease),color .2s var(--ease),transform .2s var(--spring)}
+.nav-item:hover{background:var(--b5);color:var(--t1);transform:translateX(2px)}
+.nav-item.on{background:rgba(255,255,255,0.1);color:#fff;border:1px solid var(--b20);box-shadow:inset 0 1px 0 var(--hair)}
+[data-theme="light"] .nav-item.on{background:rgba(15,18,28,0.06);color:var(--t1)}
+.nav-item.on .nav-ic{opacity:1}
+.nav-badge{border-radius:999px;background:var(--b10);color:var(--t2);border:1px solid var(--bd)}
+.nav-item.on .nav-badge{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+
+/* Topbar — sticky frosted bar */
+.topbar{position:sticky;top:0;z-index:30;margin:0 -24px 22px;padding:16px 24px;background:var(--glass);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border-bottom:1px solid var(--bd)}
+.sp,.gen-form-card{top:92px}
+
+/* Tiles — bubbly, elevated, top-lit sheen */
+.card{border-radius:var(--r-lg);border:1px solid var(--bd);background:var(--sf);box-shadow:var(--sh);overflow:hidden;transition:transform .3s var(--ease),box-shadow .3s var(--ease),border-color .3s var(--ease)}
+.card::before{display:none!important}
+.card-p{padding:20px}
+[data-theme="dark"] .card,[data-theme="dark"] .kpi,[data-theme="dark"] .crd,[data-theme="dark"] .rsi-card,[data-theme="dark"] .lead-card,[data-theme="dark"] .kanban-col,[data-theme="dark"] .intel-strip-item{background-image:linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0) 46%);box-shadow:var(--sh),inset 0 1px 0 var(--hair)}
+.card:hover{transform:translateY(-3px);box-shadow:var(--sh-lg);border-color:var(--b20)}
+.kpi,.crd,.rsi-card,.lead-card,.kanban-col{border-radius:var(--r);border:1px solid var(--bd);background:var(--sf);box-shadow:var(--sh);transition:transform .26s var(--ease),box-shadow .26s var(--ease),border-color .26s var(--ease)}
+.kpi:hover,.crd:hover,.lead-card:hover{transform:translateY(-4px);box-shadow:var(--sh-lg);border-color:var(--b20)}
+
+/* Pills — status & meta fully rounded */
+.sc,.role-badge,.run-status,.kanban-count,.cron-badge,.plan-badge,.tb-conn,.theme-btn,.demo-btn,.btn-sm{border-radius:999px}
+.sc{padding:3px 10px;font-weight:600}
+
+/* Segmented controls — pill track + thumb */
+.tabs,.settings-tabs{background:var(--inp);border:1px solid var(--bd);border-radius:999px;padding:4px}
+.tab,.stab{border-radius:999px}
+.form-tab-big{background:var(--inp);border:1px solid var(--bd);border-radius:14px}
+.tab.on,.stab.on{background:rgba(255,255,255,0.12);color:#fff;border:1px solid var(--b20);box-shadow:inset 0 1px 0 var(--hair)}
+[data-theme="light"] .tab.on,[data-theme="light"] .stab.on{background:#fff;color:var(--t1);box-shadow:0 1px 3px rgba(16,24,40,0.12)}
+.ftab.on{background:var(--sf);color:var(--t1);border:1px solid var(--b20)}
+
+/* ── TABLE OVERHAUL → bubbly card-rows ── */
+.rt{border-collapse:separate;border-spacing:0 8px;width:100%}
+.rt thead th{position:static;background:transparent;border:0;color:var(--t3);font-size:10px;letter-spacing:1.6px;font-weight:600;padding:2px 16px 4px}
+.rt tbody td{background:var(--sf2);border-top:1px solid var(--bd2);border-bottom:1px solid var(--bd2);padding:14px 16px;color:var(--t2);vertical-align:middle;transition:background .18s var(--ease)}
+.rt tbody td:first-child{border-left:1px solid var(--bd2);border-top-left-radius:14px;border-bottom-left-radius:14px;color:var(--t1);font-weight:600}
+.rt tbody td:last-child{border-right:1px solid var(--bd2);border-top-right-radius:14px;border-bottom-right-radius:14px}
+.rt tbody tr{transition:transform .18s var(--ease)}
+.rt tbody tr:hover td{background:rgba(255,255,255,0.07)}
+[data-theme="light"] .rt tbody tr:hover td{background:rgba(15,18,28,0.04)}
+.rt tbody tr:hover{transform:translateY(-1px)}
+
+/* Buttons — lime primary, monochrome secondary, tactile */
+.btn-gen,.gen-btn-big{background:var(--accent)!important;color:var(--accent-ink)!important;border:0;border-radius:14px;box-shadow:0 6px 22px -8px rgba(200,242,80,0.55);font-weight:700;transition:transform .16s var(--spring),box-shadow .25s var(--ease),filter .2s}
+.btn-gen::after,.gen-btn-big::after{display:none}
+.btn-gen:hover,.gen-btn-big:hover{transform:translateY(-2px);box-shadow:0 12px 30px -8px rgba(200,242,80,0.7);filter:brightness(1.05)}
+.btn-gen:active,.gen-btn-big:active{transform:translateY(0) scale(0.98)}
+.btn-sm,.theme-btn,.test-btn,.srv-btn{transition:all .18s var(--ease)}
+.btn-sm:hover{transform:translateY(-1px);background:var(--b10)}
+.btn-sm:active{transform:scale(0.97)}
+.btn-blue{background:var(--b10);border-color:var(--b20);color:var(--t1)}
+.theme-btn:hover{border-color:var(--b20);color:var(--t1);background:var(--b10)}
+
+/* Inputs — dark, hairline, soft monochrome focus */
+.fi,.fs,.srv-in,.key-inp{background:var(--inp);border:1px solid var(--bd);border-radius:12px;color:var(--t1);transition:border-color .18s,box-shadow .18s,background .18s}
+.fi:focus,.fs:focus,.srv-in:focus,.key-inp:focus{border-color:var(--b20);box-shadow:0 0 0 3.5px var(--b10)}
+.tog{border-radius:999px}
+
+/* Connection pill + live dot (lime) */
+.tb-conn{border:1px solid var(--bd);background:var(--b5);color:var(--t1)}
+.tb-cdot{background:var(--accent);box-shadow:0 0 8px var(--accent)}
+
+/* Intel strip — bubbly cells */
+.intel-strip{background:var(--bd);border:1px solid var(--bd);border-radius:var(--r)}
+.intel-strip-item{background:var(--sf)}
+
+/* Overlays — strong frost */
+.invite-modal,.drawer-backdrop{backdrop-filter:blur(12px) saturate(140%);background:rgba(0,0,0,0.5)}
+.invite-card,.toast{background:var(--glass-strong);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border-radius:20px;border:1px solid var(--bd)}
+
+/* ── Spring view transition — menus pop in on navigation ── */
+.view-anim{animation:viewpop .44s var(--ease) both;will-change:transform,opacity}
+@keyframes viewpop{from{opacity:0;transform:translateY(14px) scale(0.992)}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.view-anim{animation:none}}
+
 </style>
 </head>
 <body>
@@ -3629,7 +3751,7 @@ class ErrorBoundary extends React.Component{
       <div style={{color:'var(--t3)',fontSize:13,marginBottom:14,whiteSpace:'pre-wrap',maxWidth:700}}>{String((this.state.err&&this.state.err.message)||this.state.err)}</div>
       <button onClick={()=>this.setState({err:null})} style={{padding:'8px 16px',background:'var(--blue)',color:'#fff',border:0,borderRadius:8,fontWeight:700,cursor:'pointer'}}>Retry</button>
     </div>);
-    return this.props.children;
+    return <div className="view-anim">{this.props.children}</div>;
   }
 }
 
