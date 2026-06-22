@@ -29,6 +29,7 @@ import hashlib
 import io
 import logging
 import os
+import re
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
@@ -49,9 +50,16 @@ _F_AGENT = ("agent", "agent_name", "extension", "from_dn", "agentName", "ext",
 _F_START = ("started_at", "start", "start_time", "time_start", "timestamp",
             "StartTime", "datetime")
 _F_DUR = ("duration_sec", "duration", "talk_time", "talking", "TalkTime",
-          "duration_seconds")
+          "duration_seconds", "TalkingDuration", "CallTime")
 _F_REC = ("recording_url", "recording", "recordingUrl", "rec_url", "RecordingUrl",
           "recording_link")
+# Which agent extension / DN placed-or-took the call (for deterministic BDE map).
+_F_EXT = ("extension", "ext", "from_dn", "agent_dn", "dn", "Extension", "FromDN",
+          "agent_ext")
+# Tri-state "was the call answered?" + free-form status/disposition.
+_F_ANSWERED = ("answered", "Answered", "call_answered", "CallAnswered",
+               "is_answered", "connected")
+_F_STATUS = ("status", "Status", "disposition", "reason", "Reason", "result")
 
 
 def _pick(payload: Dict[str, Any], keys) -> Any:
@@ -61,8 +69,43 @@ def _pick(payload: Dict[str, Any], keys) -> Any:
     return None
 
 
+def _to_bool_or_none(v: Any):
+    """Tri-state: True (answered/connected), False (missed/busy/voicemail), or
+    None (unknown — fall back to the talk-time heuristic)."""
+    if v is None or v == "":
+        return None
+    if isinstance(v, bool):
+        return v
+    s = str(v).strip().lower()
+    if s in ("1", "true", "yes", "answered", "connected"):
+        return True
+    if s in ("0", "false", "no", "missed", "noanswer", "no answer", "unanswered",
+             "busy", "voicemail", "abandoned", "cancelled"):
+        return False
+    return None
+
+
+def to_e164(num: Any, default_cc: str = "61") -> str:
+    """Normalise a number to E.164 for STORAGE/DISPLAY only — NOT for matching
+    joins (the existing suffix matchers must stay)."""
+    s = (str(num or "")).strip()
+    plus = s.startswith("+")
+    d = re.sub(r"\D", "", s)
+    if not d:
+        return ""
+    if plus:
+        return "+" + d
+    if d.startswith("0"):
+        return "+" + default_cc + d[1:]
+    if d.startswith(default_cc):
+        return "+" + d
+    if len(d) <= 5:
+        return ""
+    return "+" + default_cc + d
+
+
 def _to_seconds(v: Any) -> int:
-    """Accept 90 / '90' / '00:01:30' / '1:30' → seconds."""
+    """Accept 90 / '90' / '00:01:30' / '1:30' / ISO-8601 'PT1M30S' → seconds."""
     if v is None:
         return 0
     if isinstance(v, (int, float)):
@@ -70,6 +113,10 @@ def _to_seconds(v: Any) -> int:
     s = str(v).strip()
     if s.isdigit():
         return int(s)
+    m = re.match(r"^P(?:T)?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$", s, re.I)
+    if m and any(m.groups()):
+        h, mi, se = (int(x or 0) for x in m.groups())
+        return h * 3600 + mi * 60 + se
     if ":" in s:
         parts = [int(p) for p in s.split(":") if p.isdigit()]
         if len(parts) == 3:
@@ -113,8 +160,11 @@ def normalize_call(payload: Dict[str, Any]) -> Dict[str, Any]:
         "from_number": from_n[:40],
         "to_number": to_n[:40],
         "agent_name": (str(_pick(payload, _F_AGENT) or ""))[:128],
+        "extension": (str(_pick(payload, _F_EXT) or ""))[:16],
         "started_at": started_at,
         "duration_sec": _to_seconds(_pick(payload, _F_DUR)),
+        "answered": _to_bool_or_none(_pick(payload, _F_ANSWERED)),
+        "disposition": (str(_pick(payload, _F_STATUS) or ""))[:32] or None,
         "recording_url": (str(_pick(payload, _F_REC) or ""))[:768],
         "raw_json": payload,
     }
@@ -160,10 +210,19 @@ def ingest(payload: Dict[str, Any], transcribe_audio: bool = True) -> Tuple[int,
         log.debug("lead match failed: %s", e)
         call["lead_id"] = None
     try:
-        # BDE is whoever's saved mobile placed/took the call.
-        call["bde_user_id"] = db.LeadCallsRepo.match_bde_by_mobile(
-            call["from_number"], call["to_number"])
-    except Exception:
+        # Prefer the exact 3CX extension/DN (users.threecx_ext); fall back to the
+        # BDE's saved mobile (suffix). NULL on no match — a wrong attribution is
+        # worse than none (commission disputes).
+        bde = None
+        ext = (call.get("extension") or call.get("agent_name") or "").strip()
+        if ext:
+            bde = db.LeadCallsRepo.match_bde_by_extension(ext)
+        if bde is None:
+            bde = db.LeadCallsRepo.match_bde_by_mobile(
+                call["from_number"], call["to_number"])
+        call["bde_user_id"] = bde
+    except Exception as e:
+        log.debug("bde match failed: %s", e)
         call["bde_user_id"] = None
 
     openai_key = os.environ.get("OPENAI_API_KEY", "")
@@ -177,6 +236,23 @@ def ingest(payload: Dict[str, Any], transcribe_audio: bool = True) -> Tuple[int,
             call["transcript"] = t
 
     call_id = db.LeadCallsRepo.record(call)
+
+    # Auto-advance the funnel: an ANSWERED, OUTBOUND call ≥5s to a matched lead by
+    # a matched BDE means we reached them → promote unassigned/assigned→contacted
+    # (never downgrades contacted/secured). Best-effort; never blocks the log.
+    try:
+        talk = int(call.get("duration_sec") or 0)
+        af = call.get("answered")
+        is_answered = (af is True) or (af is None and talk >= 5)
+        # Require an AFFIRMATIVE outbound classification — not merely "not inbound"
+        # — so a call that normalises to direction='unknown' (common on CDR rows
+        # with no direction field) never auto-promotes a lead.
+        if (is_answered and talk >= 5 and call.get("direction") == "outbound"
+                and call.get("lead_id") and call.get("bde_user_id")):
+            db.LeadAllocationRepo.mark_contacted_if_below(
+                call["lead_id"], call["bde_user_id"])
+    except Exception as e:
+        log.debug("auto-contacted skip: %s", e)
     return call_id, call
 
 

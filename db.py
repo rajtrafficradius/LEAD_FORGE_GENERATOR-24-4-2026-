@@ -1380,6 +1380,32 @@ class LeadAllocationRepo:
             conn.commit()
 
     @staticmethod
+    def mark_contacted_if_below(lead_id: int, actor_id: Optional[int]) -> bool:
+        """Promote unassigned/assigned → contacted ONLY. Never downgrades
+        contacted/secured (the funnel is monotonic here). Atomic guard in the
+        WHERE (no read-then-write race); idempotent (2nd call = rowcount 0, no
+        duplicate event). Returns True only when it actually changed something.
+        Used by the 3CX auto-Contacted path on an answered outbound call."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE master_leads SET alloc_status='contacted', "
+                    "contacted_at=COALESCE(contacted_at, NOW()), "
+                    # If the lead was unassigned, the BDE who reached them becomes the
+                    # owner — keeps alloc_status='contacted' consistent with bde_stats
+                    # (which only counts leads that HAVE an assigned_bde_id).
+                    "assigned_bde_id=COALESCE(assigned_bde_id, %s), "
+                    "assigned_at=COALESCE(assigned_at, NOW()) "
+                    "WHERE id=%s AND alloc_status IN ('unassigned','assigned')",
+                    (actor_id, lead_id),
+                )
+                changed = cur.rowcount > 0
+                if changed:
+                    LeadAllocationRepo._event(cur, lead_id, "contacted", actor_id, None)
+            conn.commit()
+            return changed
+
+    @staticmethod
     def mark_secured(lead_id: int, actor_id: Optional[int]) -> None:
         """Final funnel stage — deal won. Stamps secured_at (keeps contacted_at)."""
         with get_conn() as conn:
@@ -1513,15 +1539,20 @@ class LeadAllocationRepo:
                         "contacted": int(r["contacted"] or 0),
                         "secured": int(r["secured"] or 0),
                         "calls": 0,
+                        "last_call_at": None,
                     }
                 cur.execute(
-                    "SELECT bde_user_id AS bde, COUNT(*) AS c FROM lead_calls "
+                    "SELECT bde_user_id AS bde, COUNT(*) AS c, "
+                    "MAX(COALESCE(started_at, created_at)) AS last_call FROM lead_calls "
                     "WHERE bde_user_id IS NOT NULL GROUP BY bde_user_id"
                 )
                 for r in (cur.fetchall() or []):
                     b = int(r["bde"])
-                    stats.setdefault(b, {"total": 0, "contacted": 0, "secured": 0, "calls": 0})
+                    stats.setdefault(b, {"total": 0, "contacted": 0, "secured": 0,
+                                         "calls": 0, "last_call_at": None})
                     stats[b]["calls"] = int(r["c"] or 0)
+                    lc = r.get("last_call")
+                    stats[b]["last_call_at"] = lc.isoformat() if hasattr(lc, "isoformat") else lc
         return stats
 
     @staticmethod
@@ -1970,6 +2001,32 @@ class LeadCallsRepo:
         return None
 
     @staticmethod
+    def match_bde_by_extension(*exts: str) -> Optional[int]:
+        """Find the BDE whose saved 3CX extension (users.threecx_ext) EXACTLY
+        equals (digit-for-digit) the call's extension/DN. Exact match, NOT suffix
+        — extensions are 3-4 digits, so a suffix match would collide. This is the
+        preferred, deterministic BDE attribution; mobile-suffix is the fallback."""
+        cleaned = [re.sub(r"\D", "", e or "") for e in exts]
+        cleaned = [c for c in cleaned if c]
+        if not cleaned:
+            return None
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                for ext in cleaned:
+                    cur.execute(
+                        "SELECT id FROM users WHERE role='bde' AND threecx_ext IS NOT NULL "
+                        "AND threecx_ext<>'' AND REGEXP_REPLACE(threecx_ext,'[^0-9]','')=%s LIMIT 2",
+                        (ext,),
+                    )
+                    rows = cur.fetchall() or []
+                    # Exactly one BDE owns this extension → attribute. If two share
+                    # it (typo / shared DN), the match is ambiguous → don't guess
+                    # (a wrong attribution is worse than none); fall through.
+                    if len(rows) == 1:
+                        return int(rows[0]["id"])
+        return None
+
+    @staticmethod
     def record(call: Dict[str, Any]) -> int:
         """Idempotent upsert keyed on call_uuid (safe for webhook retries)."""
         with get_conn() as conn:
@@ -2032,6 +2089,50 @@ class LeadCallsRepo:
             with conn.cursor() as cur:
                 cur.execute("SELECT COUNT(*) AS c FROM lead_calls WHERE lead_id=%s", (lead_id,))
                 return int((cur.fetchone() or {}).get("c", 0))
+
+    @staticmethod
+    def latest_call_id(bde_id: Optional[int] = None) -> int:
+        """Newest call id (BDE-scoped). Lets the poll prime its cursor at the HEAD
+        of history in O(1) so a page load never replays old calls as toasts —
+        events_since pages oldest-first, so priming via since=0 would otherwise
+        walk forward through the whole table."""
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                if bde_id is not None:
+                    cur.execute("SELECT COALESCE(MAX(id),0) AS m FROM lead_calls WHERE bde_user_id=%s",
+                                (int(bde_id),))
+                else:
+                    cur.execute("SELECT COALESCE(MAX(id),0) AS m FROM lead_calls")
+                return int((cur.fetchone() or {}).get("m", 0))
+
+    @staticmethod
+    def events_since(since_id: int, bde_id: Optional[int] = None,
+                     limit: int = 50) -> List[Dict[str, Any]]:
+        """Calls with id > since_id (cursor poll for live screen-pops/toasts).
+        Scoped to one BDE when bde_id is given (a BDE only sees their own calls);
+        admin/manager pass None for all. Cheap auto-increment-PK cursor — no new
+        event store needed since record() already persists every call. (If gunicorn
+        ever runs >1 worker this still works; an in-memory bus would not.)"""
+        sql = ("SELECT lc.id, lc.lead_id, lc.bde_user_id, lc.call_uuid, lc.direction, "
+               "lc.from_number, lc.to_number, lc.duration_sec, lc.started_at, "
+               "ml.company_name, ml.root_domain "
+               "FROM lead_calls lc LEFT JOIN master_leads ml ON lc.lead_id=ml.id "
+               "WHERE lc.id > %s")
+        params: List[Any] = [int(since_id or 0)]
+        if bde_id is not None:
+            sql += " AND lc.bde_user_id=%s"
+            params.append(int(bde_id))
+        sql += " ORDER BY lc.id ASC LIMIT %s"
+        params.append(int(limit))
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, tuple(params))
+                rows = list(cur.fetchall() or [])
+        for r in rows:
+            sa = r.get("started_at")
+            if hasattr(sa, "isoformat"):
+                r["started_at"] = sa.isoformat()
+        return rows
 
 
 # ── Self-test ────────────────────────────────────────────────────────────────

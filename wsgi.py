@@ -739,6 +739,7 @@ def api_allocation_bdes():
                 "contacted_count": int(st.get("contacted", 0)),
                 "secured_count": int(st.get("secured", 0)),
                 "call_count": int(st.get("calls", 0)),
+                "last_call_at": st.get("last_call_at"),
             })
         return jsonify({"bdes": out})
     except Exception as e:
@@ -1205,7 +1206,7 @@ def threecx_webhook():
     secret_env = os.environ.get("THREECX_WEBHOOK_SECRET", "")
     if secret_env:
         provided = request.headers.get("X-3CX-Secret") or request.args.get("secret") or ""
-        if provided != secret_env:
+        if not hmac.compare_digest(provided.encode("utf-8"), secret_env.encode("utf-8")):
             return jsonify({"error": "forbidden"}), 403
     else:
         log.warning("3CX webhook hit with no THREECX_WEBHOOK_SECRET configured — accepting.")
@@ -1232,6 +1233,29 @@ def api_lead_calls(lead_id):
     try:
         calls = db.LeadCallsRepo.list_for_lead(lead_id)
         return jsonify({"calls": calls, "count": len(calls)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/3cx/events", methods=["GET"])
+@login_required_json
+def api_3cx_events():
+    """Cursor poll for live call events (screen-pop / toast). Returns calls with
+    id > since + the new cursor. BDEs are scoped server-side to their own calls;
+    admin/manager see all. The frontend primes the cursor on first poll so the
+    page-load doesn't replay history as a toast storm."""
+    try:
+        since = int(request.args.get("since", 0) or 0)
+    except (TypeError, ValueError):
+        since = 0
+    bde = _current_uid() if _current_role() == "bde" else None
+    try:
+        # since<=0 = prime: jump straight to the newest id (no history replay).
+        if since <= 0:
+            return jsonify({"events": [], "cursor": db.LeadCallsRepo.latest_call_id(bde)})
+        rows = db.LeadCallsRepo.events_since(since, bde_id=bde, limit=50)
+        cursor = rows[-1]["id"] if rows else since
+        return jsonify({"events": rows, "cursor": cursor})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

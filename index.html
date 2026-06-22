@@ -3333,7 +3333,7 @@ function LoginView({onLogin}){
 }
 
 // Small drag-and-drop lead chip used in the allocation board (BDE cards + DB panel).
-function AllocLeadChip({r,fromBde,onDragStart,onContacted,onSecured,onOpen,compact}){
+function AllocLeadChip({r,fromBde,onDragStart,onContacted,onSecured,onOpen,onCall,compact}){
   const sc={secured:'var(--green)',contacted:'var(--amber)',assigned:'var(--blue)',unassigned:'var(--t3)'}[r.alloc_status||(fromBde?'assigned':'unassigned')]||'var(--t3)';
   return(<div draggable onDragStart={e=>onDragStart(e,r.id,fromBde)}
     title="Drag onto a BDE to allocate"
@@ -3346,6 +3346,7 @@ function AllocLeadChip({r,fromBde,onDragStart,onContacted,onSecured,onOpen,compa
       <div style={{fontSize:10,color:'var(--t3)',fontFamily:'var(--mono)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{lfId(r.id)} · {r.root_domain}{r.call_count>0?(' · '+r.call_count+'📞'):''}</div>
     </div>
     <span style={{fontSize:9,fontWeight:700,color:sc,border:'1px solid '+sc,borderRadius:10,padding:'1px 6px',textTransform:'capitalize',flexShrink:0}}>{r.alloc_status||(fromBde?'assigned':'free')}</span>
+    {!compact&&onCall&&r.phone_e164&&<button onClick={e=>{e.stopPropagation();onCall(r);}} onMouseDown={e=>e.stopPropagation()} draggable={false} title={'Call '+r.phone_e164+' via 3CX'} style={{flexShrink:0,padding:'2px 7px',borderRadius:5,border:'1px solid var(--violet)',background:'transparent',color:'var(--violet)',cursor:'pointer',fontSize:11,fontWeight:700}}>☎</button>}
     {!compact&&onOpen&&<button onClick={()=>onOpen(r.id)} title="Open full lead page" style={{flexShrink:0,width:20,height:20,borderRadius:5,border:'1px solid var(--bd)',background:'var(--sf)',color:'var(--blue)',cursor:'pointer',fontWeight:700,fontSize:12,lineHeight:1}}>+</button>}
     {!compact&&onContacted&&<button onClick={()=>onContacted(r.id,r.alloc_status)} title={r.alloc_status==='contacted'?'Contacted — click to undo':'Mark contacted'} style={{flexShrink:0,padding:'2px 7px',borderRadius:5,border:'1px solid var(--amber)',background:r.alloc_status==='contacted'?'var(--amber)':'transparent',color:r.alloc_status==='contacted'?'#fff':'var(--amber)',cursor:'pointer',fontSize:10,fontWeight:700}}>✓</button>}
     {!compact&&onSecured&&<button onClick={()=>onSecured(r.id,r.alloc_status)} title={r.alloc_status==='secured'?'Secured — click to undo':'Mark secured (deal won)'} style={{flexShrink:0,padding:'2px 7px',borderRadius:5,border:'1px solid var(--green)',background:r.alloc_status==='secured'?'var(--green)':'transparent',color:r.alloc_status==='secured'?'#fff':'var(--green)',cursor:'pointer',fontSize:10,fontWeight:700}}>$</button>}
@@ -3398,6 +3399,10 @@ function AllocationView({onOpenLead}){
       : (currentStatus==='secured' ? 'contacted' : 'secured');
     const d=await apiJSON('/api/leads/'+leadId+'/alloc-status',{method:'POST',body:JSON.stringify({status:target})});
     if(d&&d.ok){ setMsg(lfId(leadId)+' → '+target); refresh([bdeId]); } else setMsg('Action failed'); };
+  const callLead=async(r)=>{ if(!r.phone_e164){ setMsg('No phone on '+lfId(r.id)+' — add one first.'); return; }
+    setMsg('Dialing '+(r.company_name||lfId(r.id))+' via 3CX…');
+    const d=await apiJSON('/api/3cx/call',{method:'POST',body:JSON.stringify({lead_id:r.id})});
+    setMsg(d&&d.ok ? ('3CX: '+(d.detail||'calling…')) : ('3CX: '+((d&&(d.error||d.reason))||'not configured'))); };
   const distribute=async(perBde)=>{ const ids=bdes.filter(b=>active[b.id]).map(b=>b.id);
     if(!ids.length){setMsg('Turn on at least one BDE (the green switch) first.');return;}
     if(perBde>0 && (!Number.isFinite(perBde))){setMsg('Enter a valid number per BDE.');return;}
@@ -3514,7 +3519,7 @@ function AllocationView({onOpenLead}){
             <div style={{width:38,height:38,borderRadius:'50%',background:'var(--blue)',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:15,flexShrink:0}}>{(b.username||'?').slice(0,1).toUpperCase()}</div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontWeight:700,color:'var(--t1)',fontSize:14}}>{b.full_name||b.username}</div>
-              <div style={{fontSize:11,color:'var(--t3)'}}>{b.username}{b.mobile_e164?(' · '+b.mobile_e164):''}{!b.is_active&&' · disabled'}</div>
+              <div style={{fontSize:11,color:'var(--t3)'}}>{b.username}{b.mobile_e164?(' · '+b.mobile_e164):''}{!b.is_active&&' · disabled'}{b.last_call_at&&(Date.now()-new Date(b.last_call_at).getTime()<600000)?<span style={{color:'var(--green)'}} title={'last call '+new Date(b.last_call_at).toLocaleString()}> · ⏺ recently on a call</span>:null}</div>
             </div>
             <div title="Working today?" onClick={e=>{e.stopPropagation();setActive(a=>({...a,[b.id]:!a[b.id]}));}}
                  className={'tog '+(active[b.id]?'on':'off')} style={{transform:'scale(0.8)',flexShrink:0}}><div className="tog-k"></div></div>
@@ -3532,7 +3537,7 @@ function AllocationView({onOpenLead}){
             <div style={{fontSize:11,color:'var(--t3)',marginBottom:8}}>Currently allocated — drag onto another BDE to move</div>
             <div style={{maxHeight:340,overflow:'auto',paddingRight:4}}>
               {leads.map(r=><AllocLeadChip key={r.id} r={r} fromBde={b.id} onDragStart={onDragStart}
-                  onOpen={onOpenLead} onContacted={(id,st)=>setStatus(id,st,'contacted',b.id)} onSecured={(id,st)=>setStatus(id,st,'secured',b.id)}/>)}
+                  onOpen={onOpenLead} onCall={callLead} onContacted={(id,st)=>setStatus(id,st,'contacted',b.id)} onSecured={(id,st)=>setStatus(id,st,'secured',b.id)}/>)}
               {!leads.length&&<div style={{color:'var(--t3)',fontSize:12,padding:'14px 0',textAlign:'center',border:'1.5px dashed var(--bd)',borderRadius:8}}>No leads yet — drag some here.</div>}
             </div>
           </div>}
@@ -3637,6 +3642,10 @@ function BdeLeadsView({user,onOpenLead}){
     if(d&&d.ok){ setMsg(lfId(id)+' → '+target); load(); } else setMsg('Error'); };
   const toggleContacted=(r)=>setAlloc(r.id, r.alloc_status==='contacted'?'assigned':'contacted');
   const toggleSecured=(r)=>setAlloc(r.id, r.alloc_status==='secured'?'contacted':'secured');
+  const callLead=async(r)=>{ if(!r.phone_e164){ setMsg('No phone on '+lfId(r.id)); return; }
+    setMsg('Dialing '+(r.company_name||lfId(r.id))+' via 3CX…');
+    const d=await apiJSON('/api/3cx/call',{method:'POST',body:JSON.stringify({lead_id:r.id})});
+    setMsg(d&&d.ok ? ('3CX: '+(d.detail||'calling…')) : ('3CX: '+((d&&(d.error||d.reason))||'not configured'))); };
   const stColor={secured:'var(--green)',contacted:'var(--amber)',assigned:'var(--blue)'};
   const th={textAlign:'left',padding:'8px 10px',color:'var(--t3)',fontSize:11,textTransform:'uppercase',borderBottom:'1px solid var(--bd)'};
   const td={padding:'8px 10px',borderBottom:'1px solid var(--bd)',color:'var(--t1)',fontSize:13};
@@ -3659,6 +3668,7 @@ function BdeLeadsView({user,onOpenLead}){
             <td style={td}>{r.primary_email||'—'}</td>
             <td style={td}><span style={{color:stColor[r.alloc_status]||'var(--t3)',fontWeight:600,textTransform:'capitalize'}}>{r.alloc_status||'assigned'}</span></td>
             <td style={td}><div style={{display:'flex',gap:6}}>
+              {r.phone_e164&&<button onClick={()=>callLead(r)} title={'Call '+r.phone_e164+' via 3CX'} style={{padding:'5px 11px',border:'1px solid var(--violet)',background:'transparent',color:'var(--violet)',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:700}}>☎</button>}
               <button onClick={()=>toggleContacted(r)} title={r.alloc_status==='contacted'?'Click to undo':'Mark contacted'} style={{padding:'5px 11px',border:'1px solid var(--amber)',background:r.alloc_status==='contacted'?'var(--amber)':'transparent',color:r.alloc_status==='contacted'?'#fff':'var(--amber)',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:700}}>{r.alloc_status==='contacted'?'✓ Contacted':'Contacted'}</button>
               <button onClick={()=>toggleSecured(r)} title={r.alloc_status==='secured'?'Click to undo':'Deal won'} style={{padding:'5px 11px',border:'1px solid var(--green)',background:r.alloc_status==='secured'?'var(--green)':'transparent',color:r.alloc_status==='secured'?'#fff':'var(--green)',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:700}}>{r.alloc_status==='secured'?'✓ Secured':'Secured'}</button>
             </div></td>
@@ -3763,6 +3773,7 @@ function LeadDetailView({leadId,onBack,user}){
   const [notes,setNotes]=useState(''); const [outcome,setOutcome]=useState(''); const [fdate,setFdate]=useState('');
   const [editing,setEditing]=useState(false); const [ef,setEf]=useState({});
   const [quickPhone,setQuickPhone]=useState('');
+  const [wrapUp,setWrapUp]=useState(false); const [wrapBusy,setWrapBusy]=useState(false);
   const role=(user&&user.role)||'admin';
   const isMgrAdmin=role==='admin'||role==='manager';
   const load=async()=>{ const d=await apiJSON('/api/lead/'+leadId+'/full');
@@ -3790,9 +3801,21 @@ function LeadDetailView({leadId,onBack,user}){
   const savePhone=async()=>{ const v=(quickPhone||'').trim(); if(!v)return;
     const d=await apiJSON('/api/lead/'+leadId,{method:'PATCH',body:JSON.stringify({phone_e164:v})});
     if(d&&d.ok){ setMsg('Phone number saved.'); setQuickPhone(''); load(); } else setMsg('Could not save phone: '+((d&&d.error)||'')); };
-  const call3cx=async()=>{ setMsg('Dialing via 3CX…');
+  const call3cx=async()=>{ setMsg('Dialing via 3CX…'); touch('call');
     const d=await apiJSON('/api/3cx/call',{method:'POST',body:JSON.stringify({lead_id:leadId})});
-    if(d&&d.ok){ setMsg('3CX: '+(d.detail||'calling…')); touch('call'); } else setMsg('3CX: '+((d&&(d.error||d.reason))||'failed')); };
+    setMsg(d&&d.ok ? ('3CX: '+(d.detail||'calling…')) : ('3CX: '+((d&&(d.error||d.reason))||'not configured — dial manually')));
+    setWrapUp(true);  // always open wrap-up so the outcome can be logged (even when 3CX is inert)
+  };
+  const saveWrapUp=async(markContacted)=>{ if(wrapBusy)return; setWrapBusy(true);
+    await saveFollowup();
+    // Promote-only, never downgrade: only mark contacted when the lead is still
+    // unassigned/assigned (so a follow-up call on a SECURED/contacted lead never
+    // regresses the funnel or wipes secured_at), and only for outcomes that mean
+    // we actually reached them.
+    if(markContacted && outcome!=='wrong_number' && outcome!=='no_answer'
+       && lead && (lead.alloc_status==='unassigned'||lead.alloc_status==='assigned'))
+      await setAllocStatus('contacted');
+    setWrapBusy(false); setWrapUp(false); };
   const _digits=(s)=>String(s||'').replace(/[^0-9]/g,'');
   const backBtn=<button onClick={onBack} style={{padding:'7px 14px',background:'var(--sf)',color:'var(--t1)',
     border:'1px solid var(--bd)',borderRadius:8,cursor:'pointer',fontSize:13}}>← Back</button>;
@@ -3982,6 +4005,35 @@ function LeadDetailView({leadId,onBack,user}){
       <LDField label="First seen" value={lead.first_seen_at?String(lead.first_seen_at).replace('T',' ').slice(0,16):''}/>
       <LDField label="Cost / lead" value={lead.cost_per_lead_usd!=null?('$'+Number(lead.cost_per_lead_usd).toFixed(2)):''}/>
     </LDSection>
+
+    {/* After-call wrap-up — opens after the deliberate "Call via 3CX" click
+        (even when 3CX is inert, so a manual call can be logged). Reuses the
+        existing outcome vocabulary; fully dismissible without mutating status. */}
+    {wrapUp&&<div className="invite-modal" onClick={()=>setWrapUp(false)}>
+      <div className="invite-card" onClick={e=>e.stopPropagation()} style={{width:440,maxWidth:'92vw'}}>
+        <div className="modal-title">Call wrap-up</div>
+        <div className="modal-sub">{lead.company_name||lead.display_name||lead.root_domain} · log the outcome of this call.</div>
+        <div style={{fontSize:11,color:'var(--t3)',margin:'0 0 4px'}}>Outcome</div>
+        <select value={outcome} onChange={e=>setOutcome(e.target.value)} style={{..._crmInp,width:'100%',marginBottom:12}}>
+          <option value="">— select —</option>
+          <option value="interested">Interested</option>
+          <option value="not_interested">Not interested</option>
+          <option value="callback">Callback</option>
+          <option value="no_answer">No answer</option>
+          <option value="voicemail">Voicemail</option>
+          <option value="wrong_number">Wrong number</option>
+        </select>
+        <div style={{fontSize:11,color:'var(--t3)',margin:'0 0 4px'}}>Notes</div>
+        <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3} placeholder="What was said, next steps…" style={{..._crmInp,width:'100%',marginBottom:12,resize:'vertical'}}/>
+        <div style={{fontSize:11,color:'var(--t3)',margin:'0 0 4px'}}>Follow-up reminder (optional)</div>
+        <input type="datetime-local" value={fdate} onChange={e=>setFdate(e.target.value)} style={{..._crmInp,width:'100%',marginBottom:18}}/>
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end',flexWrap:'wrap'}}>
+          <button onClick={()=>setWrapUp(false)} style={{padding:'9px 14px',background:'transparent',color:'var(--t2)',border:'1px solid var(--bd)',borderRadius:10,cursor:'pointer',fontSize:13}}>Discard</button>
+          <button disabled={wrapBusy} onClick={()=>saveWrapUp(false)} style={{padding:'9px 14px',background:'var(--b10)',color:'var(--t1)',border:'1px solid var(--bd)',borderRadius:10,cursor:'pointer',fontWeight:600,fontSize:13}}>Save note</button>
+          <button disabled={wrapBusy} onClick={()=>saveWrapUp(true)} style={{padding:'9px 16px',background:'var(--accent,#c8f250)',color:'#15200a',border:0,borderRadius:10,cursor:'pointer',fontWeight:700,fontSize:13}}>{wrapBusy?'Saving…':'Save & mark contacted'}</button>
+        </div>
+      </div>
+    </div>}
   </div>);
 }
 
@@ -4075,6 +4127,32 @@ function App({user, onLogout}){
 
   useEffect(()=>{document.documentElement.setAttribute('data-theme',theme)},[theme]);
   useEffect(()=>{if(toast){const id=setTimeout(()=>setToast(null),4200);return()=>clearTimeout(id)}},[toast]);
+  // ── 3CX live call events → screen-pop toast. Short-poll a cursor endpoint
+  // (NOT SSE — single sync gunicorn worker would block on a held stream). The
+  // first poll only PRIMES the cursor so a page load never replays history as a
+  // toast storm; only calls newer than the cursor toast thereafter. BDE-scoped
+  // server-side. Toast is click-to-open (never auto-navigates — no hijack). ──
+  const callCursor=useRef(null);
+  useEffect(()=>{
+    if(!user)return;
+    let alive=true; const seen=new Set();
+    const tick=async()=>{ try{
+      if(document.hidden)return;  // don't poll/pop on a backgrounded tab
+      const since=callCursor.current==null?0:callCursor.current;
+      const d=await apiJSON('/api/3cx/events?since='+since);
+      if(!alive||!d||d.__status===401||!Array.isArray(d.events))return;
+      const prime=callCursor.current==null;
+      if(typeof d.cursor==='number')callCursor.current=d.cursor;
+      if(prime)return;  // seed only — no toasts on first response
+      d.events.forEach(ev=>{
+        if(ev.call_uuid){ if(seen.has(ev.call_uuid))return; seen.add(ev.call_uuid); if(seen.size>80)seen.clear(); }
+        const who=ev.company_name||ev.root_domain||((ev.from_number||'?')+' → '+(ev.to_number||'?'));
+        setToast({t:ev.direction==='inbound'?'Incoming call':'Call logged',m:who,leadId:ev.lead_id||null});
+      });
+    }catch(e){/* transient network/redeploy blip — next tick retries */} };
+    const id=setInterval(tick,4000); tick();
+    return ()=>{ alive=false; clearInterval(id); };
+  },[user]);
   // Periodic card shimmer — ambient premium motion
   useEffect(()=>{
     const t=setInterval(()=>{
@@ -4447,7 +4525,7 @@ function App({user, onLogout}){
       <div className={'tog '+(paidOnly?'on':'off')} style={{transform:'scale(0.8)'}} onClick={()=>setPaidOnly(v=>!v)} title="Export ALL confirmed advertisers (no Max-Leads cap); drop unverified"><div className="tog-k"></div></div>
       <span style={{color:paidOnly?'var(--green)':'var(--t3)',fontWeight:paidOnly?700:400}}>{paidOnly?'all confirmed advertisers (Max Leads = floor)':'off (respect Max Leads)'}</span>
     </div>}
-    {toast&&<div className="toast"><div className="toast-ic">✓</div><div><div className="toast-title">{toast.t}</div><div className="toast-msg">{toast.m}</div></div></div>}
+    {toast&&<div className="toast" onClick={()=>{ if(toast.leadId){setSelectedLeadId(toast.leadId);setNav('lead-detail');} setToast(null); }} style={{cursor:toast.leadId?'pointer':'default'}}><div className="toast-ic">✓</div><div><div className="toast-title">{toast.t}</div><div className="toast-msg">{toast.m}{toast.leadId?' · open':''}</div></div></div>}
   </>);
 }
 
